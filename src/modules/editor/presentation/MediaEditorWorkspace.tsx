@@ -166,7 +166,6 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const previewVideoRef = useRef<HTMLVideoElement>(null);
   const currentTimecodeRef = useRef<HTMLSpanElement>(null);
-  const audioRefs = useRef(new Map<string, HTMLAudioElement>());
   const livePlayheadMsRef = useRef(0);
 
   const activeFile = useMemo(() => getActiveFile(state), [state]);
@@ -235,10 +234,6 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     [currentPlayheadMs, playbackEntries],
   );
   const previewState = currentIsPlaying ? livePreviewState : committedPreviewState;
-  const mountedAudioEntries = useMemo(
-    () => playbackEntries.filter((entry) => entry.asset.hasAudio),
-    [playbackEntries],
-  );
   const missingFiles = useMemo(
     () => state.files.filter((fileState) => fileState.asset.status === 'missing'),
     [state.files],
@@ -277,7 +272,6 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     previewMuted: currentPreviewMuted,
     playbackEntries,
     videoRef: previewVideoRef,
-    audioRefs,
     dispatch,
     onTransportFrame: applyLiveTransportFrame,
     onPreviewChange: handlePreviewChange,
@@ -751,12 +745,16 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     }
 
     const outputPath = selectedPath.toLowerCase().endsWith('.png') ? selectedPath : `${selectedPath}.png`;
+    const previewTimeMs = previewVideoRef.current;
+    const exportTimeMs = previewTimeMs && Number.isFinite(previewTimeMs.currentTime)
+      ? previewTimeMs.currentTime * 1000
+      : clip.inPointMs + (playheadMs - clip.startMs);
 
     try {
       await exportFrameImage({
         outputPath,
         sourcePath: fileState.asset.path,
-        timeMs: clip.inPointMs + (playheadMs - clip.startMs),
+        timeMs: exportTimeMs,
         markerRect: fileState.markerRect,
       });
       setWorkspaceFeedback(`Frame exported to ${outputPath}`);
@@ -795,7 +793,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       return;
     }
 
-    const bounds = event.currentTarget.getBoundingClientRect();
+    const bounds = scrollRef.current.getBoundingClientRect();
     const localX = event.clientX - bounds.left + scrollRef.current.scrollLeft;
     seekTo(pxToMs(localX, activeFile.zoom), activeFile.isPlaying);
   };
@@ -1054,7 +1052,6 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
               <video
                 ref={previewVideoRef}
                 className={`${styles.previewVideo} ${!previewState.hasActiveVideo ? styles.previewVideoHidden : ''}`}
-                muted
                 playsInline
                 preload="auto"
               />
@@ -1235,21 +1232,6 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         </main>
       </div>
 
-      {mountedAudioEntries.map(({ clip, asset }) => (
-        <audio
-          key={clip.id}
-          ref={(element) => {
-            if (element) {
-              audioRefs.current.set(clip.id, element);
-              return;
-            }
-            audioRefs.current.delete(clip.id);
-          }}
-          src={asset.url ?? undefined}
-          preload="auto"
-          className={styles.hiddenMedia}
-        />
-      ))}
     </div>
   );
 };

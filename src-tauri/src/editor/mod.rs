@@ -248,10 +248,10 @@ pub fn export_frame_image(request: FrameExportRequest) -> Result<(), String> {
         "-hide_banner".to_string(),
         "-loglevel".to_string(),
         "error".to_string(),
-        "-ss".to_string(),
-        seconds_from_ms(request.time_ms),
         "-i".to_string(),
         request.source_path.clone(),
+        "-ss".to_string(),
+        seconds_from_ms(request.time_ms),
     ];
 
     if let Some(marker_rect) = request.marker_rect.as_ref() {
