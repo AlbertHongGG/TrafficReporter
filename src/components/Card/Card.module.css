@@ -1,0 +1,36 @@
+.card {
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+/* Variants */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-md);
+}
+
+.solid {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Padding Options */
+.none {
+  padding: 0;
+}
+
+.sm {
+  padding: 12px;
+}
+
+.md {
+  padding: 20px;
+}
+
+.lg {
+  padding: 32px;
+}

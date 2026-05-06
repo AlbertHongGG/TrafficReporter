@@ -1,0 +1,68 @@
+.container {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+}
+
+.tooltip {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 280px;
+  padding: 8px 11px;
+  border-radius: 12px;
+  border: 1px solid rgba(250, 204, 21, 0.18);
+  background: rgba(10, 10, 12, 0.94);
+  color: rgba(255, 247, 217, 0.92);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+  white-space: normal;
+  pointer-events: none;
+  z-index: 1000;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(14px);
+}
+
+.content {
+  min-width: 0;
+}
+
+.shortcut {
+  flex: none;
+  padding: 2px 6px;
+  border-radius: 8px;
+  border: 1px solid rgba(250, 204, 21, 0.16);
+  background: rgba(250, 204, 21, 0.08);
+  color: rgba(255, 247, 217, 0.82);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.top {
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.bottom {
+  top: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.left {
+  right: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.right {
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+}
