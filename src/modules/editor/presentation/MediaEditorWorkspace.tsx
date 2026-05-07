@@ -214,6 +214,16 @@ function formatIntervalLabel(interval: TimelineIntervalSelection | null) {
   return `${formatTransportTime(interval.startMs)} - ${formatTransportTime(interval.endMs)}`;
 }
 
+function normalizeLprInterval(interval: TimelineIntervalSelection): TimelineIntervalSelection {
+  const startMs = Math.max(0, Math.round(interval.startMs));
+  const endMs = Math.max(0, Math.round(interval.endMs));
+
+  return {
+    startMs: Math.min(startMs, endMs),
+    endMs: Math.max(startMs, endMs),
+  };
+}
+
 const CountryHintInput: React.FC<CountryHintInputProps> = ({ initialValue, disabled, onCommit, onDraftChange }) => {
   const [value, setValue] = useState(initialValue);
 
@@ -345,7 +355,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     [lprState.selectedTargetTrackId, lprState.targetTracks],
   );
   const lprSelectedTrackFrame = useMemo(
-    () => (lprSelectedTrack ? getClosestTrackFrame(lprSelectedTrack, currentPlayheadMs) ?? lprSelectedTrack.frames[0] ?? null : null),
+    () => (lprSelectedTrack ? getClosestTrackFrame(lprSelectedTrack, currentPlayheadMs) : null),
     [currentPlayheadMs, lprSelectedTrack],
   );
   const lprOverlayTracks = useMemo(
@@ -360,6 +370,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
   const lprTopCandidate = lprState.candidates.find((candidate) => candidate.id === lprState.acceptedCandidateId)
     ?? lprState.candidates[0]
     ?? null;
+  const canAnalyzeRange = Boolean(activeFile && !lprBusy && lprSelectedTrackFrame);
 
   const refreshLprRuntimeStatus = useCallback(async () => {
     try {
@@ -1013,30 +1024,30 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
   const resolveSuggestedInterval = useCallback((playheadMs: number) => {
     const currentClip = selectedClip ?? findClipAtPlayhead(activeClips, playheadMs);
     if (lprState.interval) {
-      return lprState.interval;
+      return normalizeLprInterval(lprState.interval);
     }
 
     if (currentClip) {
-      return {
+      return normalizeLprInterval({
         startMs: currentClip.startMs,
         endMs: currentClip.startMs + clipDurationMs(currentClip),
-      } satisfies TimelineIntervalSelection;
+      } satisfies TimelineIntervalSelection);
     }
 
-    return {
+    return normalizeLprInterval({
       startMs: Math.max(0, playheadMs - 1000),
       endMs: playheadMs + 1000,
-    } satisfies TimelineIntervalSelection;
+    } satisfies TimelineIntervalSelection);
   }, [activeClips, lprState.interval, selectedClip]);
 
   const handleSetIntervalBoundary = (boundary: 'start' | 'end') => {
     const currentInterval = resolveSuggestedInterval(livePlayheadMsRef.current);
     dispatch({
       type: 'set-lpr-interval',
-      interval: {
+      interval: normalizeLprInterval({
         startMs: boundary === 'start' ? livePlayheadMsRef.current : currentInterval.startMs,
         endMs: boundary === 'end' ? livePlayheadMsRef.current : currentInterval.endMs,
-      },
+      }),
     });
   };
 
@@ -1048,10 +1059,10 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
 
     dispatch({
       type: 'set-lpr-interval',
-      interval: {
+      interval: normalizeLprInterval({
         startMs: currentClip.startMs,
         endMs: currentClip.startMs + clipDurationMs(currentClip),
-      },
+      }),
     });
   };
 
@@ -1123,10 +1134,8 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         timeMs: Math.max(0, Math.round(livePlayheadMsRef.current)),
         markerRect: activeFile.markerRect,
         targetVehicleKind: lprState.targetVehicleKind,
+        selectedTargetBox: lprSelectedTrackFrame?.box ?? null,
         countryHints,
-        useMarkerRoi: lprState.useMarkerRoi,
-        preferRestoration: lprState.preferRestoration,
-        useFallback: lprState.useFallback,
       });
 
       setLprRuntimeStatus(response.runtime);
@@ -1173,11 +1182,24 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       return;
     }
 
-    const interval = resolveSuggestedInterval(livePlayheadMsRef.current);
+    if (!lprSelectedTrackFrame) {
+      const errorMessage = 'Select a target on the current frame before running Range.';
+      updateLprJob({
+        status: 'failed',
+        progress: 1,
+        stage: 'Interval',
+        detail: 'Range analysis requires a current target selection.',
+        error: errorMessage,
+      });
+      setWorkspaceFeedback(errorMessage);
+      return;
+    }
+
+    const interval = normalizeLprInterval(resolveSuggestedInterval(livePlayheadMsRef.current));
     const countryHints = applyCountryHints(
       latestCountryHintDraftRef.current ?? (activeFile.lpr.countryHints.join(', ')),
     );
-    const sampleDivisor = lprState.preferMultiFrame ? 16 : 8;
+    const sampleDivisor = lprState.useDenseSampling ? 16 : 8;
     const sampleEveryMs = Math.max(120, Math.round((interval.endMs - interval.startMs) / sampleDivisor) || 120);
 
     updateLprJob({
@@ -1194,16 +1216,11 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         sourcePath: activeFile.asset.path,
         interval,
         anchorTimeMs: Math.max(0, Math.round(livePlayheadMsRef.current)),
-        markerRect: activeFile.markerRect,
         targetVehicleKind: lprState.targetVehicleKind,
-        selectedTargetBox: lprSelectedTrackFrame?.box ?? activeFile.markerRect,
+        selectedTargetBox: lprSelectedTrackFrame.box,
         countryHints,
-        useMarkerRoi: lprState.useMarkerRoi,
-        preferMultiFrame: lprState.preferMultiFrame,
-        preferRestoration: lprState.preferRestoration,
-        useFallback: lprState.useFallback,
         sampleEveryMs,
-        maxSamples: lprState.preferMultiFrame ? 18 : 8,
+        maxSamples: lprState.useDenseSampling ? 18 : 8,
       });
 
       setLprRuntimeStatus(response.runtime);
@@ -1723,36 +1740,6 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
               </section>
 
               <section className={styles.lprSection}>
-                <div className={styles.lprToggleGrid}>
-                  <button
-                    type="button"
-                    className={`${styles.lprToggle} ${lprState.useMarkerRoi ? styles.lprToggleActive : ''}`}
-                    onClick={() => dispatch({ type: 'set-lpr-toggles', toggles: { useMarkerRoi: !lprState.useMarkerRoi } })}
-                  >
-                    ROI
-                  </button>
-                  <button
-                    type="button"
-                    className={`${styles.lprToggle} ${lprState.preferMultiFrame ? styles.lprToggleActive : ''}`}
-                    onClick={() => dispatch({ type: 'set-lpr-toggles', toggles: { preferMultiFrame: !lprState.preferMultiFrame } })}
-                  >
-                    Multi
-                  </button>
-                  <button
-                    type="button"
-                    className={`${styles.lprToggle} ${lprState.preferRestoration ? styles.lprToggleActive : ''}`}
-                    onClick={() => dispatch({ type: 'set-lpr-toggles', toggles: { preferRestoration: !lprState.preferRestoration } })}
-                  >
-                    Restore
-                  </button>
-                  <button
-                    type="button"
-                    className={`${styles.lprToggle} ${lprState.useFallback ? styles.lprToggleActive : ''}`}
-                    onClick={() => dispatch({ type: 'set-lpr-toggles', toggles: { useFallback: !lprState.useFallback } })}
-                  >
-                    Fallback
-                  </button>
-                </div>
                 <div className={styles.lprField}>
                   <CountryHintInput
                     key={activeFile?.id ?? 'no-file'}
@@ -1779,9 +1766,17 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
                     <Search size={14} />
                     Frame
                   </button>
-                  <button type="button" className={styles.toolbarButton} onClick={() => void handleAnalyzeLprInterval()} disabled={!activeFile || lprBusy}>
+                  <button type="button" className={styles.toolbarButton} onClick={() => void handleAnalyzeLprInterval()} disabled={!canAnalyzeRange}>
                     <Target size={14} />
                     Range
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.lprToggle} ${lprState.useDenseSampling ? styles.lprToggleActive : ''}`}
+                    onClick={() => dispatch({ type: 'set-lpr-toggles', toggles: { useDenseSampling: !lprState.useDenseSampling } })}
+                    disabled={!activeFile}
+                  >
+                    More Samples
                   </button>
                   <button type="button" className={styles.toolbarButton} onClick={() => void handleExportLprEvidence()} disabled={!activeFile || (!lprTopCandidate && lprState.samples.length === 0)}>
                     <FileOutput size={14} />

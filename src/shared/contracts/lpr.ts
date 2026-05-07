@@ -6,7 +6,7 @@ export type LprJobStatus = 'idle' | 'queued' | 'running' | 'completed' | 'failed
 
 export type LprVehicleKind = 'any' | 'vehicle' | 'motorcycle' | 'car' | 'truck' | 'bus';
 
-export type LprRecognitionSource = 'baseline' | 'fused' | 'restored' | 'fallback';
+export type LprRecognitionSource = 'baseline' | 'fused';
 
 export type LprLegibilityLevel = 'perfect' | 'good' | 'poor' | 'illegible' | 'unknown';
 
@@ -89,10 +89,7 @@ export interface LprSessionState {
   workflowMode: LprWorkflowMode;
   interval: TimelineIntervalSelection | null;
   targetVehicleKind: LprVehicleKind;
-  useMarkerRoi: boolean;
-  preferMultiFrame: boolean;
-  preferRestoration: boolean;
-  useFallback: boolean;
+  useDenseSampling: boolean;
   countryHints: string[];
   job: LprJobState;
   targetTracks: LprTargetTrack[];
@@ -130,10 +127,8 @@ export interface LprFrameAnalysisRequest {
   timeMs: number;
   markerRect: VideoMarkerRect | null;
   targetVehicleKind: LprVehicleKind;
+  selectedTargetBox: VideoMarkerRect | null;
   countryHints: string[];
-  useMarkerRoi: boolean;
-  preferRestoration: boolean;
-  useFallback: boolean;
 }
 
 export interface LprFrameAnalysisResponse {
@@ -147,14 +142,9 @@ export interface LprIntervalAnalysisRequest {
   sourcePath: string;
   interval: TimelineIntervalSelection;
   anchorTimeMs: number;
-  markerRect: VideoMarkerRect | null;
   targetVehicleKind: LprVehicleKind;
   selectedTargetBox: VideoMarkerRect | null;
   countryHints: string[];
-  useMarkerRoi: boolean;
-  preferMultiFrame: boolean;
-  preferRestoration: boolean;
-  useFallback: boolean;
   sampleEveryMs?: number;
   maxSamples?: number;
 }

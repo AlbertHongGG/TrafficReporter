@@ -61,7 +61,7 @@ export type EditorAction =
   | { type: 'set-lpr-country-hints'; countryHints: string[] }
   | {
       type: 'set-lpr-toggles';
-      toggles: Partial<Pick<LprSessionState, 'useMarkerRoi' | 'preferMultiFrame' | 'preferRestoration' | 'useFallback'>>;
+      toggles: Partial<Pick<LprSessionState, 'useDenseSampling'>>;
     }
   | { type: 'set-lpr-target-tracks'; targetTracks: LprTargetTrack[] }
   | { type: 'select-lpr-target-track'; targetTrackId: string | null }

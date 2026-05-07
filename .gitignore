@@ -26,6 +26,7 @@ reference/
 .venv/
 traffic-lpr-runtime/.venv/
 traffic-lpr-runtime/.runtime/
+traffic-lpr-runtime/models/
 traffic-lpr-runtime/**/__pycache__/
 
 # Editor directories and files
@@ -38,3 +39,6 @@ traffic-lpr-runtime/**/__pycache__/
 *.njsproj
 *.sln
 *.sw?
+
+*.mp4
+*.pt

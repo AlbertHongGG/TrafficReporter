@@ -24,7 +24,6 @@ class PlateRecognizer(Protocol):
     def recognize(
         self,
         image: Any,
-        source_label: str,
         time_ms: int,
         crop_box: NormalizedRect | None,
     ) -> list[PlateCandidate]: ...

@@ -10,10 +10,9 @@ from traffic_lpr_runtime.domain.text import normalize_plate_text
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect, crop_image
 from traffic_lpr_runtime.infrastructure.dependencies import DependencyRegistry
 from traffic_lpr_runtime.infrastructure.frame_reader import OpenCvFrameReader
-from traffic_lpr_runtime.infrastructure.image_processing import ImagePreprocessor, QualityScorer
+from traffic_lpr_runtime.infrastructure.image_processing import QualityScorer
 from traffic_lpr_runtime.infrastructure.model_runtime import (
     FastAlprPlateRecognizer,
-    FastPlateOcrFallbackRecognizer,
     ModelRegistry,
     UltralyticsTargetDetector,
 )
@@ -26,16 +25,12 @@ class LprRuntimeApplication:
         frame_reader: FrameReader,
         target_detector: TargetDetector,
         primary_recognizer: PlateRecognizer,
-        fallback_recognizer: PlateRecognizer,
-        image_preprocessor: ImagePreprocessor,
         quality_scorer: QualityScorer,
     ) -> None:
         self._dependencies = dependencies
         self._frame_reader = frame_reader
         self._target_detector = target_detector
         self._primary_recognizer = primary_recognizer
-        self._fallback_recognizer = fallback_recognizer
-        self._image_preprocessor = image_preprocessor
         self._quality_scorer = quality_scorer
 
     def dispatch(self, subcommand: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -71,6 +66,7 @@ class LprRuntimeApplication:
         self._dependencies.ensure_ready()
         time_ms = int(payload['timeMs'])
         marker_rect = NormalizedRect.from_payload(payload.get('markerRect'))
+        selected_target_box = NormalizedRect.from_payload(payload.get('selectedTargetBox'))
         frame = self._frame_reader.read_frame(payload['sourcePath'], time_ms)
         detections = self._detect_targets(
             frame,
@@ -78,15 +74,13 @@ class LprRuntimeApplication:
             payload.get('targetVehicleKind', 'vehicle'),
             marker_rect,
         )
-        target_box = detections[0].box if detections else None
+        target_region = self._match_anchor_target(detections, selected_target_box)
+        target_box = target_region.box if target_region else selected_target_box
         candidates, sample = self._analyze_plate_candidates(
             frame,
             time_ms,
             marker_rect,
             target_box,
-            bool(payload.get('useMarkerRoi', True)),
-            bool(payload.get('preferRestoration', True)),
-            bool(payload.get('useFallback', True)),
         )
         return {
             'detections': [detection.to_payload() for detection in detections],
@@ -97,13 +91,14 @@ class LprRuntimeApplication:
 
     def analyze_interval(self, payload: dict[str, Any]) -> dict[str, Any]:
         self._dependencies.ensure_ready()
-        marker_rect = NormalizedRect.from_payload(payload.get('markerRect'))
         selected_target_box = NormalizedRect.from_payload(payload.get('selectedTargetBox'))
+        if selected_target_box is None:
+            raise RuntimeFailure('Range analysis requires a selected target on the anchor frame.')
+
         tracked_frames = self._track_target_across_interval(
             payload['sourcePath'],
             payload['interval'],
             int(payload['anchorTimeMs']),
-            marker_rect,
             payload.get('targetVehicleKind', 'vehicle'),
             selected_target_box,
             payload.get('sampleEveryMs'),
@@ -116,11 +111,8 @@ class LprRuntimeApplication:
             _, sample = self._analyze_plate_candidates(
                 frame,
                 tracked_frame.time_ms,
-                marker_rect,
+                None,
                 tracked_frame.box,
-                bool(payload.get('useMarkerRoi', True)),
-                bool(payload.get('preferRestoration', True)),
-                bool(payload.get('useFallback', True)),
             )
             samples.append(sample)
 
@@ -155,11 +147,10 @@ class LprRuntimeApplication:
         frame: Any,
         marker_rect: NormalizedRect | None,
         target_box: NormalizedRect | None,
-        use_marker_roi: bool,
     ) -> tuple[Any, NormalizedRect | None]:
         if target_box:
             return crop_image(frame, target_box), target_box
-        if use_marker_roi and marker_rect:
+        if marker_rect:
             return crop_image(frame, marker_rect), marker_rect
         return frame, None
 
@@ -169,22 +160,9 @@ class LprRuntimeApplication:
         time_ms: int,
         marker_rect: NormalizedRect | None,
         target_box: NormalizedRect | None,
-        use_marker_roi: bool,
-        prefer_restoration: bool,
-        use_fallback: bool,
     ) -> tuple[list[PlateCandidate], FrameSample]:
-        working_image, crop_box = self._select_analysis_roi(frame, marker_rect, target_box, use_marker_roi)
-        candidates: list[PlateCandidate] = []
-
-        variants = self._image_preprocessor.build_variants(working_image)
-        for variant_name, variant_image in variants:
-            if not prefer_restoration and variant_name != 'baseline':
-                continue
-            candidates.extend(self._primary_recognizer.recognize(variant_image, variant_name, time_ms, crop_box))
-
-        best_primary = max((candidate.confidence for candidate in candidates), default=0.0)
-        if use_fallback and (not candidates or best_primary < 0.72):
-            candidates.extend(self._fallback_recognizer.recognize(working_image, 'fallback', time_ms, crop_box))
+        working_image, crop_box = self._select_analysis_roi(frame, marker_rect, target_box)
+        candidates = self._primary_recognizer.recognize(working_image, time_ms, crop_box)
 
         candidates.sort(
             key=lambda candidate: (
@@ -208,7 +186,7 @@ class LprRuntimeApplication:
         return candidates, sample
 
     def _aggregate_candidates(self, samples: list[FrameSample]) -> list[PlateCandidate]:
-        source_weights = {'baseline': 1.0, 'restored': 0.92, 'fallback': 0.88, 'fused': 1.05}
+        source_weights = {'baseline': 1.0, 'fused': 1.05}
         aggregated: dict[str, dict[str, Any]] = {}
 
         for sample in samples:
@@ -304,7 +282,6 @@ class LprRuntimeApplication:
         source_path: str,
         interval: dict[str, int],
         anchor_time_ms: int,
-        marker_rect: NormalizedRect | None,
         vehicle_kind: str,
         selected_target_box: NormalizedRect | None,
         sample_every_ms: int | None,
@@ -320,7 +297,7 @@ class LprRuntimeApplication:
 
         for time_ms in times:
             frame = self._frame_reader.read_frame(source_path, time_ms)
-            detections = self._detect_targets(frame, time_ms, vehicle_kind, marker_rect)
+            detections = self._detect_targets(frame, time_ms, vehicle_kind, None)
             if time_ms == anchor_time_ms:
                 chosen = self._match_anchor_target(detections, selected_target_box)
             elif previous_box:
@@ -362,17 +339,13 @@ def build_default_application(runtime_script: Path) -> LprRuntimeApplication:
     dependencies = DependencyRegistry.load(runtime_script)
     frame_reader = OpenCvFrameReader(dependencies)
     quality_scorer = QualityScorer(dependencies)
-    image_preprocessor = ImagePreprocessor(dependencies)
     model_registry = ModelRegistry(dependencies)
     target_detector = UltralyticsTargetDetector(model_registry)
     primary_recognizer = FastAlprPlateRecognizer(model_registry, quality_scorer)
-    fallback_recognizer = FastPlateOcrFallbackRecognizer(model_registry, quality_scorer)
     return LprRuntimeApplication(
         dependencies=dependencies,
         frame_reader=frame_reader,
         target_detector=target_detector,
         primary_recognizer=primary_recognizer,
-        fallback_recognizer=fallback_recognizer,
-        image_preprocessor=image_preprocessor,
         quality_scorer=quality_scorer,
     )

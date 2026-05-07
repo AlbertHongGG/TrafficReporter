@@ -1,9 +1,8 @@
 from .dependencies import DependencyRegistry
 from .frame_reader import OpenCvFrameReader
-from .image_processing import ImagePreprocessor, QualityScorer
+from .image_processing import QualityScorer
 from .model_runtime import (
     FastAlprPlateRecognizer,
-    FastPlateOcrFallbackRecognizer,
     ModelRegistry,
     UltralyticsTargetDetector,
 )
@@ -11,8 +10,6 @@ from .model_runtime import (
 __all__ = [
     'DependencyRegistry',
     'FastAlprPlateRecognizer',
-    'FastPlateOcrFallbackRecognizer',
-    'ImagePreprocessor',
     'ModelRegistry',
     'OpenCvFrameReader',
     'QualityScorer',

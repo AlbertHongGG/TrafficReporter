@@ -164,10 +164,8 @@ pub struct LprFrameAnalysisRequestPayload {
     pub time_ms: u64,
     pub marker_rect: Option<VideoMarkerRectPayload>,
     pub target_vehicle_kind: String,
+    pub selected_target_box: Option<VideoMarkerRectPayload>,
     pub country_hints: Vec<String>,
-    pub use_marker_roi: bool,
-    pub prefer_restoration: bool,
-    pub use_fallback: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -185,14 +183,9 @@ pub struct LprIntervalAnalysisRequestPayload {
     pub source_path: String,
     pub interval: TimelineIntervalSelectionPayload,
     pub anchor_time_ms: u64,
-    pub marker_rect: Option<VideoMarkerRectPayload>,
     pub target_vehicle_kind: String,
     pub selected_target_box: Option<VideoMarkerRectPayload>,
     pub country_hints: Vec<String>,
-    pub use_marker_roi: bool,
-    pub prefer_multi_frame: bool,
-    pub prefer_restoration: bool,
-    pub use_fallback: bool,
     pub sample_every_ms: Option<u64>,
     pub max_samples: Option<u32>,
 }

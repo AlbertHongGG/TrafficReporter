@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import importlib
 import os
 import tempfile
 from collections.abc import Iterable
+from pathlib import Path
 from typing import Any
 
 from traffic_lpr_runtime.domain.errors import RuntimeFailure
 from traffic_lpr_runtime.domain.models import PlateCandidate, TrackedRegion
 from traffic_lpr_runtime.domain.text import normalize_plate_text
-from traffic_lpr_runtime.domain.value_objects import NormalizedRect
+from traffic_lpr_runtime.domain.value_objects import NormalizedRect, clamp, crop_image
 
 from .dependencies import DependencyRegistry
 from .image_processing import QualityScorer
@@ -21,13 +23,21 @@ COCO_VEHICLE_CLASSES = {
     'truck': 7,
 }
 
+VEHICLE_MODEL_NAMES = (
+    'yolo26x.pt',
+    'yolo11x.pt',
+    'yolov8x.pt',
+    'yolo26s.pt',
+    'yolo11s.pt',
+    'yolov8s.pt',
+)
+
 
 class ModelRegistry:
     def __init__(self, dependencies: DependencyRegistry) -> None:
         self._dependencies = dependencies
         self._vehicle_model: Any | None = None
         self._alpr_model: Any | None = None
-        self._fallback_ocr: Any | None = None
 
     def vehicle_classes_for_kind(self, vehicle_kind: str) -> list[int]:
         if vehicle_kind == 'motorcycle':
@@ -55,9 +65,13 @@ class ModelRegistry:
             raise RuntimeFailure('ultralytics.YOLO is unavailable in the configured Python environment.')
 
         last_error: Exception | None = None
-        for model_name in ['yolo11x.pt', 'yolov8x.pt', 'yolo11s.pt', 'yolov8s.pt']:
+        preferred_device = self._dependencies.preferred_torch_device()
+        for model_name in VEHICLE_MODEL_NAMES:
             try:
-                self._vehicle_model = yolo_type(model_name)
+                self._vehicle_model = yolo_type(str(self._ensure_vehicle_model_path(model_name)))
+                move_to = getattr(self._vehicle_model, 'to', None)
+                if callable(move_to):
+                    move_to(preferred_device)
                 return self._vehicle_model
             except Exception as error:
                 last_error = error
@@ -77,6 +91,8 @@ class ModelRegistry:
         if alpr_type is None:
             raise RuntimeFailure('fast_alpr.ALPR is unavailable in the configured Python environment.')
 
+        detector_providers = self._onnx_providers()
+        ocr_device = self._onnx_device()
         last_error: Exception | None = None
         for detector_model in [
             'yolo-v9-t-384-license-plate-end2end',
@@ -85,7 +101,10 @@ class ModelRegistry:
             try:
                 self._alpr_model = alpr_type(
                     detector_model=detector_model,
+                    detector_providers=detector_providers,
                     ocr_model='cct-xs-v2-global-model',
+                    ocr_device=ocr_device,
+                    ocr_providers=detector_providers,
                 )
                 return self._alpr_model
             except Exception as error:
@@ -93,20 +112,33 @@ class ModelRegistry:
 
         raise RuntimeFailure(f'Unable to load the ALPR detector/OCR stack: {last_error}')
 
-    def load_fallback_ocr(self) -> Any:
-        if self._fallback_ocr is not None:
-            return self._fallback_ocr
+    def _onnx_device(self) -> str:
+        return 'cuda' if self._dependencies.torch_cuda_available() else 'cpu'
 
-        self._dependencies.ensure_ready()
-        recognizer_type = getattr(self._dependencies.fast_plate_ocr, 'LicensePlateRecognizer', None)
-        if recognizer_type is None:
-            raise RuntimeFailure('fast_plate_ocr.LicensePlateRecognizer is unavailable in the configured Python environment.')
+    def _onnx_providers(self) -> list[str]:
+        if self._dependencies.torch_cuda_available():
+            return ['CUDAExecutionProvider', 'CPUExecutionProvider']
+        return ['CPUExecutionProvider']
 
-        try:
-            self._fallback_ocr = recognizer_type('cct-s-v2-global-model')
-            return self._fallback_ocr
-        except Exception as error:
-            raise RuntimeFailure(f'Unable to load the OCR fallback model: {error}') from error
+    def _ensure_vehicle_model_path(self, model_name: str) -> Path:
+        model_path = self._dependencies.models_root() / model_name
+        if model_path.exists() and model_path.stat().st_size > 0:
+            return model_path
+
+        model_path.parent.mkdir(parents=True, exist_ok=True)
+        utils_module = importlib.import_module('ultralytics.utils')
+        downloads_module = importlib.import_module('ultralytics.utils.downloads')
+        assets_url = getattr(utils_module, 'ASSETS_URL', None)
+        safe_download = getattr(downloads_module, 'safe_download', None)
+
+        if not assets_url or not callable(safe_download):
+            raise RuntimeFailure(f'Unable to resolve the Ultralytics downloader for {model_name}.')
+
+        safe_download(url=f'{assets_url}/{model_name}', file=model_path, unzip=False)
+        if model_path.exists() and model_path.stat().st_size > 0:
+            return model_path
+
+        raise RuntimeFailure(f'Unable to download the detector model {model_name} into {model_path.parent}.')
 
 
 class UltralyticsTargetDetector:
@@ -121,13 +153,19 @@ class UltralyticsTargetDetector:
         marker_rect: NormalizedRect | None,
     ) -> list[TrackedRegion]:
         model = self._models.load_vehicle_model()
+        inference_device = self._models.dependencies.preferred_torch_device()
+        working_frame = crop_image(frame, marker_rect) if marker_rect else frame
+        if working_frame is None or getattr(working_frame, 'size', 0) == 0:
+            return []
+
         result = model(
-            frame,
+            working_frame,
             classes=self._models.vehicle_classes_for_kind(vehicle_kind),
             verbose=False,
             conf=0.18,
+            device=inference_device,
         )[0]
-        frame_height, frame_width = frame.shape[:2]
+        frame_height, frame_width = working_frame.shape[:2]
         names = getattr(model, 'names', {})
 
         detections: list[TrackedRegion] = []
@@ -144,8 +182,8 @@ class UltralyticsTargetDetector:
                 frame_width,
                 frame_height,
             )
-            if marker_rect and normalized_box.intersection_over_union(marker_rect) <= 0.02:
-                continue
+            if marker_rect:
+                normalized_box = _translate_rect_from_crop(normalized_box, marker_rect)
 
             confidence = float(box.conf[0].item())
             class_id = int(box.cls[0].item())
@@ -175,7 +213,6 @@ class FastAlprPlateRecognizer:
     def recognize(
         self,
         image: Any,
-        source_label: str,
         time_ms: int,
         crop_box: NormalizedRect | None,
     ) -> list[PlateCandidate]:
@@ -193,18 +230,33 @@ class FastAlprPlateRecognizer:
         for index, raw_prediction in enumerate(raw_items):
             payload = _serialize_prediction_object(raw_prediction)
             text = normalize_plate_text(
-                payload.get('text')
-                or payload.get('plate')
-                or payload.get('plate_text')
-                or payload.get('ocr_text')
-                or payload.get('ocr')
+                _first_present(
+                    payload.get('text'),
+                    payload.get('plate'),
+                    payload.get('plate_text'),
+                    payload.get('ocr_text'),
+                    _nested_get(payload, 'ocr', 'text'),
+                )
             )
             if not text:
                 continue
 
-            confidence = _to_float(payload.get('confidence') or payload.get('ocr_confidence') or payload.get('score'))
+            confidence = _to_float(
+                _first_present(
+                    payload.get('confidence'),
+                    payload.get('ocr_confidence'),
+                    payload.get('score'),
+                    _nested_get(payload, 'ocr', 'confidence'),
+                    _nested_get(payload, 'detection', 'confidence'),
+                )
+            )
             candidate_box = _normalize_candidate_box(
-                payload.get('box') or payload.get('bbox') or payload.get('xyxy'),
+                _first_present(
+                    payload.get('box'),
+                    payload.get('bbox'),
+                    payload.get('xyxy'),
+                    _nested_get(payload, 'detection', 'bounding_box'),
+                ),
                 crop_box,
                 frame_width,
                 frame_height,
@@ -212,12 +264,12 @@ class FastAlprPlateRecognizer:
             quality = self._quality_scorer.score(image, candidate_box)
             predictions.append(
                 PlateCandidate(
-                    id=f'{source_label}-{time_ms}-{index}',
+                    id=f'baseline-{time_ms}-{index}',
                     text=text,
                     confidence=confidence,
-                    source='restored' if source_label.startswith('restored') else 'baseline',
+                    source='baseline',
                     frame_time_ms=time_ms,
-                    country_code=None,
+                    country_code=_to_optional_str(_nested_get(payload, 'ocr', 'region')),
                     box=candidate_box,
                     quality=quality,
                 )
@@ -233,69 +285,12 @@ class FastAlprPlateRecognizer:
         return predictions
 
 
-class FastPlateOcrFallbackRecognizer:
-    def __init__(
-        self,
-        models: ModelRegistry,
-        quality_scorer: QualityScorer,
-    ) -> None:
-        self._models = models
-        self._quality_scorer = quality_scorer
-
-    def recognize(
-        self,
-        image: Any,
-        source_label: str,
-        time_ms: int,
-        crop_box: NormalizedRect | None,
-    ) -> list[PlateCandidate]:
-        del source_label
-
-        model = self._models.load_fallback_ocr()
-        temp_path = _write_temp_image(self._models, image)
-        try:
-            raw_predictions = model.run(temp_path, return_confidence=True)
-        finally:
-            _cleanup_temp_image(temp_path)
-
-        raw_items = list(raw_predictions) if _is_prediction_iterable(raw_predictions) else [raw_predictions]
-        frame_height, frame_width = image.shape[:2]
-        predictions: list[PlateCandidate] = []
-
-        for index, raw_prediction in enumerate(raw_items):
-            payload = _serialize_prediction_object(raw_prediction)
-            text = normalize_plate_text(payload.get('text') or payload.get('plate') or payload.get('ocr'))
-            if not text:
-                continue
-            confidence = _to_float(payload.get('confidence') or payload.get('prob') or payload.get('region_prob'))
-            candidate_box = _normalize_candidate_box(
-                payload.get('box') or payload.get('bbox'),
-                crop_box,
-                frame_width,
-                frame_height,
-            )
-            quality = self._quality_scorer.score(image, candidate_box)
-            predictions.append(
-                PlateCandidate(
-                    id=f'fallback-{time_ms}-{index}',
-                    text=text,
-                    confidence=confidence,
-                    source='fallback',
-                    frame_time_ms=time_ms,
-                    country_code=payload.get('region'),
-                    box=candidate_box,
-                    quality=quality,
-                )
-            )
-
-        predictions.sort(
-            key=lambda candidate: (
-                candidate.confidence,
-                candidate.quality.overall_score if candidate.quality else 0.0,
-            ),
-            reverse=True,
-        )
-        return predictions
+def _translate_rect_from_crop(rect: NormalizedRect, crop_rect: NormalizedRect) -> NormalizedRect:
+    x = clamp(crop_rect.x + (rect.x * crop_rect.width), 0.0, 1.0)
+    y = clamp(crop_rect.y + (rect.y * crop_rect.height), 0.0, 1.0)
+    width = clamp(rect.width * crop_rect.width, 0.0, 1.0 - x)
+    height = clamp(rect.height * crop_rect.height, 0.0, 1.0 - y)
+    return NormalizedRect(x=x, y=y, width=width, height=height)
 
 
 def _write_temp_image(models: ModelRegistry, image: Any) -> str:
@@ -314,15 +309,28 @@ def _cleanup_temp_image(path: str) -> None:
 
 
 def _serialize_prediction_object(prediction: Any) -> dict[str, Any]:
-    if prediction is None:
-        return {}
-    if isinstance(prediction, dict):
-        return prediction
-    if hasattr(prediction, '__dict__'):
-        return dict(vars(prediction))
-    if hasattr(prediction, '_asdict'):
-        return dict(prediction._asdict())
-    return {'raw': str(prediction)}
+    serialized = _serialize_prediction_value(prediction)
+    return serialized if isinstance(serialized, dict) else {'raw': serialized}
+
+
+def _serialize_prediction_value(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        return {key: _serialize_prediction_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_serialize_prediction_value(item) for item in value]
+    if hasattr(value, '_asdict'):
+        return {
+            key: _serialize_prediction_value(item)
+            for key, item in value._asdict().items()
+        }
+    if hasattr(value, '__dict__'):
+        return {
+            key: _serialize_prediction_value(item)
+            for key, item in vars(value).items()
+        }
+    return str(value)
 
 
 def _is_prediction_iterable(raw_predictions: Any) -> bool:
@@ -330,10 +338,39 @@ def _is_prediction_iterable(raw_predictions: Any) -> bool:
 
 
 def _to_float(value: Any) -> float:
+    if isinstance(value, (list, tuple)):
+        values = [_to_float(item) for item in value if item is not None]
+        return sum(values) / len(values) if values else 0.0
     try:
         return float(value or 0.0)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _first_present(*values: Any) -> Any:
+    for value in values:
+        if value is None:
+            continue
+        if isinstance(value, str) and not value:
+            continue
+        return value
+    return None
+
+
+def _nested_get(value: Any, *keys: str) -> Any:
+    current = value
+    for key in keys:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return current
+
+
+def _to_optional_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
 
 
 def _normalize_candidate_box(
