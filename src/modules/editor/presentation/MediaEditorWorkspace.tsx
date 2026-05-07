@@ -3,18 +3,23 @@ import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import {
   AlertCircle,
+  Check,
   FileOutput,
   FilePlus2,
   Film,
   ImageDown,
   Import,
+  LoaderCircle,
   Link2,
   Pause,
   Play,
+  RefreshCw,
   Scissors,
+  Search,
   SkipBack,
   SkipForward,
   Square,
+  Target,
   Trash2,
   Volume2,
   VolumeX,
@@ -22,8 +27,10 @@ import {
 } from 'lucide-react';
 import { editorReducer, initialEditorState } from '../application/editorReducer';
 import {
+  buildDefaultLprState,
   clamp,
   clipDurationMs,
+  createId,
   DEFAULT_MARKER_RECT,
   DEFAULT_ZOOM,
   findClipAtPlayhead,
@@ -46,9 +53,22 @@ import {
   exportFrameImage,
   isSupportedMediaPath,
 } from '../infrastructure/mediaApi';
+import {
+  analyzeLprFrame,
+  analyzeLprInterval,
+  exportLprEvidence,
+  getLprRuntimeStatus,
+  scanLprTargets,
+} from '../infrastructure/lprApi';
 import { createLogger, getErrorMessage, serializeError } from '../../../utils/logger';
 import { openExportWindow } from '../../export/infrastructure/exportApi';
 import { preparePendingExportSession } from '../../export/application/exportSession';
+import type {
+  LprRuntimeStatus,
+  LprTargetTrack,
+  LprTrackedRegion,
+  TimelineIntervalSelection,
+} from '../../../shared/contracts';
 import {
   getPlaybackPreviewState,
   type PlaybackPreviewState,
@@ -104,6 +124,13 @@ interface MediaEditorWorkspaceProps {
   isActive?: boolean;
 }
 
+interface CountryHintInputProps {
+  initialValue: string;
+  disabled: boolean;
+  onCommit: (value: string) => void;
+  onDraftChange: (value: string) => void;
+}
+
 function rulerStepForZoom(zoom: number) {
   return (
     RULER_STEP_CANDIDATES_MS.find((stepMs) => msToPx(stepMs, zoom) >= 92)
@@ -144,10 +171,81 @@ function defaultFrameFileName(fileState: EditorFileState, playheadMs: number) {
   return replaceExtension(baseName, `${timeLabel}.png`);
 }
 
+function defaultLprEvidenceFileName(fileState: EditorFileState, playheadMs: number, candidateText: string | null) {
+  const baseName = replaceExtension(fileState.asset.name, 'json');
+  const timeLabel = formatTransportTime(playheadMs).replace(/[:.]/g, '-');
+  const candidateLabel = candidateText ? `_${candidateText}` : '';
+  return replaceExtension(baseName, `${timeLabel}${candidateLabel}.json`);
+}
+
+function formatConfidence(confidence: number) {
+  return `${Math.round(clamp(confidence, 0, 1) * 100)}%`;
+}
+
+function buildTargetTracksFromDetections(detections: LprTrackedRegion[]): LprTargetTrack[] {
+  return detections.map((detection, index) => ({
+    id: detection.id,
+    className: detection.className,
+    label: `${detection.className} ${index + 1}`,
+    confidence: detection.confidence,
+    frames: [detection],
+  }));
+}
+
+function getClosestTrackFrame(track: LprTargetTrack, playheadMs: number, toleranceMs = 360) {
+  if (track.frames.length === 0) {
+    return null;
+  }
+
+  const frame = track.frames.reduce((closestFrame, candidate) => {
+    const closestDelta = Math.abs(closestFrame.timeMs - playheadMs);
+    const candidateDelta = Math.abs(candidate.timeMs - playheadMs);
+    return candidateDelta < closestDelta ? candidate : closestFrame;
+  });
+
+  return Math.abs(frame.timeMs - playheadMs) <= toleranceMs ? frame : null;
+}
+
+function formatIntervalLabel(interval: TimelineIntervalSelection | null) {
+  if (!interval) {
+    return '--';
+  }
+
+  return `${formatTransportTime(interval.startMs)} - ${formatTransportTime(interval.endMs)}`;
+}
+
+const CountryHintInput: React.FC<CountryHintInputProps> = ({ initialValue, disabled, onCommit, onDraftChange }) => {
+  const [value, setValue] = useState(initialValue);
+
+  const handleChange = (nextValue: string) => {
+    setValue(nextValue);
+    onDraftChange(nextValue);
+  };
+
+  return (
+    <input
+      type="text"
+      className={styles.lprInput}
+      value={value}
+      onChange={(event) => handleChange(event.target.value)}
+      onBlur={() => onCommit(value)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') {
+          onCommit(value);
+          event.currentTarget.blur();
+        }
+      }}
+      placeholder="country hints"
+      disabled={disabled}
+    />
+  );
+};
+
 export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isActive = true }) => {
   const [state, dispatch] = useReducer(editorReducer, initialEditorState);
   const [workspaceFeedback, setWorkspaceFeedback] = useState<string | null>(null);
   const [importFeedback, setImportFeedback] = useState<string | null>(null);
+  const [lprRuntimeStatus, setLprRuntimeStatus] = useState<LprRuntimeStatus | null>(null);
   const [isExternalDropActive, setIsExternalDropActive] = useState(false);
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(0);
   const [timelineScrollLeft, setTimelineScrollLeft] = useState(0);
@@ -167,8 +265,10 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
   const previewVideoRef = useRef<HTMLVideoElement>(null);
   const currentTimecodeRef = useRef<HTMLSpanElement>(null);
   const livePlayheadMsRef = useRef(0);
+  const latestCountryHintDraftRef = useRef<string | null>(null);
 
   const activeFile = useMemo(() => getActiveFile(state), [state]);
+  const lprState = useMemo(() => activeFile?.lpr ?? buildDefaultLprState(), [activeFile]);
   const currentZoom = activeFile?.zoom ?? DEFAULT_ZOOM;
   const currentPlayheadMs = activeFile?.playheadMs ?? 0;
   const currentPreviewVolume = activeFile?.previewVolume ?? 0.85;
@@ -238,6 +338,64 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     () => state.files.filter((fileState) => fileState.asset.status === 'missing'),
     [state.files],
   );
+  const lprJob = lprState.job;
+  const lprBusy = lprJob.status === 'queued' || lprJob.status === 'running';
+  const lprSelectedTrack = useMemo(
+    () => lprState.targetTracks.find((track) => track.id === lprState.selectedTargetTrackId) ?? null,
+    [lprState.selectedTargetTrackId, lprState.targetTracks],
+  );
+  const lprSelectedTrackFrame = useMemo(
+    () => (lprSelectedTrack ? getClosestTrackFrame(lprSelectedTrack, currentPlayheadMs) ?? lprSelectedTrack.frames[0] ?? null : null),
+    [currentPlayheadMs, lprSelectedTrack],
+  );
+  const lprOverlayTracks = useMemo(
+    () => lprState.targetTracks
+      .map((track) => ({
+        track,
+        frame: getClosestTrackFrame(track, currentPlayheadMs),
+      }))
+      .filter((entry): entry is { track: LprTargetTrack; frame: LprTrackedRegion } => Boolean(entry.frame)),
+    [currentPlayheadMs, lprState.targetTracks],
+  );
+  const lprTopCandidate = lprState.candidates.find((candidate) => candidate.id === lprState.acceptedCandidateId)
+    ?? lprState.candidates[0]
+    ?? null;
+
+  const refreshLprRuntimeStatus = useCallback(async () => {
+    try {
+      const runtimeStatus = await getLprRuntimeStatus();
+      setLprRuntimeStatus(runtimeStatus);
+    } catch (error) {
+      setLprRuntimeStatus({
+        available: false,
+        pythonExecutable: null,
+        runtimeScript: null,
+        version: null,
+        missingPackages: [],
+        installedPackages: [],
+        detail: getErrorMessage(error, 'Unable to inspect the local LPR runtime.'),
+      });
+    }
+  }, []);
+
+  const updateLprJob = useCallback((job: Partial<EditorFileState['lpr']['job']>) => {
+    dispatch({
+      type: 'set-lpr-job',
+      job: {
+        ...job,
+        updatedAt: new Date().toISOString(),
+      },
+    });
+  }, [dispatch]);
+
+  const applyCountryHints = useCallback((draftValue: string) => {
+    const countryHints = draftValue
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
+    dispatch({ type: 'set-lpr-country-hints', countryHints });
+    return countryHints;
+  }, [dispatch]);
 
   const applyLiveTransportFrame = useCallback((playheadMs: number) => {
     livePlayheadMsRef.current = playheadMs;
@@ -298,6 +456,14 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
   useEffect(() => {
     zoomRef.current = currentZoom;
   }, [currentZoom]);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      void refreshLprRuntimeStatus();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [refreshLprRuntimeStatus]);
 
   useEffect(() => {
     applyLiveTransportFrame(currentPlayheadMs);
@@ -844,6 +1010,279 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     });
   };
 
+  const resolveSuggestedInterval = useCallback((playheadMs: number) => {
+    const currentClip = selectedClip ?? findClipAtPlayhead(activeClips, playheadMs);
+    if (lprState.interval) {
+      return lprState.interval;
+    }
+
+    if (currentClip) {
+      return {
+        startMs: currentClip.startMs,
+        endMs: currentClip.startMs + clipDurationMs(currentClip),
+      } satisfies TimelineIntervalSelection;
+    }
+
+    return {
+      startMs: Math.max(0, playheadMs - 1000),
+      endMs: playheadMs + 1000,
+    } satisfies TimelineIntervalSelection;
+  }, [activeClips, lprState.interval, selectedClip]);
+
+  const handleSetIntervalBoundary = (boundary: 'start' | 'end') => {
+    const currentInterval = resolveSuggestedInterval(livePlayheadMsRef.current);
+    dispatch({
+      type: 'set-lpr-interval',
+      interval: {
+        startMs: boundary === 'start' ? livePlayheadMsRef.current : currentInterval.startMs,
+        endMs: boundary === 'end' ? livePlayheadMsRef.current : currentInterval.endMs,
+      },
+    });
+  };
+
+  const handleUseClipInterval = () => {
+    const currentClip = selectedClip ?? findClipAtPlayhead(activeClips, livePlayheadMsRef.current);
+    if (!currentClip) {
+      return;
+    }
+
+    dispatch({
+      type: 'set-lpr-interval',
+      interval: {
+        startMs: currentClip.startMs,
+        endMs: currentClip.startMs + clipDurationMs(currentClip),
+      },
+    });
+  };
+
+  const handleScanLprTargets = async () => {
+    if (!activeFile || activeFile.asset.status !== 'ready') {
+      return;
+    }
+
+    updateLprJob({
+      status: 'running',
+      progress: 0.18,
+      stage: 'Targets',
+      detail: 'Scanning current frame for trackable targets.',
+      error: null,
+      startedAt: new Date().toISOString(),
+    });
+
+    try {
+      const response = await scanLprTargets({
+        sourcePath: activeFile.asset.path,
+        timeMs: Math.max(0, Math.round(livePlayheadMsRef.current)),
+        markerRect: activeFile.markerRect,
+        targetVehicleKind: lprState.targetVehicleKind,
+      });
+
+      setLprRuntimeStatus(response.runtime);
+      dispatch({ type: 'set-lpr-target-tracks', targetTracks: buildTargetTracksFromDetections(response.detections) });
+      dispatch({ type: 'set-lpr-mode', workflowMode: response.detections.length > 0 ? 'target' : 'range' });
+      updateLprJob({
+        status: 'completed',
+        progress: 1,
+        stage: 'Targets',
+        detail: response.detections.length > 0
+          ? `${response.detections.length} target(s) ready.`
+          : 'No target found in the current frame.',
+      });
+    } catch (error) {
+      updateLprJob({
+        status: 'failed',
+        progress: 1,
+        stage: 'Targets',
+        detail: 'Target scan failed.',
+        error: getErrorMessage(error, 'Unable to scan targets.'),
+      });
+      setWorkspaceFeedback(getErrorMessage(error, 'Unable to scan targets.'));
+    }
+  };
+
+  const handleAnalyzeLprFrame = async () => {
+    if (!activeFile || activeFile.asset.status !== 'ready') {
+      return;
+    }
+
+    const countryHints = applyCountryHints(
+      latestCountryHintDraftRef.current ?? (activeFile.lpr.countryHints.join(', ')),
+    );
+    updateLprJob({
+      status: 'running',
+      progress: 0.24,
+      stage: 'Frame',
+      detail: 'Analyzing the current frame.',
+      error: null,
+      startedAt: new Date().toISOString(),
+    });
+
+    try {
+      const response = await analyzeLprFrame({
+        sourcePath: activeFile.asset.path,
+        timeMs: Math.max(0, Math.round(livePlayheadMsRef.current)),
+        markerRect: activeFile.markerRect,
+        targetVehicleKind: lprState.targetVehicleKind,
+        countryHints,
+        useMarkerRoi: lprState.useMarkerRoi,
+        preferRestoration: lprState.preferRestoration,
+        useFallback: lprState.useFallback,
+      });
+
+      setLprRuntimeStatus(response.runtime);
+      dispatch({ type: 'set-lpr-target-tracks', targetTracks: buildTargetTracksFromDetections(response.detections) });
+      dispatch({ type: 'set-lpr-samples', samples: response.sample ? [response.sample] : [] });
+      dispatch({ type: 'set-lpr-candidates', candidates: response.candidates });
+      dispatch({ type: 'accept-lpr-candidate', candidateId: response.candidates[0]?.id ?? null });
+      if (response.candidates.length > 0) {
+        dispatch({
+          type: 'append-lpr-history',
+          entry: {
+            id: createId('lpr-history'),
+            createdAt: new Date().toISOString(),
+            interval: null,
+            targetTrackId: response.detections[0]?.id ?? null,
+            acceptedCandidateId: response.candidates[0]?.id ?? null,
+            candidates: response.candidates,
+            summary: response.candidates[0]?.text ?? 'Frame analysis',
+          },
+        });
+      }
+      updateLprJob({
+        status: 'completed',
+        progress: 1,
+        stage: 'Frame',
+        detail: response.candidates[0]
+          ? `Best candidate ${response.candidates[0].text}`
+          : 'No confident plate candidate.',
+      });
+    } catch (error) {
+      updateLprJob({
+        status: 'failed',
+        progress: 1,
+        stage: 'Frame',
+        detail: 'Frame analysis failed.',
+        error: getErrorMessage(error, 'Unable to analyze the current frame.'),
+      });
+      setWorkspaceFeedback(getErrorMessage(error, 'Unable to analyze the current frame.'));
+    }
+  };
+
+  const handleAnalyzeLprInterval = async () => {
+    if (!activeFile || activeFile.asset.status !== 'ready') {
+      return;
+    }
+
+    const interval = resolveSuggestedInterval(livePlayheadMsRef.current);
+    const countryHints = applyCountryHints(
+      latestCountryHintDraftRef.current ?? (activeFile.lpr.countryHints.join(', ')),
+    );
+    const sampleDivisor = lprState.preferMultiFrame ? 16 : 8;
+    const sampleEveryMs = Math.max(120, Math.round((interval.endMs - interval.startMs) / sampleDivisor) || 120);
+
+    updateLprJob({
+      status: 'running',
+      progress: 0.12,
+      stage: 'Interval',
+      detail: 'Tracking the selected target across the chosen interval.',
+      error: null,
+      startedAt: new Date().toISOString(),
+    });
+
+    try {
+      const response = await analyzeLprInterval({
+        sourcePath: activeFile.asset.path,
+        interval,
+        anchorTimeMs: Math.max(0, Math.round(livePlayheadMsRef.current)),
+        markerRect: activeFile.markerRect,
+        targetVehicleKind: lprState.targetVehicleKind,
+        selectedTargetBox: lprSelectedTrackFrame?.box ?? activeFile.markerRect,
+        countryHints,
+        useMarkerRoi: lprState.useMarkerRoi,
+        preferMultiFrame: lprState.preferMultiFrame,
+        preferRestoration: lprState.preferRestoration,
+        useFallback: lprState.useFallback,
+        sampleEveryMs,
+        maxSamples: lprState.preferMultiFrame ? 18 : 8,
+      });
+
+      setLprRuntimeStatus(response.runtime);
+      dispatch({ type: 'set-lpr-interval', interval });
+      dispatch({ type: 'set-lpr-target-tracks', targetTracks: response.targetTracks });
+      dispatch({ type: 'set-lpr-samples', samples: response.samples });
+      dispatch({ type: 'set-lpr-candidates', candidates: response.candidates });
+      dispatch({ type: 'accept-lpr-candidate', candidateId: response.acceptedCandidateId ?? response.candidates[0]?.id ?? null });
+      dispatch({
+        type: 'append-lpr-history',
+        entry: {
+          id: createId('lpr-history'),
+          createdAt: new Date().toISOString(),
+          interval,
+          targetTrackId: response.targetTracks[0]?.id ?? null,
+          acceptedCandidateId: response.acceptedCandidateId ?? response.candidates[0]?.id ?? null,
+          candidates: response.candidates,
+          summary: response.summary,
+        },
+      });
+      dispatch({ type: 'set-lpr-mode', workflowMode: response.candidates.length > 0 ? 'review' : 'target' });
+      updateLprJob({
+        status: 'completed',
+        progress: 1,
+        stage: 'Interval',
+        detail: response.summary,
+      });
+    } catch (error) {
+      updateLprJob({
+        status: 'failed',
+        progress: 1,
+        stage: 'Interval',
+        detail: 'Interval analysis failed.',
+        error: getErrorMessage(error, 'Unable to analyze the selected interval.'),
+      });
+      setWorkspaceFeedback(getErrorMessage(error, 'Unable to analyze the selected interval.'));
+    }
+  };
+
+  const handleSelectTargetTrack = (targetTrackId: string) => {
+    dispatch({ type: 'select-lpr-target-track', targetTrackId });
+  };
+
+  const handleExportLprEvidence = async () => {
+    if (!activeFile || activeFile.asset.status !== 'ready' || (!lprTopCandidate && lprState.samples.length === 0)) {
+      return;
+    }
+
+    const selectedPath = await save({
+      title: 'Export LPR evidence snapshot',
+      defaultPath: defaultLprEvidenceFileName(activeFile, livePlayheadMsRef.current, lprTopCandidate?.text ?? null),
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    });
+
+    if (!selectedPath) {
+      return;
+    }
+
+    const outputPath = selectedPath.toLowerCase().endsWith('.json') ? selectedPath : `${selectedPath}.json`;
+
+    try {
+      const response = await exportLprEvidence({
+        outputPath,
+        sourcePath: activeFile.asset.path,
+        timeMs: Math.max(0, Math.round(livePlayheadMsRef.current)),
+        markerRect: activeFile.markerRect,
+        interval: lprState.interval,
+        targetTrack: lprSelectedTrack,
+        acceptedCandidate: lprTopCandidate,
+        candidates: lprState.candidates,
+        samples: lprState.samples,
+      });
+
+      setWorkspaceFeedback(`Evidence exported to ${response.jsonPath} with frame ${response.imagePath}`);
+    } catch (error) {
+      setWorkspaceFeedback(getErrorMessage(error, 'Unable to export the LPR evidence snapshot.'));
+    }
+  };
+
   const handleMarkerPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!activeFile?.markerRect) {
       return;
@@ -1064,6 +1503,27 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
 
               {activeFile && previewViewport.width > 0 && (
                 <div className={styles.previewMarkerLayer}>
+                  {lprOverlayTracks.map(({ track, frame }) => {
+                    const box = frame.box;
+                    const overlayStyle = {
+                      left: `${previewViewport.left + (box.x * previewViewport.width)}px`,
+                      top: `${previewViewport.top + (box.y * previewViewport.height)}px`,
+                      width: `${box.width * previewViewport.width}px`,
+                      height: `${box.height * previewViewport.height}px`,
+                    };
+
+                    return (
+                      <button
+                        key={track.id}
+                        type="button"
+                        className={`${styles.lprOverlayTarget} ${track.id === lprState.selectedTargetTrackId ? styles.lprOverlayTargetSelected : ''}`}
+                        style={overlayStyle}
+                        onClick={() => handleSelectTargetTrack(track.id)}
+                      >
+                        <span className={styles.lprOverlayLabel}>{track.label}</span>
+                      </button>
+                    );
+                  })}
                   {activeFile.markerRect && markerStyle && (
                     <div
                       className={styles.previewMarker}
@@ -1229,6 +1689,185 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
               </div>
             </div>
           </section>
+
+          <aside className={styles.lprPanel}>
+            <div className={`${styles.panelHeader} ${styles.lprPanelHeader}`}>
+              <div className={styles.lprHeaderMeta}>
+                <strong>Plate</strong>
+                <span className={`${styles.lprRuntimeBadge} ${lprRuntimeStatus?.available ? styles.lprRuntimeBadgeReady : styles.lprRuntimeBadgeMissing}`}>
+                  {lprRuntimeStatus?.available ? 'local' : 'offline'}
+                </span>
+              </div>
+              <button type="button" className={styles.iconButton} onClick={() => void refreshLprRuntimeStatus()}>
+                <RefreshCw size={14} />
+              </button>
+            </div>
+
+            <div className={styles.lprPanelContent}>
+              <section className={styles.lprSection}>
+                <div className={styles.lprActionRow}>
+                  <button type="button" className={styles.toolbarButton} onClick={handleUseClipInterval} disabled={!activeFile}>
+                    Clip
+                  </button>
+                  <button type="button" className={styles.toolbarButton} onClick={() => handleSetIntervalBoundary('start')} disabled={!activeFile}>
+                    In
+                  </button>
+                  <button type="button" className={styles.toolbarButton} onClick={() => handleSetIntervalBoundary('end')} disabled={!activeFile}>
+                    Out
+                  </button>
+                  <button type="button" className={styles.toolbarButton} onClick={() => dispatch({ type: 'clear-lpr-interval' })} disabled={!lprState.interval}>
+                    Clear
+                  </button>
+                </div>
+                <div className={styles.lprIntervalValue}>{formatIntervalLabel(lprState.interval ?? resolveSuggestedInterval(currentPlayheadMs))}</div>
+              </section>
+
+              <section className={styles.lprSection}>
+                <div className={styles.lprToggleGrid}>
+                  <button
+                    type="button"
+                    className={`${styles.lprToggle} ${lprState.useMarkerRoi ? styles.lprToggleActive : ''}`}
+                    onClick={() => dispatch({ type: 'set-lpr-toggles', toggles: { useMarkerRoi: !lprState.useMarkerRoi } })}
+                  >
+                    ROI
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.lprToggle} ${lprState.preferMultiFrame ? styles.lprToggleActive : ''}`}
+                    onClick={() => dispatch({ type: 'set-lpr-toggles', toggles: { preferMultiFrame: !lprState.preferMultiFrame } })}
+                  >
+                    Multi
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.lprToggle} ${lprState.preferRestoration ? styles.lprToggleActive : ''}`}
+                    onClick={() => dispatch({ type: 'set-lpr-toggles', toggles: { preferRestoration: !lprState.preferRestoration } })}
+                  >
+                    Restore
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.lprToggle} ${lprState.useFallback ? styles.lprToggleActive : ''}`}
+                    onClick={() => dispatch({ type: 'set-lpr-toggles', toggles: { useFallback: !lprState.useFallback } })}
+                  >
+                    Fallback
+                  </button>
+                </div>
+                <div className={styles.lprField}>
+                  <CountryHintInput
+                    key={activeFile?.id ?? 'no-file'}
+                    initialValue={(activeFile?.lpr.countryHints ?? []).join(', ')}
+                    disabled={!activeFile}
+                    onDraftChange={(value) => {
+                      latestCountryHintDraftRef.current = value;
+                    }}
+                    onCommit={(value) => {
+                      latestCountryHintDraftRef.current = value;
+                      applyCountryHints(value);
+                    }}
+                  />
+                </div>
+              </section>
+
+              <section className={styles.lprSection}>
+                <div className={styles.lprActionColumn}>
+                  <button type="button" className={styles.primaryButton} onClick={() => void handleScanLprTargets()} disabled={!activeFile || lprBusy}>
+                    <Target size={14} />
+                    Targets
+                  </button>
+                  <button type="button" className={styles.toolbarButton} onClick={() => void handleAnalyzeLprFrame()} disabled={!activeFile || lprBusy}>
+                    <Search size={14} />
+                    Frame
+                  </button>
+                  <button type="button" className={styles.toolbarButton} onClick={() => void handleAnalyzeLprInterval()} disabled={!activeFile || lprBusy}>
+                    <Target size={14} />
+                    Range
+                  </button>
+                  <button type="button" className={styles.toolbarButton} onClick={() => void handleExportLprEvidence()} disabled={!activeFile || (!lprTopCandidate && lprState.samples.length === 0)}>
+                    <FileOutput size={14} />
+                    Evidence
+                  </button>
+                  <button type="button" className={styles.toolbarButton} onClick={() => dispatch({ type: 'clear-lpr-results' })} disabled={lprState.candidates.length === 0 && lprState.targetTracks.length === 0}>
+                    <X size={14} />
+                    Reset
+                  </button>
+                </div>
+
+                <div className={styles.lprStatusCard}>
+                  <div className={styles.lprStatusRow}>
+                    {lprBusy ? <LoaderCircle size={14} className={styles.spinningIcon} /> : lprTopCandidate ? <Check size={14} /> : <AlertCircle size={14} />}
+                    <span>{lprJob.detail || lprRuntimeStatus?.detail || 'Local analysis ready.'}</span>
+                  </div>
+                  {lprJob.error && <div className={styles.lprStatusError}>{lprJob.error}</div>}
+                </div>
+              </section>
+
+              <section className={styles.lprSection}>
+                <div className={styles.lprHeadline}>
+                  <span>{lprTopCandidate?.text ?? '--'}</span>
+                  <strong>{lprTopCandidate ? formatConfidence(lprTopCandidate.confidence) : '0%'}</strong>
+                </div>
+                <div className={styles.lprCandidateList}>
+                  {lprState.candidates.length === 0 && <div className={styles.lprEmpty}>No candidates yet.</div>}
+                  {lprState.candidates.map((candidate) => (
+                    <button
+                      key={candidate.id}
+                      type="button"
+                      className={`${styles.lprCandidate} ${candidate.id === lprState.acceptedCandidateId ? styles.lprCandidateActive : ''}`}
+                      onClick={() => dispatch({ type: 'accept-lpr-candidate', candidateId: candidate.id })}
+                    >
+                      <span>{candidate.text}</span>
+                      <span>{formatConfidence(candidate.confidence)}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              <section className={styles.lprSection}>
+                <div className={styles.lprCompactHeader}>Targets</div>
+                <div className={styles.lprTrackList}>
+                  {lprState.targetTracks.length === 0 && <div className={styles.lprEmpty}>Scan to pick a target.</div>}
+                  {lprState.targetTracks.map((track) => (
+                    <button
+                      key={track.id}
+                      type="button"
+                      className={`${styles.lprTrackItem} ${track.id === lprState.selectedTargetTrackId ? styles.lprTrackItemActive : ''}`}
+                      onClick={() => handleSelectTargetTrack(track.id)}
+                    >
+                      <span>{track.label}</span>
+                      <span>{formatConfidence(track.confidence)}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              <section className={styles.lprSection}>
+                <div className={styles.lprCompactHeader}>Samples</div>
+                <div className={styles.lprSampleList}>
+                  {lprState.samples.length === 0 && <div className={styles.lprEmpty}>No samples.</div>}
+                  {lprState.samples.map((sample) => (
+                    <div key={sample.id} className={styles.lprSamplePill}>
+                      <span>{formatTransportTime(sample.timeMs)}</span>
+                      <span>{formatConfidence(sample.quality?.overallScore ?? 0)}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <section className={styles.lprSection}>
+                <div className={styles.lprCompactHeader}>History</div>
+                <div className={styles.lprHistoryList}>
+                  {lprState.history.length === 0 && <div className={styles.lprEmpty}>No history.</div>}
+                  {lprState.history.slice().reverse().map((entry) => (
+                    <div key={entry.id} className={styles.lprHistoryItem}>
+                      <span>{entry.summary}</span>
+                      <span>{entry.interval ? formatIntervalLabel(entry.interval) : 'frame'}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            </div>
+          </aside>
         </main>
       </div>
 

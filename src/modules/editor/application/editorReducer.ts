@@ -1,6 +1,20 @@
-import type { EditorAsset, EditorWorkspaceState, VideoMarkerRect } from '../domain/model';
+import type {
+  EditorAsset,
+  EditorWorkspaceState,
+  LprFrameSample,
+  LprJobState,
+  LprPlateCandidate,
+  LprResultHistoryEntry,
+  LprSessionState,
+  LprTargetTrack,
+  LprVehicleKind,
+  LprWorkflowMode,
+  TimelineIntervalSelection,
+  VideoMarkerRect,
+} from '../domain/model';
 import {
   buildDefaultWorkspaceState,
+  buildDefaultLprState,
   buildEditorFileState,
   clamp,
   getActiveFile,
@@ -39,7 +53,25 @@ export type EditorAction =
   | { type: 'set-preview-volume'; previewVolume: number }
   | { type: 'set-preview-muted'; previewMuted: boolean }
   | { type: 'set-marker-rect'; markerRect: VideoMarkerRect }
-  | { type: 'clear-marker' };
+  | { type: 'clear-marker' }
+  | { type: 'set-lpr-mode'; workflowMode: LprWorkflowMode }
+  | { type: 'set-lpr-interval'; interval: TimelineIntervalSelection }
+  | { type: 'clear-lpr-interval' }
+  | { type: 'set-lpr-target-vehicle-kind'; targetVehicleKind: LprVehicleKind }
+  | { type: 'set-lpr-country-hints'; countryHints: string[] }
+  | {
+      type: 'set-lpr-toggles';
+      toggles: Partial<Pick<LprSessionState, 'useMarkerRoi' | 'preferMultiFrame' | 'preferRestoration' | 'useFallback'>>;
+    }
+  | { type: 'set-lpr-target-tracks'; targetTracks: LprTargetTrack[] }
+  | { type: 'select-lpr-target-track'; targetTrackId: string | null }
+  | { type: 'set-lpr-job'; job: Partial<LprJobState> }
+  | { type: 'set-lpr-samples'; samples: LprFrameSample[] }
+  | { type: 'set-lpr-candidates'; candidates: LprPlateCandidate[] }
+  | { type: 'accept-lpr-candidate'; candidateId: string | null }
+  | { type: 'append-lpr-history'; entry: LprResultHistoryEntry }
+  | { type: 'clear-lpr-results' }
+  | { type: 'reset-lpr-session' };
 
 export function createInitialEditorState() {
   return buildDefaultWorkspaceState();
@@ -79,6 +111,16 @@ function updateActiveFile(state: EditorWorkspaceState, updater: (fileState: Edit
 
 function stopPlaybackForAllFiles(files: EditorWorkspaceState['files']) {
   return files.map((fileState) => (fileState.isPlaying ? { ...fileState, isPlaying: false } : fileState));
+}
+
+function mapActiveLprState(
+  state: EditorWorkspaceState,
+  updater: (lprState: LprSessionState) => LprSessionState,
+) {
+  return updateActiveFile(state, (fileState) => ({
+    ...fileState,
+    lpr: updater(fileState.lpr),
+  }));
 }
 
 export function editorReducer(state: EditorWorkspaceState, action: EditorAction): EditorWorkspaceState {
@@ -213,6 +255,113 @@ export function editorReducer(state: EditorWorkspaceState, action: EditorAction)
           markerRect: null,
         }),
       );
+
+    case 'set-lpr-mode':
+      return mapActiveLprState(state, (lprState) => ({
+        ...lprState,
+        workflowMode: action.workflowMode,
+      }));
+
+    case 'set-lpr-interval':
+      return mapActiveLprState(state, (lprState) => ({
+        ...lprState,
+        interval: {
+          startMs: Math.max(0, Math.min(action.interval.startMs, action.interval.endMs)),
+          endMs: Math.max(0, Math.max(action.interval.startMs, action.interval.endMs)),
+        },
+        workflowMode: lprState.workflowMode === 'idle' ? 'range' : lprState.workflowMode,
+      }));
+
+    case 'clear-lpr-interval':
+      return mapActiveLprState(state, (lprState) => ({
+        ...lprState,
+        interval: null,
+      }));
+
+    case 'set-lpr-target-vehicle-kind':
+      return mapActiveLprState(state, (lprState) => ({
+        ...lprState,
+        targetVehicleKind: action.targetVehicleKind,
+      }));
+
+    case 'set-lpr-country-hints':
+      return mapActiveLprState(state, (lprState) => ({
+        ...lprState,
+        countryHints: [...action.countryHints],
+      }));
+
+    case 'set-lpr-toggles':
+      return mapActiveLprState(state, (lprState) => ({
+        ...lprState,
+        ...action.toggles,
+      }));
+
+    case 'set-lpr-target-tracks':
+      return mapActiveLprState(state, (lprState) => ({
+        ...lprState,
+        targetTracks: buildDefaultLprState({ targetTracks: action.targetTracks }).targetTracks,
+        selectedTargetTrackId: action.targetTracks.some((track) => track.id === lprState.selectedTargetTrackId)
+          ? lprState.selectedTargetTrackId
+          : action.targetTracks[0]?.id ?? null,
+      }));
+
+    case 'select-lpr-target-track':
+      return mapActiveLprState(state, (lprState) => ({
+        ...lprState,
+        selectedTargetTrackId: action.targetTrackId,
+        workflowMode: action.targetTrackId ? 'target' : lprState.workflowMode,
+      }));
+
+    case 'set-lpr-job':
+      return mapActiveLprState(state, (lprState) => ({
+        ...lprState,
+        job: {
+          ...lprState.job,
+          ...action.job,
+        },
+      }));
+
+    case 'set-lpr-samples':
+      return mapActiveLprState(state, (lprState) => ({
+        ...lprState,
+        samples: buildDefaultLprState({ samples: action.samples }).samples,
+      }));
+
+    case 'set-lpr-candidates':
+      return mapActiveLprState(state, (lprState) => ({
+        ...lprState,
+        candidates: buildDefaultLprState({ candidates: action.candidates }).candidates,
+        acceptedCandidateId: action.candidates.some((candidate) => candidate.id === lprState.acceptedCandidateId)
+          ? lprState.acceptedCandidateId
+          : action.candidates[0]?.id ?? null,
+      }));
+
+    case 'accept-lpr-candidate':
+      return mapActiveLprState(state, (lprState) => ({
+        ...lprState,
+        acceptedCandidateId: action.candidateId,
+        workflowMode: action.candidateId ? 'review' : lprState.workflowMode,
+      }));
+
+    case 'append-lpr-history':
+      return mapActiveLprState(state, (lprState) => ({
+        ...lprState,
+        history: [...lprState.history, buildDefaultLprState({ history: [action.entry] }).history[0]],
+      }));
+
+    case 'clear-lpr-results':
+      return mapActiveLprState(state, (lprState) => ({
+        ...lprState,
+        job: buildDefaultLprState().job,
+        targetTracks: [],
+        selectedTargetTrackId: null,
+        samples: [],
+        candidates: [],
+        acceptedCandidateId: null,
+      }));
+
+    case 'reset-lpr-session':
+      return mapActiveLprState(state, () => buildDefaultLprState());
 
     default:
       return state;

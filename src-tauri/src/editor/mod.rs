@@ -1,11 +1,20 @@
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 
 use crate::contracts::{
-    FrameExportRequest, MediaProbePayload, VideoMarkerRectPayload,
+    FrameExportRequest, LprEvidenceExportRequestPayload, LprEvidenceExportResponsePayload,
+    LprFrameAnalysisRequestPayload, LprFrameAnalysisResponsePayload,
+    LprIntervalAnalysisRequestPayload, LprIntervalAnalysisResponsePayload,
+    LprRuntimeStatusPayload, LprTargetScanRequestPayload, LprTargetScanResponsePayload,
+    MediaProbePayload, VideoMarkerRectPayload,
 };
-use crate::platform::process::{find_bundled, hidden_command};
+use crate::platform::process::{find_bundled, find_lpr_runtime_root, find_python_runtime, hidden_command};
 
 fn parse_decimal_seconds_to_ms(value: &str) -> Option<u64> {
     let seconds = value.trim().parse::<f64>().ok()?;
@@ -51,6 +60,64 @@ fn build_drawbox_filter(marker_rect: &VideoMarkerRectPayload) -> String {
     format!(
         "drawbox=x=iw*{x:.6}:y=ih*{y:.6}:w=iw*{width:.6}:h=ih*{height:.6}:color=red@1:thickness=4",
     )
+}
+
+fn invoke_lpr_runtime<TRequest, TResponse>(
+    subcommand: &str,
+    payload: &TRequest,
+) -> Result<TResponse, String>
+where
+    TRequest: Serialize,
+    TResponse: DeserializeOwned,
+{
+    let python = find_python_runtime()?;
+    let runtime_root = find_lpr_runtime_root()?;
+    let serialized_payload = serde_json::to_vec(payload)
+        .map_err(|error| format!("Failed to serialize LPR payload: {}", error))?;
+
+    let mut command = hidden_command(&python.program);
+    for arg in &python.args {
+        command.arg(arg);
+    }
+
+    let mut child = command
+        .current_dir(&runtime_root)
+        .arg("-m")
+        .arg("traffic_lpr_runtime")
+        .arg(subcommand)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| format!("Failed to start the local LPR runtime: {}", error))?;
+
+    if let Some(stdin) = child.stdin.as_mut() {
+        stdin
+            .write_all(&serialized_payload)
+            .map_err(|error| format!("Failed to write LPR request payload: {}", error))?;
+    }
+
+    let output = child
+        .wait_with_output()
+        .map_err(|error| format!("Failed to wait for LPR runtime: {}", error))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if stderr.is_empty() {
+            "The local LPR runtime failed without additional details.".to_string()
+        } else {
+            stderr
+        });
+    }
+
+    serde_json::from_slice(&output.stdout).map_err(|error| {
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if stdout.is_empty() {
+            format!("Failed to parse LPR runtime response: {}", error)
+        } else {
+            format!("Failed to parse LPR runtime response: {}\n{}", error, stdout)
+        }
+    })
 }
 
 fn probe_with_ffprobe(path: &str) -> Result<MediaProbePayload, String> {
@@ -232,8 +299,7 @@ pub async fn probe_media_source(path: String) -> Result<MediaProbePayload, Strin
     }
 }
 
-#[tauri::command]
-pub fn export_frame_image(request: FrameExportRequest) -> Result<(), String> {
+fn export_frame_image_internal(request: &FrameExportRequest) -> Result<(), String> {
     let ffmpeg = find_bundled("ffmpeg")?;
     let output_path = PathBuf::from(&request.output_path);
     if let Some(parent) = output_path.parent() {
@@ -279,6 +345,86 @@ pub fn export_frame_image(request: FrameExportRequest) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+#[tauri::command]
+pub fn export_frame_image(request: FrameExportRequest) -> Result<(), String> {
+    export_frame_image_internal(&request)
+}
+
+#[tauri::command]
+pub fn get_lpr_runtime_status() -> Result<LprRuntimeStatusPayload, String> {
+    invoke_lpr_runtime("status", &serde_json::json!({}))
+}
+
+#[tauri::command]
+pub fn scan_lpr_targets(
+    request: LprTargetScanRequestPayload,
+) -> Result<LprTargetScanResponsePayload, String> {
+    invoke_lpr_runtime("scan-targets", &request)
+}
+
+#[tauri::command]
+pub fn analyze_lpr_frame(
+    request: LprFrameAnalysisRequestPayload,
+) -> Result<LprFrameAnalysisResponsePayload, String> {
+    invoke_lpr_runtime("analyze-frame", &request)
+}
+
+#[tauri::command]
+pub fn analyze_lpr_interval(
+    request: LprIntervalAnalysisRequestPayload,
+) -> Result<LprIntervalAnalysisResponsePayload, String> {
+    invoke_lpr_runtime("analyze-interval", &request)
+}
+
+#[tauri::command]
+pub fn export_lpr_evidence(
+    request: LprEvidenceExportRequestPayload,
+) -> Result<LprEvidenceExportResponsePayload, String> {
+    let json_path = PathBuf::from(&request.output_path);
+    if let Some(parent) = json_path.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent)
+                .map_err(|error| format!("Failed to create evidence directory: {}", error))?;
+        }
+    }
+
+    let image_path = json_path.with_extension("png");
+    export_frame_image_internal(&FrameExportRequest {
+        output_path: image_path.to_string_lossy().to_string(),
+        source_path: request.source_path.clone(),
+        time_ms: request.time_ms,
+        marker_rect: request.marker_rect.clone(),
+    })?;
+
+    let exported_at_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| format!("System clock error while exporting evidence: {}", error))?
+        .as_millis() as u64;
+
+    let snapshot = serde_json::json!({
+        "exportedAtMs": exported_at_ms,
+        "sourcePath": request.source_path,
+        "timeMs": request.time_ms,
+        "interval": request.interval,
+        "markerRect": request.marker_rect,
+        "targetTrack": request.target_track,
+        "acceptedCandidate": request.accepted_candidate,
+        "candidates": request.candidates,
+        "samples": request.samples,
+        "imagePath": image_path.to_string_lossy(),
+    });
+
+    let serialized_snapshot = serde_json::to_vec_pretty(&snapshot)
+        .map_err(|error| format!("Failed to serialize evidence snapshot: {}", error))?;
+    fs::write(&json_path, serialized_snapshot)
+        .map_err(|error| format!("Failed to write evidence snapshot: {}", error))?;
+
+    Ok(LprEvidenceExportResponsePayload {
+        json_path: json_path.to_string_lossy().to_string(),
+        image_path: image_path.to_string_lossy().to_string(),
+    })
 }
 
 #[cfg(test)]

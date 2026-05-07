@@ -1,0 +1,27 @@
+[project]
+name = "traffic-lpr-runtime"
+version = "0.1.0"
+description = "Independent local runtime for Traffic license plate recognition"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "fast-alpr[onnx-gpu]>=0.4.0",
+    "fast-plate-ocr[onnx-gpu]>=1.1.0",
+    "numpy>=2.2.0",
+    "opencv-python>=4.10.0",
+    "ultralytics>=8.4.0",
+]
+
+[project.scripts]
+traffic-lpr-runtime = "traffic_lpr_runtime.entrypoints.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["traffic_lpr_runtime*"]

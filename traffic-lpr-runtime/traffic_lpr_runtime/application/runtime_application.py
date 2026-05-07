@@ -1,0 +1,378 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from traffic_lpr_runtime.domain.errors import RuntimeFailure
+from traffic_lpr_runtime.domain.interfaces import FrameReader, PlateRecognizer, TargetDetector
+from traffic_lpr_runtime.domain.models import FrameSample, PlateCandidate, TargetTrack, TrackedRegion
+from traffic_lpr_runtime.domain.text import normalize_plate_text
+from traffic_lpr_runtime.domain.value_objects import NormalizedRect, crop_image
+from traffic_lpr_runtime.infrastructure.dependencies import DependencyRegistry
+from traffic_lpr_runtime.infrastructure.frame_reader import OpenCvFrameReader
+from traffic_lpr_runtime.infrastructure.image_processing import ImagePreprocessor, QualityScorer
+from traffic_lpr_runtime.infrastructure.model_runtime import (
+    FastAlprPlateRecognizer,
+    FastPlateOcrFallbackRecognizer,
+    ModelRegistry,
+    UltralyticsTargetDetector,
+)
+
+
+class LprRuntimeApplication:
+    def __init__(
+        self,
+        dependencies: DependencyRegistry,
+        frame_reader: FrameReader,
+        target_detector: TargetDetector,
+        primary_recognizer: PlateRecognizer,
+        fallback_recognizer: PlateRecognizer,
+        image_preprocessor: ImagePreprocessor,
+        quality_scorer: QualityScorer,
+    ) -> None:
+        self._dependencies = dependencies
+        self._frame_reader = frame_reader
+        self._target_detector = target_detector
+        self._primary_recognizer = primary_recognizer
+        self._fallback_recognizer = fallback_recognizer
+        self._image_preprocessor = image_preprocessor
+        self._quality_scorer = quality_scorer
+
+    def dispatch(self, subcommand: str, payload: dict[str, Any]) -> dict[str, Any]:
+        if subcommand == 'status':
+            return self.status()
+        if subcommand == 'scan-targets':
+            return self.scan_targets(payload)
+        if subcommand == 'analyze-frame':
+            return self.analyze_frame(payload)
+        if subcommand == 'analyze-interval':
+            return self.analyze_interval(payload)
+        raise RuntimeFailure(f'Unsupported LPR runtime subcommand: {subcommand}')
+
+    def status(self) -> dict[str, Any]:
+        return self._dependencies.build_status().to_payload()
+
+    def scan_targets(self, payload: dict[str, Any]) -> dict[str, Any]:
+        self._dependencies.ensure_ready()
+        time_ms = int(payload['timeMs'])
+        frame = self._frame_reader.read_frame(payload['sourcePath'], time_ms)
+        detections = self._detect_targets(
+            frame,
+            time_ms,
+            payload.get('targetVehicleKind', 'vehicle'),
+            NormalizedRect.from_payload(payload.get('markerRect')),
+        )
+        return {
+            'detections': [detection.to_payload() for detection in detections],
+            'runtime': self.status(),
+        }
+
+    def analyze_frame(self, payload: dict[str, Any]) -> dict[str, Any]:
+        self._dependencies.ensure_ready()
+        time_ms = int(payload['timeMs'])
+        marker_rect = NormalizedRect.from_payload(payload.get('markerRect'))
+        frame = self._frame_reader.read_frame(payload['sourcePath'], time_ms)
+        detections = self._detect_targets(
+            frame,
+            time_ms,
+            payload.get('targetVehicleKind', 'vehicle'),
+            marker_rect,
+        )
+        target_box = detections[0].box if detections else None
+        candidates, sample = self._analyze_plate_candidates(
+            frame,
+            time_ms,
+            marker_rect,
+            target_box,
+            bool(payload.get('useMarkerRoi', True)),
+            bool(payload.get('preferRestoration', True)),
+            bool(payload.get('useFallback', True)),
+        )
+        return {
+            'detections': [detection.to_payload() for detection in detections],
+            'sample': sample.to_payload(),
+            'candidates': [candidate.to_payload() for candidate in candidates[:8]],
+            'runtime': self.status(),
+        }
+
+    def analyze_interval(self, payload: dict[str, Any]) -> dict[str, Any]:
+        self._dependencies.ensure_ready()
+        marker_rect = NormalizedRect.from_payload(payload.get('markerRect'))
+        selected_target_box = NormalizedRect.from_payload(payload.get('selectedTargetBox'))
+        tracked_frames = self._track_target_across_interval(
+            payload['sourcePath'],
+            payload['interval'],
+            int(payload['anchorTimeMs']),
+            marker_rect,
+            payload.get('targetVehicleKind', 'vehicle'),
+            selected_target_box,
+            payload.get('sampleEveryMs'),
+            payload.get('maxSamples'),
+        )
+
+        samples: list[FrameSample] = []
+        for tracked_frame in tracked_frames:
+            frame = self._frame_reader.read_frame(payload['sourcePath'], tracked_frame.time_ms)
+            _, sample = self._analyze_plate_candidates(
+                frame,
+                tracked_frame.time_ms,
+                marker_rect,
+                tracked_frame.box,
+                bool(payload.get('useMarkerRoi', True)),
+                bool(payload.get('preferRestoration', True)),
+                bool(payload.get('useFallback', True)),
+            )
+            samples.append(sample)
+
+        candidates = self._aggregate_candidates(samples)
+        accepted_candidate_id = candidates[0].id if candidates else None
+        summary = (
+            f'{len(samples)} samples, {len(candidates)} fused candidate(s), best={candidates[0].text}'
+            if candidates
+            else f'{len(samples)} samples, no confident plate candidate.'
+        )
+
+        return {
+            'targetTracks': [track.to_payload() for track in self._build_track_payload(tracked_frames)],
+            'samples': [sample.to_payload() for sample in samples],
+            'candidates': [candidate.to_payload() for candidate in candidates],
+            'acceptedCandidateId': accepted_candidate_id,
+            'summary': summary,
+            'runtime': self.status(),
+        }
+
+    def _detect_targets(
+        self,
+        frame: Any,
+        time_ms: int,
+        vehicle_kind: str,
+        marker_rect: NormalizedRect | None,
+    ) -> list[TrackedRegion]:
+        return self._target_detector.detect_targets(frame, time_ms, vehicle_kind, marker_rect)
+
+    def _select_analysis_roi(
+        self,
+        frame: Any,
+        marker_rect: NormalizedRect | None,
+        target_box: NormalizedRect | None,
+        use_marker_roi: bool,
+    ) -> tuple[Any, NormalizedRect | None]:
+        if target_box:
+            return crop_image(frame, target_box), target_box
+        if use_marker_roi and marker_rect:
+            return crop_image(frame, marker_rect), marker_rect
+        return frame, None
+
+    def _analyze_plate_candidates(
+        self,
+        frame: Any,
+        time_ms: int,
+        marker_rect: NormalizedRect | None,
+        target_box: NormalizedRect | None,
+        use_marker_roi: bool,
+        prefer_restoration: bool,
+        use_fallback: bool,
+    ) -> tuple[list[PlateCandidate], FrameSample]:
+        working_image, crop_box = self._select_analysis_roi(frame, marker_rect, target_box, use_marker_roi)
+        candidates: list[PlateCandidate] = []
+
+        variants = self._image_preprocessor.build_variants(working_image)
+        for variant_name, variant_image in variants:
+            if not prefer_restoration and variant_name != 'baseline':
+                continue
+            candidates.extend(self._primary_recognizer.recognize(variant_image, variant_name, time_ms, crop_box))
+
+        best_primary = max((candidate.confidence for candidate in candidates), default=0.0)
+        if use_fallback and (not candidates or best_primary < 0.72):
+            candidates.extend(self._fallback_recognizer.recognize(working_image, 'fallback', time_ms, crop_box))
+
+        candidates.sort(
+            key=lambda candidate: (
+                candidate.confidence,
+                candidate.quality.overall_score if candidate.quality else 0.0,
+            ),
+            reverse=True,
+        )
+
+        best_candidate = candidates[0] if candidates else None
+        sample_quality = best_candidate.quality if best_candidate else self._quality_scorer.score(working_image, None)
+        sample = FrameSample(
+            id=f'sample-{time_ms}',
+            time_ms=time_ms,
+            target_box=target_box,
+            plate_box=best_candidate.box if best_candidate else None,
+            quality=sample_quality,
+            candidates=candidates[:6],
+            image_path=None,
+        )
+        return candidates, sample
+
+    def _aggregate_candidates(self, samples: list[FrameSample]) -> list[PlateCandidate]:
+        source_weights = {'baseline': 1.0, 'restored': 0.92, 'fallback': 0.88, 'fused': 1.05}
+        aggregated: dict[str, dict[str, Any]] = {}
+
+        for sample in samples:
+            for candidate in sample.candidates:
+                text = normalize_plate_text(candidate.text)
+                if not text:
+                    continue
+                quality_weight = candidate.quality.overall_score if candidate.quality else 0.55
+                weight = candidate.confidence * quality_weight * source_weights.get(candidate.source, 1.0)
+
+                current = aggregated.get(text)
+                if current is None:
+                    aggregated[text] = {
+                        'weight': weight,
+                        'best_raw_confidence': candidate.confidence,
+                        'candidate': PlateCandidate(
+                            id=f'candidate-{len(aggregated)}',
+                            text=text,
+                            confidence=weight,
+                            source='fused',
+                            frame_time_ms=candidate.frame_time_ms,
+                            country_code=candidate.country_code,
+                            box=candidate.box,
+                            quality=candidate.quality,
+                        ),
+                    }
+                    continue
+
+                current['weight'] += weight
+                if candidate.confidence >= current['best_raw_confidence']:
+                    current['best_raw_confidence'] = candidate.confidence
+                    current['candidate'].frame_time_ms = candidate.frame_time_ms
+                    current['candidate'].country_code = candidate.country_code
+                    current['candidate'].box = candidate.box
+                    current['candidate'].quality = candidate.quality
+
+        ranked = sorted(aggregated.values(), key=lambda item: item['weight'], reverse=True)
+        if not ranked:
+            return []
+
+        best_weight = max(item['weight'] for item in ranked) or 1.0
+        fused_candidates: list[PlateCandidate] = []
+        for item in ranked[:8]:
+            candidate = item['candidate']
+            candidate.confidence = max(0.0, min(1.0, item['weight'] / best_weight))
+            fused_candidates.append(candidate)
+
+        return fused_candidates
+
+    def _sample_times(
+        self,
+        interval: dict[str, int],
+        requested_every_ms: int | None,
+        requested_max_samples: int | None,
+    ) -> list[int]:
+        start_ms = int(interval['startMs'])
+        end_ms = int(interval['endMs'])
+        duration_ms = max(0, end_ms - start_ms)
+        max_samples = max(4, min(int(requested_max_samples or 18), 48))
+
+        if duration_ms == 0:
+            return [start_ms]
+
+        sample_every_ms = requested_every_ms or max(120, int(duration_ms / max_samples))
+        times = list(range(start_ms, end_ms + 1, sample_every_ms))
+        if times[-1] != end_ms:
+            times.append(end_ms)
+        return times[:max_samples]
+
+    def _match_anchor_target(
+        self,
+        detections: list[TrackedRegion],
+        selected_target_box: NormalizedRect | None,
+    ) -> TrackedRegion | None:
+        if not detections:
+            return None
+        if not selected_target_box:
+            return detections[0]
+
+        ranked = sorted(
+            detections,
+            key=lambda candidate: (
+                candidate.box.intersection_over_union(selected_target_box),
+                -candidate.box.center_distance(selected_target_box),
+                candidate.confidence,
+            ),
+            reverse=True,
+        )
+        return ranked[0]
+
+    def _track_target_across_interval(
+        self,
+        source_path: str,
+        interval: dict[str, int],
+        anchor_time_ms: int,
+        marker_rect: NormalizedRect | None,
+        vehicle_kind: str,
+        selected_target_box: NormalizedRect | None,
+        sample_every_ms: int | None,
+        max_samples: int | None,
+    ) -> list[TrackedRegion]:
+        times = self._sample_times(interval, sample_every_ms, max_samples)
+        if anchor_time_ms not in times:
+            times.append(anchor_time_ms)
+            times = sorted(set(times))
+
+        tracked_frames: list[TrackedRegion] = []
+        previous_box = selected_target_box
+
+        for time_ms in times:
+            frame = self._frame_reader.read_frame(source_path, time_ms)
+            detections = self._detect_targets(frame, time_ms, vehicle_kind, marker_rect)
+            if time_ms == anchor_time_ms:
+                chosen = self._match_anchor_target(detections, selected_target_box)
+            elif previous_box:
+                ranked = sorted(
+                    detections,
+                    key=lambda candidate: (
+                        candidate.box.intersection_over_union(previous_box),
+                        -candidate.box.center_distance(previous_box),
+                        candidate.confidence,
+                    ),
+                    reverse=True,
+                )
+                chosen = ranked[0] if ranked else None
+            else:
+                chosen = detections[0] if detections else None
+
+            if chosen:
+                tracked_frames.append(chosen)
+                previous_box = chosen.box
+
+        return tracked_frames
+
+    def _build_track_payload(self, tracked_frames: list[TrackedRegion]) -> list[TargetTrack]:
+        if not tracked_frames:
+            return []
+        average_confidence = sum(frame.confidence for frame in tracked_frames) / len(tracked_frames)
+        return [
+            TargetTrack(
+                id='tracked-target-0',
+                class_name=tracked_frames[0].class_name,
+                label=f'{tracked_frames[0].class_name} {tracked_frames[0].time_ms}ms',
+                confidence=average_confidence,
+                frames=tracked_frames,
+            )
+        ]
+
+
+def build_default_application(runtime_script: Path) -> LprRuntimeApplication:
+    dependencies = DependencyRegistry.load(runtime_script)
+    frame_reader = OpenCvFrameReader(dependencies)
+    quality_scorer = QualityScorer(dependencies)
+    image_preprocessor = ImagePreprocessor(dependencies)
+    model_registry = ModelRegistry(dependencies)
+    target_detector = UltralyticsTargetDetector(model_registry)
+    primary_recognizer = FastAlprPlateRecognizer(model_registry, quality_scorer)
+    fallback_recognizer = FastPlateOcrFallbackRecognizer(model_registry, quality_scorer)
+    return LprRuntimeApplication(
+        dependencies=dependencies,
+        frame_reader=frame_reader,
+        target_detector=target_detector,
+        primary_recognizer=primary_recognizer,
+        fallback_recognizer=fallback_recognizer,
+        image_preprocessor=image_preprocessor,
+        quality_scorer=quality_scorer,
+    )

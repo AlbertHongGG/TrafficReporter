@@ -267,7 +267,7 @@ export function usePlaybackController({
     return result;
   });
 
-  const finishPlayback = useCallback((finalPlayheadMs: number) => {
+  const finishPlayback = (finalPlayheadMs: number) => {
     const { playheadMs: currentPlayheadMs, timelineDurationMs: currentTimelineDurationMs, isPlaying: currentlyPlaying } = latestStateRef.current;
     const committedPlayheadMs = clamp(livePlayheadMsRef.current, 0, currentTimelineDurationMs);
     const boundedPlayheadMs = clamp(finalPlayheadMs ?? committedPlayheadMs, 0, currentTimelineDurationMs);
@@ -287,14 +287,14 @@ export function usePlaybackController({
     }
 
     return boundedPlayheadMs;
-  }, [dispatch]);
+  };
 
-  const stopPlayback = useCallback(() => {
+  const stopPlayback = () => {
     const { timelineDurationMs: currentTimelineDurationMs } = latestStateRef.current;
     finishPlayback(clamp(livePlayheadMsRef.current, 0, currentTimelineDurationMs));
-  }, [finishPlayback]);
+  };
 
-  const seekTo = useCallback((nextPlayheadMs: number, preservePlayback = false) => {
+  const seekTo = (nextPlayheadMs: number, preservePlayback = false) => {
     const {
       isPlaying: currentlyPlaying,
       playheadMs: currentPlayheadMs,
@@ -326,9 +326,9 @@ export function usePlaybackController({
     if (currentlyPlaying) {
       dispatch({ type: 'set-playing', isPlaying: false });
     }
-  }, [dispatch]);
+  };
 
-  const togglePlay = useCallback(() => {
+  const togglePlay = () => {
     const {
       isPlaying: currentlyPlaying,
       playheadMs: currentPlayheadMs,
@@ -366,16 +366,16 @@ export function usePlaybackController({
     if (!currentlyPlaying) {
       dispatch({ type: 'set-playing', isPlaying: true });
     }
-  }, [dispatch, stopPlayback]);
+  };
 
-  const seekBy = useCallback((deltaMs: number) => {
+  const seekBy = (deltaMs: number) => {
     const { isPlaying: currentlyPlaying, timelineDurationMs: currentTimelineDurationMs } = latestStateRef.current;
     if (currentTimelineDurationMs === 0) {
       return;
     }
 
     seekTo(livePlayheadMsRef.current + deltaMs, currentlyPlaying);
-  }, [seekTo]);
+  };
 
   useEffect(() => {
     if (!isPlaying) {
@@ -461,7 +461,7 @@ export function usePlaybackController({
 
     frameId = requestAnimationFrame(step);
     return () => cancelAnimationFrame(frameId);
-  }, [emitTransportState, finishPlayback, isPlaying, syncVideoElement, videoRef]);
+  }, [finishPlayback, isPlaying, syncVideoElement, videoRef]);
 
   useEffect(() => {
     if (isPlaying) {

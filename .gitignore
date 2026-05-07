@@ -21,6 +21,13 @@ src-tauri/bin/*.so
 src-tauri/bin/*.dylib
 src-tauri/gen
 
+# Local references and runtime assets
+reference/
+.venv/
+traffic-lpr-runtime/.venv/
+traffic-lpr-runtime/.runtime/
+traffic-lpr-runtime/**/__pycache__/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
