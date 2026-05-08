@@ -15,6 +15,9 @@ from traffic_lpr_runtime.domain.errors import RuntimeFailure
 def main() -> int:
     runtime_script = Path(__file__).resolve()
     subcommand = sys.argv[1] if len(sys.argv) > 1 else 'status'
+    if subcommand == 'serve':
+        return serve(runtime_script)
+
     application = None
     stdout_noise = io.StringIO()
 
@@ -44,6 +47,68 @@ def main() -> int:
         }
         sys.stderr.write(json.dumps(failure))
         return 1
+
+
+def serve(runtime_script: Path) -> int:
+    stdout_noise = io.StringIO()
+
+    try:
+        with contextlib.redirect_stdout(stdout_noise):
+            application = build_default_application(runtime_script)
+    except Exception:
+        _flush_stdout_noise(stdout_noise)
+        sys.stderr.write(traceback.format_exc())
+        return 1
+
+    _flush_stdout_noise(stdout_noise)
+
+    while True:
+        raw_line = sys.stdin.buffer.readline()
+        if not raw_line:
+            break
+
+        line = raw_line.decode('utf-8').strip()
+        if not line:
+            continue
+
+        request_id: Any = None
+        response: dict[str, Any]
+
+        try:
+            request = json.loads(line)
+            request_id = request.get('requestId')
+            subcommand = request.get('subcommand', 'status')
+            payload = request.get('payload') or {}
+            with contextlib.redirect_stdout(stdout_noise):
+                result = application.dispatch(subcommand, payload)
+            _flush_stdout_noise(stdout_noise)
+            response = {
+                'requestId': request_id,
+                'ok': True,
+                'result': result,
+            }
+        except RuntimeFailure as error:
+            _flush_stdout_noise(stdout_noise)
+            response = {
+                'requestId': request_id,
+                'ok': False,
+                'error': str(error),
+                'runtime': _runtime_status_payload(application) | {'detail': str(error)},
+            }
+        except Exception as error:
+            _flush_stdout_noise(stdout_noise)
+            response = {
+                'requestId': request_id,
+                'ok': False,
+                'error': str(error),
+                'runtime': _runtime_status_payload(application) | {'detail': 'Unexpected LPR runtime failure.'},
+                'traceback': traceback.format_exc(),
+            }
+
+        sys.stdout.write(json.dumps(response) + '\n')
+        sys.stdout.flush()
+
+    return 0
 
 
 def _flush_stdout_noise(stdout_noise: io.StringIO) -> None:

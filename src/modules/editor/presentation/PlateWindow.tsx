@@ -19,7 +19,10 @@ import {
 import { requestPlateWindowSession, sendPlateWindowAction } from '../infrastructure/plateWindowApi';
 import { buildDefaultLprState, clamp, formatTransportTime } from '../domain/model';
 import type { TimelineIntervalSelection } from '../../../shared/contracts';
+import { createLogger, getErrorSummary, serializeError } from '../../../utils/logger';
 import styles from './PlateWindow.module.css';
+
+const log = createLogger('PlateWindow');
 
 function formatConfidence(confidence: number) {
   return `${Math.round(clamp(confidence, 0, 1) * 100)}%`;
@@ -63,7 +66,8 @@ export const PlateWindow: React.FC = () => {
         return;
       }
 
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to connect to the main editor window.');
+      log.error('Failed to request the latest plate window session.', serializeError(error));
+      setErrorMessage(getErrorSummary(error, 'Unable to connect to the main editor window.'));
     });
 
     return () => {
@@ -81,7 +85,11 @@ export const PlateWindow: React.FC = () => {
       await sendPlateWindowAction(action);
       setErrorMessage(null);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to send the plate action.');
+      log.error('Failed to send a plate window action.', {
+        action,
+        error: serializeError(error),
+      });
+      setErrorMessage(getErrorSummary(error, 'Unable to send the plate action.'));
     }
   }, []);
 

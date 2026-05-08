@@ -1,5 +1,13 @@
+import { listen } from '@tauri-apps/api/event';
+
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 type ConsoleMethod = 'log' | 'info' | 'warn' | 'error';
+
+interface BackendLogPayload {
+  level: LogLevel;
+  scope: string;
+  message: string;
+}
 
 interface SerializedError {
   name: string;
@@ -17,6 +25,8 @@ const LOG_COLORS: Record<LogLevel, string> = {
 };
 
 const PREFIX = '[MediaEditor]';
+const BACKEND_LOG_EVENT = 'app/log';
+const MAX_UI_ERROR_LENGTH = 220;
 const originalConsole = {
   log: console.log.bind(console),
   info: console.info.bind(console),
@@ -44,6 +54,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+function isLogLevel(value: unknown): value is LogLevel {
+  return value === 'debug' || value === 'info' || value === 'warn' || value === 'error';
+}
+
 export function getErrorMessage(error: unknown, fallback = 'Unexpected error.'): string {
   if (error instanceof Error && error.message.trim()) {
     return error.message;
@@ -58,6 +72,21 @@ export function getErrorMessage(error: unknown, fallback = 'Unexpected error.'):
   }
 
   return fallback;
+}
+
+export function getErrorSummary(error: unknown, fallback = 'Unexpected error.', maxLength = MAX_UI_ERROR_LENGTH): string {
+  const message = getErrorMessage(error, fallback)
+    .replace(/\r/g, '\n')
+    .split('\n')
+    .map((line) => line.trim())
+    .find((line) => line && !line.startsWith('Traceback') && !line.startsWith('File "'))
+    ?? fallback;
+
+  if (message.length <= maxLength) {
+    return message;
+  }
+
+  return `${message.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
 }
 
 export function serializeError(error: unknown): SerializedError | { value: unknown } {
@@ -94,6 +123,11 @@ function writeIntercept(level: 'warn' | 'error', args: unknown[]) {
   const style = LOG_COLORS[level];
   const label = `${PREFIX}[Console][${level.toUpperCase()}]`;
   originalConsole[level](`%c${timestamp} ${label}`, style, ...args);
+}
+
+function writeBackendLog(payload: BackendLogPayload) {
+  const level = isLogLevel(payload.level) ? payload.level : 'info';
+  write(level, payload.scope || 'Backend', payload.message || 'Empty backend log event.');
 }
 
 export function createLogger(module: string) {
@@ -134,6 +168,12 @@ export function installGlobalLogger() {
   console.error = (...args: unknown[]) => {
     writeIntercept('error', args);
   };
+
+  void listen<BackendLogPayload>(BACKEND_LOG_EVENT, (event) => {
+    writeBackendLog(event.payload);
+  }).catch((error) => {
+    log.warn('Unable to attach the backend log bridge.', serializeError(error));
+  });
 
   log.info('Global logger installed.');
 }

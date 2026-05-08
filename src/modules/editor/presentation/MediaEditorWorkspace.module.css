@@ -134,6 +134,7 @@
   padding: 8px 16px;
   border-bottom: 1px solid var(--border-subtle);
   background: rgba(0,0,0,0.4);
+  overflow: hidden;
 }
 
 .notice {
@@ -142,6 +143,15 @@
   gap: 6px;
   font-size: 12px;
   color: var(--text-secondary);
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.notice span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .noticeError {

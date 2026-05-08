@@ -151,7 +151,7 @@ export function buildDefaultLprState(overrides: Partial<LprSessionState> = {}): 
   return {
     workflowMode: overrides.workflowMode ?? 'idle',
     interval: cloneIntervalSelection(overrides.interval ?? null),
-    targetVehicleKind: overrides.targetVehicleKind ?? 'motorcycle',
+    targetVehicleKind: overrides.targetVehicleKind ?? 'vehicle',
     useDenseSampling: overrides.useDenseSampling ?? true,
     countryHints: [...(overrides.countryHints ?? [])],
     job: cloneLprJobState(overrides.job ?? DEFAULT_LPR_JOB_STATE),

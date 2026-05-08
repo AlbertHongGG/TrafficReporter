@@ -57,7 +57,7 @@ import {
   getLprRuntimeStatus,
   scanLprTargets,
 } from '../infrastructure/lprApi';
-import { createLogger, getErrorMessage, serializeError } from '../../../utils/logger';
+import { createLogger, getErrorMessage, getErrorSummary, serializeError } from '../../../utils/logger';
 import { openExportWindow } from '../../export/infrastructure/exportApi';
 import { preparePendingExportSession } from '../../export/application/exportSession';
 import {
@@ -759,14 +759,20 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       }
 
       if (failures.length > 0) {
+        log.warn('Some selected files failed to import.', {
+          failureCount: failures.length,
+          firstFailure: serializeError(failures[0].reason),
+        });
         setImportFeedback(
-          failures[0].reason instanceof Error
-            ? failures[0].reason.message
-            : `${failures.length} file(s) failed to import.`,
+          getErrorSummary(
+            failures[0].reason,
+            `${failures.length} file(s) failed to import.`,
+          ),
         );
       }
     } catch (error) {
-      setImportFeedback(error instanceof Error ? error.message : 'Failed to import media.');
+      log.error('Media import failed.', serializeError(error));
+      setImportFeedback(getErrorSummary(error, 'Failed to import media.'));
     }
   }, []);
 
@@ -859,7 +865,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         error: serializeError(error),
         fileCount: state.files.length,
       });
-      setWorkspaceFeedback(getErrorMessage(error, 'Failed to open export window.'));
+      setWorkspaceFeedback(getErrorSummary(error, 'Failed to open export window.'));
     }
   };
 
@@ -903,7 +909,8 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       });
       setWorkspaceFeedback(`Frame exported to ${outputPath}`);
     } catch (error) {
-      setWorkspaceFeedback(getErrorMessage(error, 'Failed to export the current frame.'));
+      log.error('Failed to export the current frame.', serializeError(error));
+      setWorkspaceFeedback(getErrorSummary(error, 'Failed to export the current frame.'));
     }
   };
 
@@ -928,7 +935,8 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       dispatch({ type: 'relink-file', fileId, asset });
       setImportFeedback(null);
     } catch (error) {
-      setImportFeedback(error instanceof Error ? error.message : 'Failed to relink video.');
+      log.error('Failed to relink media file.', serializeError(error));
+      setImportFeedback(getErrorSummary(error, 'Failed to relink video.'));
     }
   };
 
@@ -1080,14 +1088,15 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
           : 'No target found in the current frame.',
       });
     } catch (error) {
+      log.error('Target scan failed.', serializeError(error));
       updateLprJob({
         status: 'failed',
         progress: 1,
         stage: 'Targets',
         detail: 'Target scan failed.',
-        error: getErrorMessage(error, 'Unable to scan targets.'),
+        error: getErrorSummary(error, 'Unable to scan targets.'),
       });
-      setWorkspaceFeedback(getErrorMessage(error, 'Unable to scan targets.'));
+      setWorkspaceFeedback(getErrorSummary(error, 'Unable to scan targets.'));
     }
   };
 
@@ -1146,14 +1155,15 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
           : 'No confident plate candidate.',
       });
     } catch (error) {
+      log.error('Frame analysis failed.', serializeError(error));
       updateLprJob({
         status: 'failed',
         progress: 1,
         stage: 'Frame',
         detail: 'Frame analysis failed.',
-        error: getErrorMessage(error, 'Unable to analyze the current frame.'),
+        error: getErrorSummary(error, 'Unable to analyze the current frame.'),
       });
-      setWorkspaceFeedback(getErrorMessage(error, 'Unable to analyze the current frame.'));
+      setWorkspaceFeedback(getErrorSummary(error, 'Unable to analyze the current frame.'));
     }
   };
 
@@ -1242,14 +1252,15 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         detail: response.summary,
       });
     } catch (error) {
+      log.error('Range analysis failed.', serializeError(error));
       updateLprJob({
         status: 'failed',
         progress: 1,
         stage: 'Interval',
         detail: 'Interval analysis failed.',
-        error: getErrorMessage(error, 'Unable to analyze the selected interval.'),
+        error: getErrorSummary(error, 'Unable to analyze the selected interval.'),
       });
-      setWorkspaceFeedback(getErrorMessage(error, 'Unable to analyze the selected interval.'));
+      setWorkspaceFeedback(getErrorSummary(error, 'Unable to analyze the selected interval.'));
     }
   };
 
@@ -1289,7 +1300,8 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
 
       setWorkspaceFeedback(`Evidence exported to ${response.jsonPath} with frame ${response.imagePath}`);
     } catch (error) {
-      setWorkspaceFeedback(getErrorMessage(error, 'Unable to export the LPR evidence snapshot.'));
+      log.error('Failed to export LPR evidence.', serializeError(error));
+      setWorkspaceFeedback(getErrorSummary(error, 'Unable to export the LPR evidence snapshot.'));
     }
   };
 
