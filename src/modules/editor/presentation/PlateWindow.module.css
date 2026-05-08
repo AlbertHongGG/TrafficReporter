@@ -2,42 +2,50 @@
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: var(--bg-base);
+  background: rgba(10, 10, 10, 0.6);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   color: var(--text-primary);
+  font-family: var(--font-sans);
+  overflow: hidden;
 }
 
 .chrome {
-  height: 44px;
-  padding: 0 10px 0 14px;
-  border-bottom: 1px solid var(--border-light);
-  background: var(--bg-surface-elevated);
+  height: 48px;
+  padding: 0 12px 0 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(to bottom, rgba(30, 30, 30, 0.7), rgba(15, 15, 15, 0.7));
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-shrink: 0;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
 }
 
 .chromeMeta {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .chromeTitle {
   min-width: 0;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
 .chromeActions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .chromeButton {
@@ -48,68 +56,108 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s ease-out, color 0.15s ease-out;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  outline: none;
 }
 
 .chromeButton:hover {
-  background: rgba(255, 255, 255, 0.08);
   color: var(--text-primary);
 }
 
 .chromeButtonClose:hover {
-  background: rgba(239, 68, 68, 0.12);
-  color: var(--accent-danger);
+  color: #ef4444;
 }
 
 .runtimeBadge {
-  height: 20px;
-  padding: 0 7px;
+  height: 22px;
+  padding: 0 8px;
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
   font-size: 10px;
   font-family: var(--font-mono);
-  text-transform: lowercase;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
 }
 
 .runtimeBadgeReady {
-  background: rgba(34, 197, 94, 0.12);
-  color: #7dd3a7;
+  background: rgba(34, 197, 94, 0.15);
+  color: #86efac;
+  box-shadow: inset 0 0 0 1px rgba(34, 197, 94, 0.3);
 }
 
 .runtimeBadgeOffline {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-muted);
 }
 
 .body {
   flex: 1;
   min-height: 0;
-  overflow: auto;
-  padding: 12px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
 }
 
-.block,
-.listBlock,
-.resultStrip {
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-md);
-  background: var(--bg-surface);
+/* Custom Scrollbar */
+.body::-webkit-scrollbar,
+.samplesListBody::-webkit-scrollbar {
+  width: 6px;
+}
+.body::-webkit-scrollbar-track,
+.samplesListBody::-webkit-scrollbar-track {
+  background: transparent;
+}
+.body::-webkit-scrollbar-thumb,
+.samplesListBody::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+.body::-webkit-scrollbar-thumb:hover,
+.samplesListBody::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.contentWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .block,
 .listBlock {
-  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(20, 20, 20, 0.4);
+  padding: 14px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+.block::before,
+.listBlock::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, transparent 100%);
+  pointer-events: none;
 }
 
 .intervalRow,
 .actionGrid,
 .splitColumns {
   display: grid;
-  gap: 8px;
+  gap: 10px;
+  position: relative;
+  z-index: 1;
 }
 
 .intervalRow {
@@ -122,87 +170,124 @@
 
 .splitColumns {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
 }
 
 .intervalValue {
-  margin-top: 10px;
-  padding: 8px 10px;
-  border-radius: var(--radius-sm);
-  background: var(--bg-surface-elevated);
-  color: var(--text-secondary);
-  font-size: 11px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  color: var(--accent-primary);
+  font-size: 12px;
   font-family: var(--font-mono);
+  font-weight: 500;
+  text-align: center;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.inputWrapper {
+  position: relative;
+  z-index: 1;
 }
 
 .input {
   width: 100%;
-  height: 34px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
-  background: var(--bg-surface-elevated);
+  height: 40px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.4);
   color: var(--text-primary);
-  padding: 0 10px;
-  font-size: 12px;
+  padding: 0 14px;
+  font-size: 13px;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .input:focus {
   outline: none;
-  border-color: rgba(212, 175, 55, 0.5);
+  border-color: rgba(212, 175, 55, 0.6);
+  box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.15);
 }
 
-.primaryButton,
-.secondaryButton,
-.toggleButton,
-.listButton {
-  min-height: 34px;
-  border-radius: var(--radius-sm);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 0 10px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  transition: background 0.15s ease-out, border-color 0.15s ease-out, color 0.15s ease-out;
+.inputGlow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 80%;
+  height: 20px;
+  background: var(--accent-primary);
+  filter: blur(20px);
+  opacity: 0;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  transition: opacity 0.3s;
+  z-index: -1;
+}
+
+.input:focus + .inputGlow {
+  opacity: 0.1;
 }
 
 .primaryButton,
 .secondaryButton,
 .toggleButton {
-  border: 1px solid var(--border-light);
-  background: var(--bg-surface-elevated);
+  min-height: 38px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  outline: none;
 }
 
 .primaryButton {
-  background: var(--accent-primary);
-  border-color: transparent;
+  background: linear-gradient(135deg, var(--accent-primary) 0%, #b89326 100%);
   color: #000;
+  box-shadow: 0 2px 8px rgba(212, 175, 55, 0.3);
+}
+
+.secondaryButton,
+.toggleButton {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .primaryButton:hover:not(:disabled) {
-  background: var(--accent-primary-hover);
+  box-shadow: 0 4px 12px rgba(212, 175, 55, 0.4);
 }
 
 .secondaryButton:hover:not(:disabled),
-.toggleButton:hover:not(:disabled),
-.listButton:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.08);
+.toggleButton:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
   color: var(--text-primary);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .toggleButtonActive {
-  border-color: rgba(212, 175, 55, 0.28);
-  background: rgba(212, 175, 55, 0.1);
+  background: rgba(212, 175, 55, 0.15);
+  border-color: rgba(212, 175, 55, 0.4);
   color: var(--accent-primary);
+  box-shadow: 0 2px 8px rgba(212, 175, 55, 0.15);
 }
 
 .primaryButton:disabled,
 .secondaryButton:disabled,
-.toggleButton:disabled,
-.listButton:disabled {
-  opacity: 0.34;
+.toggleButton:disabled {
+  opacity: 0.4;
   cursor: not-allowed;
+  filter: grayscale(0.5);
+}
+
+.btnIcon {
+  opacity: 0.8;
 }
 
 .statusRow,
@@ -211,58 +296,98 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 12px;
 }
 
 .statusRow {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  z-index: 1;
+  position: relative;
 }
 
 .errorText {
-  margin-top: 8px;
-  font-size: 11px;
-  color: var(--accent-danger);
+  margin-top: 10px;
+  font-size: 12px;
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.1);
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  overflow: hidden;
+}
+
+.resultStripWrapper {
+  position: relative;
+  border-radius: 12px;
+}
+
+.resultStripGlow {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(90deg, rgba(212, 175, 55, 0.15) 0%, rgba(212, 175, 55, 0.05) 100%);
+  filter: blur(10px);
+  border-radius: 16px;
+  z-index: 0;
 }
 
 .resultStrip {
-  padding: 14px 16px;
+  position: relative;
+  z-index: 1;
+  padding: 16px 20px;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
+  background: linear-gradient(135deg, rgba(30, 30, 30, 0.8) 0%, rgba(15, 15, 15, 0.9) 100%);
+  border: 1px solid rgba(212, 175, 55, 0.3);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .resultPrimary {
   min-width: 0;
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #fff;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
 }
 
 .resultConfidence {
   flex-shrink: 0;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 16px;
+  font-weight: 600;
   color: var(--accent-primary);
+  background: rgba(212, 175, 55, 0.15);
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(212, 175, 55, 0.3);
 }
 
 .listHeader {
-  margin-bottom: 8px;
-  font-size: 10px;
+  margin-bottom: 12px;
+  font-size: 11px;
   font-family: var(--font-mono);
+  font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
+  position: relative;
+  z-index: 1;
 }
 
 .listBody {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+  position: relative;
+  z-index: 1;
 }
 
 .samplesBlock {
@@ -270,85 +395,168 @@
 }
 
 .samplesListBody {
-  height: 320px;
-  min-height: 320px;
-  max-height: 320px;
+  height: 280px;
+  min-height: 280px;
+  max-height: 280px;
   overflow-y: auto;
-  padding-right: 2px;
+  padding-right: 6px;
 }
 
 .listButton {
+  position: relative;
   width: 100%;
+  display: flex;
+  align-items: center;
   justify-content: space-between;
-  border: 1px solid var(--border-subtle);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(0, 0, 0, 0.2);
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  overflow: hidden;
+  outline: none;
 }
 
-.listButtonActive {
-  border-color: rgba(212, 175, 55, 0.34);
-  background: rgba(212, 175, 55, 0.1);
-  color: var(--text-primary);
+.activeHighlight {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(90deg, rgba(212, 175, 55, 0.2) 0%, rgba(212, 175, 55, 0.05) 100%);
+  border: 1px solid rgba(212, 175, 55, 0.5);
+  border-radius: 8px;
+  z-index: 0;
+}
+
+.listButtonText {
+  position: relative;
+  z-index: 1;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.listButtonBadge {
+  position: relative;
+  z-index: 1;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.listButtonActive .listButtonText {
+  color: #fff;
+  font-weight: 600;
+}
+
+.listButtonActive .listButtonBadge {
+  color: var(--accent-primary);
+  font-weight: 500;
 }
 
 .sampleRow,
 .historyRow {
-  min-height: 34px;
-  padding: 0 10px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-subtle);
-  background: rgba(255, 255, 255, 0.02);
-  font-size: 11px;
+  min-height: 42px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(0, 0, 0, 0.2);
+  font-size: 12px;
 }
 
 .sampleMain {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
 
-.sampleMain span:last-child {
-  color: var(--text-secondary);
+.sampleTime {
+  color: var(--text-muted);
   font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.sampleText {
+  color: var(--text-primary);
+  font-weight: 500;
 }
 
 .sampleBadge {
   flex-shrink: 0;
   color: var(--accent-primary);
   font-family: var(--font-mono);
+  font-weight: 600;
+  background: rgba(212, 175, 55, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.historySummary {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.historyInterval {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 2px 6px;
+  border-radius: 4px;
 }
 
 .emptyState,
 .emptyInline {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .emptyState {
-  min-height: 120px;
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius-md);
+  flex: 1;
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: rgba(0, 0, 0, 0.2);
+  box-shadow: inset 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.emptyStateIcon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: rgba(212, 175, 55, 0.1);
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.02);
+  color: var(--accent-primary);
+  box-shadow: 0 0 20px rgba(212, 175, 55, 0.2);
 }
 
 .spinningIcon {
-  animation: spin 0.9s linear infinite;
+  color: var(--accent-primary);
+  animation: spin 1s linear infinite;
+}
+
+.successIcon {
+  color: #10b981;
+}
+
+.idleIcon {
+  color: var(--text-muted);
 }
 
 @keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
-@media (max-width: 520px) {
+@media (max-width: 540px) {
   .splitColumns,
   .intervalRow,
   .actionGrid {

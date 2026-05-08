@@ -330,7 +330,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
   const lprTopCandidate = lprState.candidates.find((candidate) => candidate.id === lprState.acceptedCandidateId)
     ?? lprState.candidates[0]
     ?? null;
-  const canAnalyzeRange = Boolean(activeFile && !lprBusy && lprSelectedTrackFrame && lprState.interval);
+  const canAnalyzeRange = Boolean(activeFile && !lprBusy && lprSelectedTrack && lprState.interval);
 
   useEffect(() => {
     setLiveOverlayPlayheadMs(currentPlayheadMs);
@@ -1185,8 +1185,8 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       return;
     }
 
-    if (!lprSelectedTrackFrame) {
-      const errorMessage = 'Select a target on the current frame before running Range.';
+    if (!lprSelectedTrack) {
+      const errorMessage = 'Select a target before running Range.';
       updateLprJob({
         status: 'failed',
         progress: 1,
@@ -1220,7 +1220,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         interval,
         anchorTimeMs: Math.max(0, Math.round(livePlayheadMsRef.current)),
         targetVehicleKind: lprState.targetVehicleKind,
-        selectedTargetBox: lprSelectedTrackFrame.box,
+        selectedTargetBox: (lprSelectedTrackFrame ?? lprSelectedTrack.frames[0])?.box ?? null,
         countryHints,
         sampleEveryMs,
         maxSamples: lprState.useDenseSampling ? 18 : 8,
