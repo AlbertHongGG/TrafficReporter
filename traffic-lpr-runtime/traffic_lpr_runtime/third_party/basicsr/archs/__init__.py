@@ -1,0 +1,1 @@
+"""Architecture utilities exposed for the vendored MambaIR runtime module."""

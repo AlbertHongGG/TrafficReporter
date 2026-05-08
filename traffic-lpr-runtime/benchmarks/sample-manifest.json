@@ -1,0 +1,46 @@
+{
+  "cases": [
+    {
+      "id": "tw-night-001",
+      "mode": "interval",
+      "sourcePath": "C:/replace/with/your/video.mp4",
+      "interval": {
+        "startMs": 1200,
+        "endMs": 2600
+      },
+      "anchorTimeMs": 1800,
+      "targetVehicleKind": "vehicle",
+      "selectedTargetBox": {
+        "x": 0.34,
+        "y": 0.41,
+        "width": 0.23,
+        "height": 0.19
+      },
+      "countryHints": [
+        "TW"
+      ],
+      "expectedText": "ABC1234",
+      "tags": [
+        "night",
+        "blur",
+        "glare",
+        "moving-camera"
+      ],
+      "sampleEveryMs": 120,
+      "maxSamples": 10,
+      "analysisOptions": {
+        "persistArtifacts": true,
+        "debugTag": "tw-night-001",
+        "trackerMode": "botsort",
+        "fusionMode": "aligned-char",
+        "restorationMode": "mambairv2",
+        "enableRecognizerComparison": true,
+        "ocrModelNames": [
+          "cct-xs-v2-global-model",
+          "cct-s-v2-global-model",
+          "global-plates-mobile-vit-v2-model"
+        ]
+      }
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct VideoInfo {
@@ -92,6 +93,7 @@ pub struct LprTrackedRegionPayload {
     pub r#box: VideoMarkerRectPayload,
     pub confidence: f64,
     pub class_name: String,
+    pub diagnostics: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -102,6 +104,7 @@ pub struct LprTargetTrackPayload {
     pub label: String,
     pub confidence: f64,
     pub frames: Vec<LprTrackedRegionPayload>,
+    pub diagnostics: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -115,6 +118,7 @@ pub struct LprPlateCandidatePayload {
     pub country_code: Option<String>,
     pub r#box: Option<VideoMarkerRectPayload>,
     pub quality: Option<LprQualityMetricsPayload>,
+    pub diagnostics: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -127,6 +131,27 @@ pub struct LprFrameSamplePayload {
     pub quality: Option<LprQualityMetricsPayload>,
     pub candidates: Vec<LprPlateCandidatePayload>,
     pub image_path: Option<String>,
+    pub diagnostics: Option<Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LprAnalysisOptionsPayload {
+    pub persist_artifacts: Option<bool>,
+    pub artifact_dir: Option<String>,
+    pub tracker_mode: Option<String>,
+    pub fusion_mode: Option<String>,
+    pub restoration_mode: Option<String>,
+    pub enable_rectification: Option<bool>,
+    pub enable_enhancement: Option<bool>,
+    pub enable_recognizer_comparison: Option<bool>,
+    pub debug_tag: Option<String>,
+    pub ocr_model_names: Option<Vec<String>>,
+    pub max_plate_candidates: Option<u32>,
+    pub tracker_high_confidence: Option<f64>,
+    pub tracker_low_confidence: Option<f64>,
+    pub max_tracking_gap: Option<u32>,
+    pub min_alignment_score: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -166,6 +191,7 @@ pub struct LprFrameAnalysisRequestPayload {
     pub target_vehicle_kind: String,
     pub selected_target_box: Option<VideoMarkerRectPayload>,
     pub country_hints: Vec<String>,
+    pub analysis_options: Option<LprAnalysisOptionsPayload>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -175,6 +201,7 @@ pub struct LprFrameAnalysisResponsePayload {
     pub sample: Option<LprFrameSamplePayload>,
     pub candidates: Vec<LprPlateCandidatePayload>,
     pub runtime: LprRuntimeStatusPayload,
+    pub diagnostics: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -188,6 +215,7 @@ pub struct LprIntervalAnalysisRequestPayload {
     pub country_hints: Vec<String>,
     pub sample_every_ms: Option<u64>,
     pub max_samples: Option<u32>,
+    pub analysis_options: Option<LprAnalysisOptionsPayload>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -199,6 +227,7 @@ pub struct LprIntervalAnalysisResponsePayload {
     pub accepted_candidate_id: Option<String>,
     pub summary: String,
     pub runtime: LprRuntimeStatusPayload,
+    pub diagnostics: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

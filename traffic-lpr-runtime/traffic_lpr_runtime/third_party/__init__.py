@@ -1,0 +1,1 @@
+"""Local third-party compatibility shims for runtime-only integrations."""

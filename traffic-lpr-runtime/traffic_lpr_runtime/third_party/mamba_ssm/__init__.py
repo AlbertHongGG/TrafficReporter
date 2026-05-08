@@ -1,0 +1,1 @@
+"""Minimal local package surface for MambaIRv2 runtime imports."""

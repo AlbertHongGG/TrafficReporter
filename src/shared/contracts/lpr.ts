@@ -6,9 +6,29 @@ export type LprJobStatus = 'idle' | 'queued' | 'running' | 'completed' | 'failed
 
 export type LprVehicleKind = 'any' | 'vehicle' | 'motorcycle' | 'car' | 'truck' | 'bus';
 
-export type LprRecognitionSource = 'baseline' | 'fused';
+export type LprRecognitionSource = 'baseline' | 'fused' | 'legacy-vote' | 'fused-char' | `ocr:${string}` | `fused-image:${string}`;
 
 export type LprLegibilityLevel = 'perfect' | 'good' | 'poor' | 'illegible' | 'unknown';
+
+export type LprDiagnostics = Record<string, unknown>;
+
+export interface LprAnalysisOptions {
+  persistArtifacts?: boolean;
+  artifactDir?: string | null;
+  trackerMode?: 'legacy' | 'target-cascade' | 'bytetrack' | 'botsort' | string;
+  fusionMode?: 'legacy' | 'aligned-char' | string;
+  restorationMode?: 'off' | 'gated' | 'mambairv2' | 'mambairv2-x2' | 'mambairv2-x4' | string;
+  enableRectification?: boolean;
+  enableEnhancement?: boolean;
+  enableRecognizerComparison?: boolean;
+  debugTag?: string | null;
+  ocrModelNames?: string[];
+  maxPlateCandidates?: number;
+  trackerHighConfidence?: number;
+  trackerLowConfidence?: number;
+  maxTrackingGap?: number;
+  minAlignmentScore?: number;
+}
 
 export interface TimelineIntervalSelection {
   startMs: number;
@@ -33,6 +53,7 @@ export interface LprTrackedRegion {
   box: VideoMarkerRect;
   confidence: number;
   className: string;
+  diagnostics?: LprDiagnostics | null;
 }
 
 export interface LprTargetTrack {
@@ -41,6 +62,7 @@ export interface LprTargetTrack {
   label: string;
   confidence: number;
   frames: LprTrackedRegion[];
+  diagnostics?: LprDiagnostics | null;
 }
 
 export interface LprPlateCandidate {
@@ -52,6 +74,7 @@ export interface LprPlateCandidate {
   countryCode: string | null;
   box: VideoMarkerRect | null;
   quality: LprQualityMetrics | null;
+  diagnostics?: LprDiagnostics | null;
 }
 
 export interface LprFrameSample {
@@ -62,6 +85,7 @@ export interface LprFrameSample {
   quality: LprQualityMetrics | null;
   candidates: LprPlateCandidate[];
   imagePath: string | null;
+  diagnostics?: LprDiagnostics | null;
 }
 
 export interface LprJobState {
@@ -129,6 +153,7 @@ export interface LprFrameAnalysisRequest {
   targetVehicleKind: LprVehicleKind;
   selectedTargetBox: VideoMarkerRect | null;
   countryHints: string[];
+  analysisOptions?: LprAnalysisOptions | null;
 }
 
 export interface LprFrameAnalysisResponse {
@@ -136,6 +161,7 @@ export interface LprFrameAnalysisResponse {
   sample: LprFrameSample | null;
   candidates: LprPlateCandidate[];
   runtime: LprRuntimeStatus;
+  diagnostics?: LprDiagnostics | null;
 }
 
 export interface LprIntervalAnalysisRequest {
@@ -147,6 +173,7 @@ export interface LprIntervalAnalysisRequest {
   countryHints: string[];
   sampleEveryMs?: number;
   maxSamples?: number;
+  analysisOptions?: LprAnalysisOptions | null;
 }
 
 export interface LprIntervalAnalysisResponse {
@@ -156,6 +183,7 @@ export interface LprIntervalAnalysisResponse {
   acceptedCandidateId: string | null;
   summary: string;
   runtime: LprRuntimeStatus;
+  diagnostics?: LprDiagnostics | null;
 }
 
 export interface LprEvidenceExportRequest {

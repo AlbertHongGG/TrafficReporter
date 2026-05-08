@@ -53,3 +53,28 @@ You can override discovery with:
 
 - `TRAFFIC_LPR_PYTHON` - explicit Python executable.
 - `TRAFFIC_LPR_RUNTIME_DIR` - explicit runtime project root.
+
+## Benchmark Workflow
+
+The runtime now includes a `benchmark-run` subcommand so you can turn difficult moving-camera clips into a repeatable hard-case benchmark.
+
+Example usage:
+
+```powershell
+cd traffic-lpr-runtime
+.\.venv\Scripts\python.exe -m traffic_lpr_runtime benchmark-run < benchmarks\sample-manifest.json
+```
+
+Each case can target either `frame` or `interval` mode and may include `analysisOptions` for ablations such as:
+
+- `trackerMode`: `legacy`, `botsort`, or `bytetrack`
+- `fusionMode`: `legacy` or `aligned-char`
+- `restorationMode`: `off`, `gated`, `mambairv2`, `mambairv2-x2`, or `mambairv2-x4`
+- `persistArtifacts`: store cropped / rectified / restored intermediate images under `.runtime/analysis/`
+- `ocrModelNames`: compare multiple OCR heads on the same plate crop
+
+Start by copying [benchmarks/sample-manifest.json](benchmarks/sample-manifest.json) and replacing the placeholder `sourcePath`, `selectedTargetBox`, and `expectedText` values with your own difficult cases.
+
+The benchmark output includes per-case exact match, top-3 match, and character error rate so you can compare tracker / fusion / restoration changes against the same hard-case set.
+
+If you want a public benchmark set that does not depend on your own clips, see [benchmarks/README.md](benchmarks/README.md) and run `benchmarks/prepare_public_benchmark.py` to build a balanced CCPD hard-case manifest from a directly downloadable public subset.

@@ -27,3 +27,12 @@ class PlateRecognizer(Protocol):
         time_ms: int,
         crop_box: NormalizedRect | None,
     ) -> list[PlateCandidate]: ...
+
+    def recognize_plate_crop(
+        self,
+        image: Any,
+        time_ms: int,
+        plate_box: NormalizedRect | None,
+        country_hints: list[str] | None = None,
+        model_names: list[str] | None = None,
+    ) -> list[PlateCandidate]: ...

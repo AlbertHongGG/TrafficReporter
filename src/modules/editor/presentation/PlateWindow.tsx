@@ -1,7 +1,7 @@
 import React from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import {
   AlertCircle,
   Check,
@@ -44,15 +44,15 @@ function formatIntervalLabel(interval: TimelineIntervalSelection | null) {
 
 type TabType = 'candidates' | 'targets' | 'samples' | 'history';
 
-const tabContentVariants = {
+const tabContentVariants: Variants = {
   hidden: { opacity: 0, y: 10, filter: 'blur(4px)' },
-  show: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { type: 'spring', stiffness: 350, damping: 25 } },
+  show: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { type: 'spring' as const, stiffness: 350, damping: 25 } },
   exit: { opacity: 0, y: -10, filter: 'blur(4px)', transition: { duration: 0.15 } },
 };
 
-const listItemVariants = {
+const listItemVariants: Variants = {
   hidden: { opacity: 0, x: -10 },
-  show: { opacity: 1, x: 0, transition: { type: 'spring', stiffness: 400, damping: 30 } },
+  show: { opacity: 1, x: 0, transition: { type: 'spring' as const, stiffness: 400, damping: 30 } },
   exit: { opacity: 0, scale: 0.95, transition: { duration: 0.15 } },
 };
 

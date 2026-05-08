@@ -61,6 +61,7 @@ class TrackedRegion:
     box: NormalizedRect
     confidence: float
     class_name: str
+    diagnostics: dict[str, Any] | None = None
 
     def to_payload(self) -> dict[str, Any]:
         return {
@@ -69,6 +70,7 @@ class TrackedRegion:
             'box': self.box.to_payload(),
             'confidence': self.confidence,
             'className': self.class_name,
+            'diagnostics': self.diagnostics,
         }
 
 
@@ -79,6 +81,7 @@ class TargetTrack:
     label: str
     confidence: float
     frames: list[TrackedRegion]
+    diagnostics: dict[str, Any] | None = None
 
     def to_payload(self) -> dict[str, Any]:
         return {
@@ -87,6 +90,7 @@ class TargetTrack:
             'label': self.label,
             'confidence': self.confidence,
             'frames': [frame.to_payload() for frame in self.frames],
+            'diagnostics': self.diagnostics,
         }
 
 
@@ -100,6 +104,7 @@ class PlateCandidate:
     country_code: str | None
     box: NormalizedRect | None
     quality: QualityMetrics | None
+    diagnostics: dict[str, Any] | None = None
 
     def to_payload(self) -> dict[str, Any]:
         return {
@@ -111,6 +116,7 @@ class PlateCandidate:
             'countryCode': self.country_code,
             'box': self.box.to_payload() if self.box else None,
             'quality': self.quality.to_payload() if self.quality else None,
+            'diagnostics': self.diagnostics,
         }
 
 
@@ -123,6 +129,7 @@ class FrameSample:
     quality: QualityMetrics | None
     candidates: list[PlateCandidate]
     image_path: str | None
+    diagnostics: dict[str, Any] | None = None
 
     def to_payload(self) -> dict[str, Any]:
         return {
@@ -133,4 +140,5 @@ class FrameSample:
             'quality': self.quality.to_payload() if self.quality else None,
             'candidates': [candidate.to_payload() for candidate in self.candidates],
             'imagePath': self.image_path,
+            'diagnostics': self.diagnostics,
         }

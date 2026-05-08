@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import os
+import re
 import tempfile
 from collections.abc import Iterable
 from pathlib import Path
@@ -32,12 +33,19 @@ VEHICLE_MODEL_NAMES = (
     'yolov8s.pt',
 )
 
+DEFAULT_CROP_OCR_MODEL_NAMES = (
+    'cct-xs-v2-global-model',
+    'cct-s-v2-global-model',
+    'global-plates-mobile-vit-v2-model',
+)
+
 
 class ModelRegistry:
     def __init__(self, dependencies: DependencyRegistry) -> None:
         self._dependencies = dependencies
         self._vehicle_model: Any | None = None
         self._alpr_model: Any | None = None
+        self._crop_ocr_models: dict[str, Any] = {}
 
     def vehicle_classes_for_kind(self, vehicle_kind: str) -> list[int]:
         if vehicle_kind == 'motorcycle':
@@ -111,6 +119,28 @@ class ModelRegistry:
                 last_error = error
 
         raise RuntimeFailure(f'Unable to load the ALPR detector/OCR stack: {last_error}')
+
+    def load_crop_ocr_model(self, model_name: str) -> Any:
+        cached_model = self._crop_ocr_models.get(model_name)
+        if cached_model is not None:
+            return cached_model
+
+        self._dependencies.ensure_ready()
+        recognizer_type = getattr(self._dependencies.fast_plate_ocr, 'LicensePlateRecognizer', None)
+        if recognizer_type is None:
+            raise RuntimeFailure('fast_plate_ocr.LicensePlateRecognizer is unavailable in the configured Python environment.')
+
+        try:
+            crop_ocr_model = recognizer_type(
+                hub_ocr_model=model_name,
+                device=self._onnx_device(),
+                providers=self._onnx_providers(),
+            )
+        except Exception as error:
+            raise RuntimeFailure(f'Unable to load the OCR model {model_name}: {error}') from error
+
+        self._crop_ocr_models[model_name] = crop_ocr_model
+        return crop_ocr_model
 
     def _onnx_device(self) -> str:
         return 'cuda' if self._dependencies.torch_cuda_available() else 'cpu'
@@ -262,6 +292,11 @@ class FastAlprPlateRecognizer:
                 frame_height,
             )
             quality = self._quality_scorer.score(image, candidate_box)
+            raw_confidence = _first_present(
+                payload.get('ocr_confidence'),
+                _nested_get(payload, 'ocr', 'confidence'),
+                payload.get('confidence'),
+            )
             predictions.append(
                 PlateCandidate(
                     id=f'baseline-{time_ms}-{index}',
@@ -272,6 +307,76 @@ class FastAlprPlateRecognizer:
                     country_code=_to_optional_str(_nested_get(payload, 'ocr', 'region')),
                     box=candidate_box,
                     quality=quality,
+                    diagnostics={
+                        'recognizer': 'fast-alpr',
+                        'ocrModel': 'cct-xs-v2-global-model',
+                        'charConfidences': _to_float_list(raw_confidence),
+                    },
+                )
+            )
+
+        predictions.sort(
+            key=lambda candidate: (
+                candidate.confidence,
+                candidate.quality.overall_score if candidate.quality else 0.0,
+            ),
+            reverse=True,
+        )
+        return predictions
+
+    def recognize_plate_crop(
+        self,
+        image: Any,
+        time_ms: int,
+        plate_box: NormalizedRect | None,
+        country_hints: list[str] | None = None,
+        model_names: list[str] | None = None,
+    ) -> list[PlateCandidate]:
+        if image is None or getattr(image, 'size', 0) == 0:
+            return []
+
+        hints = [hint.upper() for hint in (country_hints or []) if hint]
+        predictions: list[PlateCandidate] = []
+        effective_model_names = list(dict.fromkeys(model_names or DEFAULT_CROP_OCR_MODEL_NAMES))
+
+        for index, model_name in enumerate(effective_model_names):
+            crop_ocr_model = self._models.load_crop_ocr_model(model_name)
+            try:
+                prediction = crop_ocr_model.run_one(image, return_confidence=True)
+            except Exception:
+                continue
+
+            text = normalize_plate_text(getattr(prediction, 'plate', None))
+            if not text:
+                continue
+
+            char_confidences = _to_float_list(getattr(prediction, 'char_probs', None)) or []
+            raw_confidence = sum(char_confidences) / len(char_confidences) if char_confidences else 0.0
+            quality = self._quality_scorer.score(image, None)
+            country_code = _to_optional_str(getattr(prediction, 'region', None)) or _preferred_country_hint(hints)
+            taiwan_prior = _taiwan_plate_prior(text) if _uses_taiwan_prior(hints, country_code) else 1.0
+            confidence = clamp(
+                ((raw_confidence * 0.72) + ((quality.overall_score if quality else 0.55) * 0.28)) * taiwan_prior,
+                0.0,
+                1.0,
+            )
+            predictions.append(
+                PlateCandidate(
+                    id=f'ocr-{time_ms}-{index}',
+                    text=text,
+                    confidence=confidence,
+                    source=f'ocr:{model_name}',
+                    frame_time_ms=time_ms,
+                    country_code=country_code,
+                    box=plate_box,
+                    quality=quality,
+                    diagnostics={
+                        'recognizer': 'fast-plate-ocr',
+                        'ocrModel': model_name,
+                        'charConfidences': char_confidences,
+                        'taiwanPrior': taiwan_prior,
+                        'regionConfidence': _to_float(getattr(prediction, 'region_prob', None)),
+                    },
                 )
             )
 
@@ -347,6 +452,17 @@ def _to_float(value: Any) -> float:
         return 0.0
 
 
+def _to_float_list(value: Any) -> list[float] | None:
+    if value is None:
+        return None
+    if hasattr(value, 'tolist'):
+        value = value.tolist()
+    if isinstance(value, Iterable) and not isinstance(value, (str, bytes, dict)):
+        converted = [_to_float(item) for item in value if item is not None]
+        return converted or None
+    return None
+
+
 def _first_present(*values: Any) -> Any:
     for value in values:
         if value is None:
@@ -371,6 +487,29 @@ def _to_optional_str(value: Any) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _preferred_country_hint(country_hints: list[str]) -> str | None:
+    return country_hints[0] if country_hints else None
+
+
+def _uses_taiwan_prior(country_hints: list[str], country_code: str | None) -> bool:
+    if country_code and country_code.upper() in {'TW', 'TWN', 'TAIWAN'}:
+        return True
+    return any(hint in {'TW', 'TWN', 'TAIWAN'} for hint in country_hints)
+
+
+def _taiwan_plate_prior(text: str) -> float:
+    normalized = normalize_plate_text(text)
+    if not normalized:
+        return 0.65
+    if re.fullmatch(r'[A-Z]{2,4}[0-9]{2,4}', normalized):
+        return 1.12
+    if re.fullmatch(r'[0-9]{2,4}[A-Z]{2,4}', normalized):
+        return 1.08
+    if 5 <= len(normalized) <= 7 and any(char.isalpha() for char in normalized) and any(char.isdigit() for char in normalized):
+        return 1.03
+    return 0.88
 
 
 def _normalize_candidate_box(

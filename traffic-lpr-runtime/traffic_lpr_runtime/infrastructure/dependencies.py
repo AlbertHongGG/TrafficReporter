@@ -14,32 +14,41 @@ from traffic_lpr_runtime.domain.models import RuntimeStatus
 
 
 DEPENDENCY_NAMES = [
+    ('einops', 'einops'),
     ('opencv-python', 'cv2'),
     ('numpy', 'numpy'),
+    ('timm', 'timm'),
     ('ultralytics', 'ultralytics'),
     ('fast-alpr[onnx-gpu]', 'fast_alpr'),
+    ('fast-plate-ocr', 'fast_plate_ocr'),
 ]
 
 
 @dataclass(slots=True)
 class DependencyRegistry:
     runtime_script: Path
+    einops: Any | None
     cv2: Any | None
     numpy: Any | None
     torch: Any | None
+    timm: Any | None
     ultralytics: Any | None
     fast_alpr: Any | None
+    fast_plate_ocr: Any | None
 
     @classmethod
     def load(cls, runtime_script: Path) -> 'DependencyRegistry':
         _prime_gpu_runtime()
         return cls(
             runtime_script=runtime_script,
+            einops=_safe_import('einops'),
             cv2=_safe_import('cv2'),
             numpy=_safe_import('numpy'),
             torch=_safe_import('torch'),
+            timm=_safe_import('timm'),
             ultralytics=_safe_import('ultralytics'),
             fast_alpr=_safe_import('fast_alpr'),
+            fast_plate_ocr=_safe_import('fast_plate_ocr'),
         )
 
     def runtime_root(self) -> Path:

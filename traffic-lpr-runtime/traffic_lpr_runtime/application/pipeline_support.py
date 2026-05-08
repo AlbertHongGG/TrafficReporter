@@ -1,0 +1,868 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
+
+from traffic_lpr_runtime.domain.models import PlateCandidate, QualityMetrics, TrackedRegion
+from traffic_lpr_runtime.domain.value_objects import NormalizedRect, clamp, crop_image
+from traffic_lpr_runtime.infrastructure.dependencies import DependencyRegistry
+from traffic_lpr_runtime.infrastructure.image_processing import QualityScorer
+from traffic_lpr_runtime.infrastructure.mambair_runtime import MambaIrV2LightRestorer
+
+
+DEFAULT_OCR_MODEL_NAMES = [
+    'cct-xs-v2-global-model',
+    'cct-s-v2-global-model',
+    'global-plates-mobile-vit-v2-model',
+]
+
+
+@dataclass(slots=True)
+class AnalysisOptions:
+    persist_artifacts: bool = False
+    artifact_dir: str | None = None
+    tracker_mode: str = 'botsort'
+    fusion_mode: str = 'aligned-char'
+    restoration_mode: str = 'mambairv2'
+    enable_rectification: bool = True
+    enable_enhancement: bool = True
+    enable_recognizer_comparison: bool = True
+    debug_tag: str | None = None
+    ocr_model_names: list[str] = field(default_factory=lambda: list(DEFAULT_OCR_MODEL_NAMES))
+    max_plate_candidates: int = 3
+    tracker_high_confidence: float = 0.35
+    tracker_low_confidence: float = 0.15
+    max_tracking_gap: int = 3
+    min_alignment_score: float = 0.05
+
+    @classmethod
+    def from_payload(cls, payload: dict[str, Any] | None) -> 'AnalysisOptions':
+        raw = dict((payload or {}).get('analysisOptions') or {})
+        return cls(
+            persist_artifacts=bool(raw.get('persistArtifacts') or False),
+            artifact_dir=_to_optional_str(raw.get('artifactDir')),
+            tracker_mode=_to_optional_str(raw.get('trackerMode')) or 'botsort',
+            fusion_mode=_to_optional_str(raw.get('fusionMode')) or 'aligned-char',
+            restoration_mode=_to_optional_str(raw.get('restorationMode')) or 'mambairv2',
+            enable_rectification=raw.get('enableRectification', True) is not False,
+            enable_enhancement=raw.get('enableEnhancement', True) is not False,
+            enable_recognizer_comparison=raw.get('enableRecognizerComparison', True) is not False,
+            debug_tag=_to_optional_str(raw.get('debugTag')),
+            ocr_model_names=[str(name) for name in (raw.get('ocrModelNames') or DEFAULT_OCR_MODEL_NAMES)],
+            max_plate_candidates=max(1, min(int(raw.get('maxPlateCandidates') or 3), 6)),
+            tracker_high_confidence=float(raw.get('trackerHighConfidence') or 0.35),
+            tracker_low_confidence=float(raw.get('trackerLowConfidence') or 0.15),
+            max_tracking_gap=max(1, min(int(raw.get('maxTrackingGap') or 3), 8)),
+            min_alignment_score=float(raw.get('minAlignmentScore') or 0.05),
+        )
+
+    def resolve_artifact_root(self, runtime_root: Path, suffix: str | None = None) -> Path | None:
+        if not self.persist_artifacts:
+            return None
+        if self.artifact_dir:
+            root = Path(self.artifact_dir)
+        else:
+            timestamp = datetime.now(UTC).strftime('%Y%m%d-%H%M%S')
+            base_name = self.debug_tag or 'analysis'
+            root = runtime_root / '.runtime' / 'analysis' / f'{timestamp}-{base_name}'
+        if suffix:
+            root = root / suffix
+        root.mkdir(parents=True, exist_ok=True)
+        return root
+
+    def ocr_models(self) -> list[str]:
+        return self.ocr_model_names if self.enable_recognizer_comparison else self.ocr_model_names[:1]
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            'persistArtifacts': self.persist_artifacts,
+            'artifactDir': self.artifact_dir,
+            'trackerMode': self.tracker_mode,
+            'fusionMode': self.fusion_mode,
+            'restorationMode': self.restoration_mode,
+            'enableRectification': self.enable_rectification,
+            'enableEnhancement': self.enable_enhancement,
+            'enableRecognizerComparison': self.enable_recognizer_comparison,
+            'debugTag': self.debug_tag,
+            'ocrModelNames': self.ocr_model_names,
+            'maxPlateCandidates': self.max_plate_candidates,
+            'trackerHighConfidence': self.tracker_high_confidence,
+            'trackerLowConfidence': self.tracker_low_confidence,
+            'maxTrackingGap': self.max_tracking_gap,
+            'minAlignmentScore': self.min_alignment_score,
+        }
+
+
+@dataclass(slots=True)
+class PlateObservation:
+    time_ms: int
+    target_box: NormalizedRect | None
+    plate_box: NormalizedRect | None
+    quality: QualityMetrics | None
+    original_image: Any
+    rectified_image: Any
+    enhanced_image: Any
+    restored_image: Any | None
+    working_image: Any
+    artifact_paths: dict[str, str]
+    diagnostics: dict[str, Any]
+    ocr_candidates: list[PlateCandidate] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class _TrackerState:
+    reference_box: NormalizedRect | None
+    last_box: NormalizedRect | None
+    velocity: tuple[float, float, float, float]
+    last_time_ms: int
+    misses: int = 0
+
+
+class _UltralyticsTrackerDetections:
+    def __init__(self, xyxy: Any, confidence: Any, class_ids: Any, numpy_module: Any) -> None:
+        self._numpy = numpy_module
+        self.xyxy = self._as_rows(xyxy, 4)
+        self.conf = self._as_vector(confidence)
+        self.cls = self._as_vector(class_ids)
+        self.xywh = self._to_xywh(self.xyxy)
+
+    def __len__(self) -> int:
+        return int(self.conf.shape[0])
+
+    def __getitem__(self, index: Any) -> '_UltralyticsTrackerDetections':
+        return _UltralyticsTrackerDetections(self.xyxy[index], self.conf[index], self.cls[index], self._numpy)
+
+    def _as_rows(self, values: Any, width: int) -> Any:
+        array = self._numpy.asarray(values, dtype='float32')
+        if array.size == 0:
+            return self._numpy.empty((0, width), dtype='float32')
+        return array.reshape(-1, width).astype('float32')
+
+    def _as_vector(self, values: Any) -> Any:
+        array = self._numpy.asarray(values, dtype='float32')
+        if array.size == 0:
+            return self._numpy.empty((0,), dtype='float32')
+        return array.reshape(-1).astype('float32')
+
+    def _to_xywh(self, xyxy: Any) -> Any:
+        if getattr(xyxy, 'size', 0) == 0:
+            return self._numpy.empty((0, 4), dtype='float32')
+        x1 = xyxy[:, 0]
+        y1 = xyxy[:, 1]
+        x2 = xyxy[:, 2]
+        y2 = xyxy[:, 3]
+        return self._numpy.stack(((x1 + x2) / 2.0, (y1 + y2) / 2.0, x2 - x1, y2 - y1), axis=1).astype('float32')
+
+
+class PlatePreprocessor:
+    def __init__(self, dependencies: DependencyRegistry, quality_scorer: QualityScorer) -> None:
+        self._dependencies = dependencies
+        self._quality_scorer = quality_scorer
+        self._mambair_restorer = MambaIrV2LightRestorer(dependencies)
+
+    def prepare(
+        self,
+        frame: Any,
+        time_ms: int,
+        target_box: NormalizedRect | None,
+        plate_box: NormalizedRect | None,
+        options: AnalysisOptions,
+        artifact_root: Path | None,
+    ) -> PlateObservation | None:
+        if frame is None or plate_box is None:
+            return None
+
+        original_image = crop_image(frame, plate_box)
+        if original_image is None or getattr(original_image, 'size', 0) == 0:
+            return None
+
+        rectified_image = original_image
+        rectification = {'applied': False, 'method': 'crop'}
+        if options.enable_rectification:
+            rectified_image, rectification = self._rectify_plate(original_image)
+
+        enhanced_image = self._enhance_plate(rectified_image) if options.enable_enhancement else rectified_image
+        source_quality = self._quality_scorer.score(frame, plate_box)
+        crop_quality = self._quality_scorer.score(enhanced_image, None)
+        merged_quality = _merge_quality_metrics(source_quality, crop_quality)
+
+        restored_image = None
+        restoration = {'applied': False, 'backend': 'none', 'mode': options.restoration_mode}
+        if self._should_restore(enhanced_image, merged_quality, options):
+            restored_image, restoration = self._restore_plate(enhanced_image, options)
+        working_image = restored_image if restored_image is not None else enhanced_image
+
+        artifact_paths = self._persist_artifacts(
+            artifact_root,
+            time_ms,
+            original_image,
+            rectified_image,
+            enhanced_image,
+            restored_image,
+            working_image,
+        )
+        diagnostics = {
+            'rectification': rectification,
+            'restoreApplied': restored_image is not None,
+            'restoration': restoration,
+            'originalShape': list(original_image.shape[:2]),
+            'workingShape': list(working_image.shape[:2]),
+            'artifacts': artifact_paths,
+        }
+        return PlateObservation(
+            time_ms=time_ms,
+            target_box=target_box,
+            plate_box=plate_box,
+            quality=merged_quality,
+            original_image=original_image,
+            rectified_image=rectified_image,
+            enhanced_image=enhanced_image,
+            restored_image=restored_image,
+            working_image=working_image,
+            artifact_paths=artifact_paths,
+            diagnostics=diagnostics,
+        )
+
+    def _persist_artifacts(
+        self,
+        artifact_root: Path | None,
+        time_ms: int,
+        original_image: Any,
+        rectified_image: Any,
+        enhanced_image: Any,
+        restored_image: Any | None,
+        working_image: Any,
+    ) -> dict[str, str]:
+        if artifact_root is None or self._dependencies.cv2 is None:
+            return {}
+
+        cv2 = self._dependencies.cv2
+        artifact_root.mkdir(parents=True, exist_ok=True)
+        artifact_paths: dict[str, str] = {}
+        for name, image in [
+            ('original', original_image),
+            ('rectified', rectified_image),
+            ('enhanced', enhanced_image),
+            ('working', working_image),
+            ('restored', restored_image),
+        ]:
+            if image is None:
+                continue
+            output_path = artifact_root / f'{time_ms}-{name}.png'
+            cv2.imwrite(str(output_path), image)
+            artifact_paths[name] = str(output_path)
+        return artifact_paths
+
+    def _rectify_plate(self, plate_image: Any) -> tuple[Any, dict[str, Any]]:
+        cv2 = self._dependencies.cv2
+        if cv2 is None or plate_image is None or getattr(plate_image, 'size', 0) == 0:
+            return plate_image, {'applied': False, 'method': 'crop'}
+
+        grayscale = cv2.cvtColor(plate_image, cv2.COLOR_BGR2GRAY)
+        blurred = cv2.GaussianBlur(grayscale, (5, 5), 0)
+        edges = cv2.Canny(blurred, 60, 180)
+        contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        image_area = max(float(plate_image.shape[0] * plate_image.shape[1]), 1.0)
+        best_quad: Any = None
+        best_score = 0.0
+
+        for contour in contours:
+            area = float(cv2.contourArea(contour))
+            if area < image_area * 0.12:
+                continue
+            rect = cv2.minAreaRect(contour)
+            (_, _), (width, height), _ = rect
+            if width <= 1 or height <= 1:
+                continue
+            aspect_ratio = max(width, height) / max(min(width, height), 1.0)
+            if not 2.0 <= aspect_ratio <= 6.5:
+                continue
+            score = (area / image_area) - (abs(aspect_ratio - 3.2) * 0.08)
+            if score <= best_score:
+                continue
+            best_score = score
+            best_quad = cv2.boxPoints(rect)
+
+        if best_quad is None:
+            return plate_image, {'applied': False, 'method': 'crop'}
+
+        ordered = _order_quad_points(best_quad)
+        dest_width = max(128, int(round(max(_distance(ordered[0], ordered[1]), _distance(ordered[2], ordered[3])))))
+        dest_height = max(40, int(round(dest_width / 3.2)))
+        destination = self._dependencies.numpy.array(
+            [[0, 0], [dest_width - 1, 0], [dest_width - 1, dest_height - 1], [0, dest_height - 1]],
+            dtype='float32',
+        )
+        transform = cv2.getPerspectiveTransform(ordered, destination)
+        rectified = cv2.warpPerspective(plate_image, transform, (dest_width, dest_height))
+        return rectified, {'applied': True, 'method': 'minAreaRect', 'score': best_score}
+
+    def _enhance_plate(self, plate_image: Any) -> Any:
+        cv2 = self._dependencies.cv2
+        if cv2 is None or plate_image is None or getattr(plate_image, 'size', 0) == 0:
+            return plate_image
+
+        lab = cv2.cvtColor(plate_image, cv2.COLOR_BGR2LAB)
+        channel_l, channel_a, channel_b = cv2.split(lab)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4, 4))
+        equalized_l = clahe.apply(channel_l)
+        merged_lab = cv2.merge((equalized_l, channel_a, channel_b))
+        enhanced = cv2.cvtColor(merged_lab, cv2.COLOR_LAB2BGR)
+        denoised = cv2.bilateralFilter(enhanced, 5, 45, 45)
+        softened = cv2.GaussianBlur(denoised, (0, 0), 1.2)
+        return cv2.addWeighted(denoised, 1.55, softened, -0.55, 0)
+
+    def _should_restore(self, plate_image: Any, quality: QualityMetrics | None, options: AnalysisOptions) -> bool:
+        if options.restoration_mode == 'off' or plate_image is None:
+            return False
+        height, width = plate_image.shape[:2]
+        if min(height, width) < 42:
+            return True
+        if quality is None:
+            return True
+        return (
+            quality.overall_score < 0.62
+            or quality.sharpness < 0.28
+            or quality.glare_score < 0.45
+            or quality.contrast < 0.35
+        )
+
+    def _restore_plate(self, plate_image: Any, options: AnalysisOptions) -> tuple[Any | None, dict[str, Any]]:
+        restoration_mode = (options.restoration_mode or 'mambairv2').strip().lower()
+        if restoration_mode.startswith('mambairv2'):
+            scale = 4 if restoration_mode.endswith('x4') or min(plate_image.shape[:2]) < 40 else 2
+            restored_image = self._mambair_restorer.restore(plate_image, scale=scale)
+            if restored_image is not None and getattr(restored_image, 'size', 0) > 0:
+                return restored_image, {
+                    'applied': True,
+                    'backend': 'mambairv2-lightsr',
+                    'mode': restoration_mode,
+                    'scale': scale,
+                }
+
+        if restoration_mode == 'off':
+            return None, {'applied': False, 'backend': 'none', 'mode': restoration_mode}
+
+        restored_image = self._classical_restore_plate(plate_image)
+        return restored_image, {
+            'applied': restored_image is not None,
+            'backend': 'classical',
+            'mode': restoration_mode,
+        }
+
+    def _classical_restore_plate(self, plate_image: Any) -> Any:
+        cv2 = self._dependencies.cv2
+        if cv2 is None or plate_image is None or getattr(plate_image, 'size', 0) == 0:
+            return plate_image
+
+        upscaled = cv2.resize(plate_image, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_LANCZOS4)
+        denoised = cv2.fastNlMeansDenoisingColored(upscaled, None, 3, 3, 7, 21)
+        softened = cv2.GaussianBlur(denoised, (0, 0), 1.0)
+        return cv2.addWeighted(denoised, 1.65, softened, -0.65, 0)
+
+
+class TargetCentricTracker:
+    def __init__(self, dependencies: DependencyRegistry, frame_reader: Any, target_detector: Any) -> None:
+        self._dependencies = dependencies
+        self._frame_reader = frame_reader
+        self._target_detector = target_detector
+
+    def track(
+        self,
+        source_path: str,
+        interval: dict[str, int],
+        anchor_time_ms: int,
+        vehicle_kind: str,
+        selected_target_box: NormalizedRect | None,
+        sample_times: list[int],
+        options: AnalysisOptions,
+    ) -> tuple[list[TrackedRegion], dict[str, Any]]:
+        tracker_mode = (options.tracker_mode or 'botsort').strip().lower()
+        if tracker_mode in {'botsort', 'bot-sort', 'bytetrack', 'byte-track'}:
+            return self._track_with_ultralytics_tracker(
+                source_path,
+                interval,
+                anchor_time_ms,
+                vehicle_kind,
+                selected_target_box,
+                sample_times,
+                options,
+            )
+
+        anchor_frame = self._frame_reader.read_frame(source_path, anchor_time_ms)
+        anchor_detections = self._target_detector.detect_targets(anchor_frame, anchor_time_ms, vehicle_kind, None)
+        anchor_region = _select_best_anchor(anchor_detections, selected_target_box)
+        seed_box = anchor_region.box if anchor_region else selected_target_box
+
+        if seed_box is None:
+            return [], {
+                'trackerMode': options.tracker_mode,
+                'matchedFrames': 0,
+                'missedFrames': 0,
+                'averageMatchScore': 0.0,
+                'anchorDetected': False,
+            }
+
+        before, before_stats = self._walk(
+            source_path,
+            sorted([time_ms for time_ms in sample_times if time_ms < anchor_time_ms], reverse=True),
+            anchor_time_ms,
+            anchor_frame,
+            vehicle_kind,
+            seed_box,
+            options,
+        )
+        after, after_stats = self._walk(
+            source_path,
+            sorted([time_ms for time_ms in sample_times if time_ms > anchor_time_ms]),
+            anchor_time_ms,
+            anchor_frame,
+            vehicle_kind,
+            seed_box,
+            options,
+        )
+
+        tracked_frames = list(reversed(before))
+        if anchor_region is not None and anchor_time_ms in sample_times:
+            tracked_frames.append(anchor_region)
+        tracked_frames.extend(after)
+
+        scores = before_stats['scores'] + after_stats['scores']
+        diagnostics = {
+            'trackerMode': options.tracker_mode,
+            'matchedFrames': len(tracked_frames),
+            'missedFrames': before_stats['misses'] + after_stats['misses'],
+            'averageMatchScore': (sum(scores) / len(scores)) if scores else 0.0,
+            'anchorDetected': anchor_region is not None,
+        }
+        return tracked_frames, diagnostics
+
+    def _track_with_ultralytics_tracker(
+        self,
+        source_path: str,
+        interval: dict[str, int],
+        anchor_time_ms: int,
+        vehicle_kind: str,
+        selected_target_box: NormalizedRect | None,
+        sample_times: list[int],
+        options: AnalysisOptions,
+    ) -> tuple[list[TrackedRegion], dict[str, Any]]:
+        traversal_times = self._tracker_times(interval, anchor_time_ms, sample_times)
+        frame_rate = self._estimate_frame_rate(traversal_times)
+        tracker = self._build_ultralytics_tracker(options, frame_rate)
+
+        tracked_by_time: dict[int, list[TrackedRegion]] = {}
+        anchor_track_id: str | None = None
+        anchor_region: TrackedRegion | None = None
+
+        for time_ms in traversal_times:
+            frame = self._frame_reader.read_frame(source_path, time_ms)
+            detections = self._target_detector.detect_targets(frame, time_ms, vehicle_kind, None)
+            tracked_regions = self._update_ultralytics_tracker(tracker, frame, detections, time_ms)
+            tracked_by_time[time_ms] = tracked_regions
+
+            if time_ms == anchor_time_ms:
+                anchor_region = _select_best_anchor(tracked_regions, selected_target_box)
+                anchor_track_id = anchor_region.id if anchor_region is not None else None
+
+        if anchor_track_id is None:
+            return [], {
+                'trackerMode': options.tracker_mode,
+                'matchedFrames': 0,
+                'missedFrames': len(sample_times),
+                'averageMatchScore': 0.0,
+                'anchorDetected': False,
+                'frameRate': frame_rate,
+            }
+
+        tracked_frames: list[TrackedRegion] = []
+        confidences: list[float] = []
+        missed_frames = 0
+        for time_ms in sorted(sample_times):
+            matched = next((region for region in tracked_by_time.get(time_ms, []) if region.id == anchor_track_id), None)
+            if matched is None:
+                missed_frames += 1
+                continue
+            tracked_frames.append(matched)
+            confidences.append(matched.confidence)
+
+        diagnostics = {
+            'trackerMode': options.tracker_mode,
+            'matchedFrames': len(tracked_frames),
+            'missedFrames': missed_frames,
+            'averageMatchScore': (sum(confidences) / len(confidences)) if confidences else 0.0,
+            'anchorDetected': anchor_region is not None,
+            'anchorTrackId': anchor_track_id,
+            'frameRate': frame_rate,
+        }
+        return tracked_frames, diagnostics
+
+    def _tracker_times(self, interval: dict[str, int], anchor_time_ms: int, sample_times: list[int]) -> list[int]:
+        start_ms = int(interval['startMs'])
+        end_ms = int(interval['endMs'])
+        traversal_times = set(sample_times)
+        traversal_times.add(anchor_time_ms)
+        if anchor_time_ms < start_ms:
+            traversal_times.update(time_ms for time_ms in sample_times if time_ms >= start_ms)
+        elif anchor_time_ms > end_ms:
+            traversal_times.update(time_ms for time_ms in sample_times if time_ms <= end_ms)
+        return sorted(traversal_times)
+
+    def _estimate_frame_rate(self, traversal_times: list[int]) -> int:
+        if len(traversal_times) < 2:
+            return 30
+        deltas = [max(current - previous, 1) for previous, current in zip(traversal_times, traversal_times[1:])]
+        average_delta = sum(deltas) / len(deltas)
+        return max(1, int(round(1000.0 / average_delta)))
+
+    def _build_ultralytics_tracker(self, options: AnalysisOptions, frame_rate: int) -> Any:
+        tracker_mode = (options.tracker_mode or 'botsort').strip().lower()
+        if tracker_mode in {'bytetrack', 'byte-track'}:
+            from ultralytics.trackers.byte_tracker import BYTETracker
+
+            return BYTETracker(
+                SimpleNamespace(
+                    track_high_thresh=max(0.1, options.tracker_high_confidence),
+                    track_low_thresh=max(0.01, min(options.tracker_low_confidence, options.tracker_high_confidence)),
+                    new_track_thresh=max(0.1, options.tracker_high_confidence),
+                    track_buffer=max(12, int(round(frame_rate * 2.5))),
+                    match_thresh=0.82,
+                    fuse_score=True,
+                ),
+                frame_rate=frame_rate,
+            )
+
+        from ultralytics.trackers.bot_sort import BOTSORT
+
+        return BOTSORT(
+            SimpleNamespace(
+                track_high_thresh=max(0.1, options.tracker_high_confidence),
+                track_low_thresh=max(0.01, min(options.tracker_low_confidence, options.tracker_high_confidence)),
+                new_track_thresh=max(0.1, options.tracker_high_confidence),
+                track_buffer=max(12, int(round(frame_rate * 2.5))),
+                match_thresh=0.82,
+                fuse_score=True,
+                gmc_method='sparseOptFlow',
+                proximity_thresh=0.5,
+                appearance_thresh=0.25,
+                with_reid=False,
+                model='auto',
+            ),
+            frame_rate=frame_rate,
+        )
+
+    def _update_ultralytics_tracker(
+        self,
+        tracker: Any,
+        frame: Any,
+        detections: list[TrackedRegion],
+        time_ms: int,
+    ) -> list[TrackedRegion]:
+        numpy = self._dependencies.numpy
+        if numpy is None:
+            return []
+
+        tracker_inputs = self._build_tracker_detections(detections, frame)
+        outputs = tracker.update(tracker_inputs, img=frame)
+        if outputs is None or getattr(outputs, 'size', 0) == 0:
+            return []
+
+        frame_height, frame_width = frame.shape[:2]
+        tracked_regions: list[TrackedRegion] = []
+        for output in outputs:
+            xyxy = output[:4]
+            track_id = int(round(float(output[4])))
+            confidence = float(output[5])
+            class_id = int(round(float(output[6]))) if len(output) > 6 else -1
+            detection_index = int(round(float(output[7]))) if len(output) > 7 else -1
+            class_name = detections[detection_index].class_name if 0 <= detection_index < len(detections) else _tracker_class_name(class_id)
+            tracked_regions.append(
+                TrackedRegion(
+                    id=f'track-{track_id}',
+                    time_ms=time_ms,
+                    box=NormalizedRect.from_xyxy(float(xyxy[0]), float(xyxy[1]), float(xyxy[2]), float(xyxy[3]), frame_width, frame_height),
+                    confidence=confidence,
+                    class_name=class_name,
+                    diagnostics={
+                        'trackerId': track_id,
+                        'classId': class_id,
+                        'detectionIndex': detection_index,
+                    },
+                )
+            )
+
+        tracked_regions.sort(key=lambda candidate: candidate.confidence, reverse=True)
+        return tracked_regions
+
+    def _build_tracker_detections(self, detections: list[TrackedRegion], frame: Any) -> _UltralyticsTrackerDetections:
+        numpy = self._dependencies.numpy
+        frame_height, frame_width = frame.shape[:2]
+        boxes: list[list[float]] = []
+        confidences: list[float] = []
+        class_ids: list[float] = []
+
+        for detection in detections:
+            x1, y1, x2, y2 = detection.box.to_pixels(frame_width, frame_height)
+            boxes.append([float(x1), float(y1), float(x2), float(y2)])
+            confidences.append(float(detection.confidence))
+            class_ids.append(float(_tracker_class_id(detection.class_name)))
+
+        return _UltralyticsTrackerDetections(boxes, confidences, class_ids, numpy)
+
+    def _walk(
+        self,
+        source_path: str,
+        traversal_times: list[int],
+        anchor_time_ms: int,
+        anchor_frame: Any,
+        vehicle_kind: str,
+        seed_box: NormalizedRect,
+        options: AnalysisOptions,
+    ) -> tuple[list[TrackedRegion], dict[str, Any]]:
+        tracked_frames: list[TrackedRegion] = []
+        scores: list[float] = []
+        total_misses = 0
+        state = _TrackerState(
+            reference_box=seed_box,
+            last_box=seed_box,
+            velocity=(0.0, 0.0, 0.0, 0.0),
+            last_time_ms=anchor_time_ms,
+        )
+        previous_frame = anchor_frame
+
+        for time_ms in traversal_times:
+            frame = self._frame_reader.read_frame(source_path, time_ms)
+            detections = self._target_detector.detect_targets(frame, time_ms, vehicle_kind, None)
+            predicted_box, global_shift = self._predict_box(previous_frame, frame, state)
+            chosen, score, match_diagnostics = self._associate(detections, predicted_box, state.last_box, options)
+            if chosen is None:
+                state.misses += 1
+                total_misses += 1
+                previous_frame = frame
+                state.last_time_ms = time_ms
+                if state.misses > options.max_tracking_gap:
+                    state.last_box = predicted_box
+                continue
+
+            state.misses = 0
+            state.velocity = _update_velocity(state.last_box, chosen.box, state.last_time_ms, time_ms, state.velocity)
+            state.last_box = chosen.box
+            chosen.diagnostics = {
+                'matchScore': score,
+                'match': match_diagnostics,
+                'globalShift': global_shift,
+            }
+            tracked_frames.append(chosen)
+            scores.append(score)
+            previous_frame = frame
+            state.last_time_ms = time_ms
+
+        return tracked_frames, {'scores': scores, 'misses': total_misses}
+
+    def _predict_box(
+        self,
+        previous_frame: Any,
+        frame: Any,
+        state: _TrackerState,
+    ) -> tuple[NormalizedRect, dict[str, float]]:
+        dx_norm, dy_norm, phase_score = self._estimate_global_shift(previous_frame, frame)
+        dt = 1.0
+        pred = _shift_rect(
+            state.last_box or state.reference_box,
+            dx_norm + (state.velocity[0] * dt),
+            dy_norm + (state.velocity[1] * dt),
+            state.velocity[2] * dt,
+            state.velocity[3] * dt,
+        )
+        return pred, {'dx': dx_norm, 'dy': dy_norm, 'score': phase_score}
+
+    def _estimate_global_shift(self, previous_frame: Any, frame: Any) -> tuple[float, float, float]:
+        cv2 = self._dependencies.cv2
+        numpy = self._dependencies.numpy
+        if cv2 is None or numpy is None:
+            return 0.0, 0.0, 0.0
+
+        prev_gray = cv2.cvtColor(previous_frame, cv2.COLOR_BGR2GRAY)
+        curr_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        target_size = (320, 180)
+        prev_resized = cv2.resize(prev_gray, target_size).astype('float32')
+        curr_resized = cv2.resize(curr_gray, target_size).astype('float32')
+        try:
+            (shift_x, shift_y), response = cv2.phaseCorrelate(prev_resized, curr_resized)
+        except Exception:
+            return 0.0, 0.0, 0.0
+
+        frame_height, frame_width = frame.shape[:2]
+        dx_norm = float(shift_x) / max(frame_width, 1)
+        dy_norm = float(shift_y) / max(frame_height, 1)
+        return dx_norm, dy_norm, float(response)
+
+    def _associate(
+        self,
+        detections: list[TrackedRegion],
+        predicted_box: NormalizedRect,
+        previous_box: NormalizedRect | None,
+        options: AnalysisOptions,
+    ) -> tuple[TrackedRegion | None, float, dict[str, Any]]:
+        ranked: list[tuple[float, TrackedRegion, dict[str, Any]]] = []
+        for candidate in detections:
+            predicted_iou = candidate.box.intersection_over_union(predicted_box)
+            previous_iou = candidate.box.intersection_over_union(previous_box)
+            center_distance = candidate.box.center_distance(predicted_box)
+            area_similarity = min(candidate.box.area(), predicted_box.area()) / max(candidate.box.area(), predicted_box.area(), 0.0001)
+            confidence_band = 1.0 if candidate.confidence >= options.tracker_high_confidence else 0.8
+            score = (
+                (predicted_iou * 0.52)
+                + (previous_iou * 0.18)
+                + (area_similarity * 0.15)
+                + (candidate.confidence * 0.25 * confidence_band)
+                - (center_distance * 0.35)
+            )
+            diagnostics = {
+                'predictedIou': predicted_iou,
+                'previousIou': previous_iou,
+                'centerDistance': center_distance,
+                'areaSimilarity': area_similarity,
+                'confidenceBand': confidence_band,
+            }
+            ranked.append((score, candidate, diagnostics))
+
+        ranked.sort(key=lambda item: item[0], reverse=True)
+        if not ranked:
+            return None, 0.0, {'reason': 'no-detections'}
+
+        best_score, best_candidate, best_diagnostics = ranked[0]
+        if best_score < 0.05:
+            return None, best_score, {'reason': 'below-threshold'} | best_diagnostics
+        return best_candidate, best_score, best_diagnostics
+
+
+def _merge_quality_metrics(
+    source_quality: QualityMetrics | None,
+    crop_quality: QualityMetrics | None,
+) -> QualityMetrics | None:
+    if source_quality is None:
+        return crop_quality
+    if crop_quality is None:
+        return source_quality
+
+    overall_score = max(source_quality.overall_score, crop_quality.overall_score)
+    if overall_score >= 0.82:
+        legibility_level = 'perfect'
+    elif overall_score >= 0.62:
+        legibility_level = 'good'
+    elif overall_score >= 0.35:
+        legibility_level = 'poor'
+    else:
+        legibility_level = 'illegible'
+
+    return QualityMetrics(
+        sharpness=max(source_quality.sharpness, crop_quality.sharpness),
+        contrast=max(source_quality.contrast, crop_quality.contrast),
+        plate_area=source_quality.plate_area,
+        angle_score=max(source_quality.angle_score, crop_quality.angle_score),
+        occlusion_score=max(source_quality.occlusion_score, crop_quality.occlusion_score),
+        glare_score=max(source_quality.glare_score, crop_quality.glare_score),
+        legibility_score=max(source_quality.legibility_score, crop_quality.legibility_score),
+        overall_score=overall_score,
+        legibility_level=legibility_level,
+    )
+
+
+def _select_best_anchor(
+    detections: list[TrackedRegion],
+    selected_target_box: NormalizedRect | None,
+) -> TrackedRegion | None:
+    if not detections:
+        return None
+    if selected_target_box is None:
+        return detections[0]
+    ranked = sorted(
+        detections,
+        key=lambda candidate: (
+            candidate.box.intersection_over_union(selected_target_box),
+            -candidate.box.center_distance(selected_target_box),
+            candidate.confidence,
+        ),
+        reverse=True,
+    )
+    return ranked[0]
+
+
+def _update_velocity(
+    previous_box: NormalizedRect | None,
+    current_box: NormalizedRect,
+    previous_time_ms: int,
+    current_time_ms: int,
+    prior_velocity: tuple[float, float, float, float],
+) -> tuple[float, float, float, float]:
+    if previous_box is None:
+        return prior_velocity
+    delta_time = max(abs(current_time_ms - previous_time_ms), 1)
+    measured_velocity = (
+        (current_box.x - previous_box.x) / delta_time,
+        (current_box.y - previous_box.y) / delta_time,
+        (current_box.width - previous_box.width) / delta_time,
+        (current_box.height - previous_box.height) / delta_time,
+    )
+    return tuple((prior * 0.6) + (observed * 0.4) for prior, observed in zip(prior_velocity, measured_velocity, strict=True))
+
+
+def _shift_rect(
+    rect: NormalizedRect | None,
+    delta_x: float,
+    delta_y: float,
+    delta_width: float,
+    delta_height: float,
+) -> NormalizedRect:
+    if rect is None:
+        return NormalizedRect(0.0, 0.0, 0.0, 0.0)
+    x = clamp(rect.x + delta_x, 0.0, 1.0)
+    y = clamp(rect.y + delta_y, 0.0, 1.0)
+    width = clamp(rect.width + delta_width, 0.01, 1.0 - x)
+    height = clamp(rect.height + delta_height, 0.01, 1.0 - y)
+    return NormalizedRect(x=x, y=y, width=width, height=height)
+
+
+def _order_quad_points(points: Any) -> Any:
+    numpy = __import__('numpy')
+    ordered = numpy.zeros((4, 2), dtype='float32')
+    sums = points.sum(axis=1)
+    diffs = points[:, 0] - points[:, 1]
+    ordered[0] = points[sums.argmin()]
+    ordered[2] = points[sums.argmax()]
+    ordered[1] = points[diffs.argmin()]
+    ordered[3] = points[diffs.argmax()]
+    return ordered
+
+
+def _distance(left: Any, right: Any) -> float:
+    return float((((left[0] - right[0]) ** 2) + ((left[1] - right[1]) ** 2)) ** 0.5)
+
+
+def _tracker_class_id(class_name: str) -> int:
+    return {
+        'car': 2,
+        'motorcycle': 3,
+        'bus': 5,
+        'truck': 7,
+    }.get(str(class_name), 0)
+
+
+def _tracker_class_name(class_id: int) -> str:
+    return {
+        2: 'car',
+        3: 'motorcycle',
+        5: 'bus',
+        7: 'truck',
+    }.get(int(class_id), 'vehicle')
+
+
+def _to_optional_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None

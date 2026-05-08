@@ -1,0 +1,1 @@
+"""Minimal Basicsr compatibility layer for runtime-only MambaIR imports."""
