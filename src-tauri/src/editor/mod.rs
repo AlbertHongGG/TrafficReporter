@@ -353,78 +353,90 @@ pub fn export_frame_image(request: FrameExportRequest) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn get_lpr_runtime_status() -> Result<LprRuntimeStatusPayload, String> {
-    invoke_lpr_runtime("status", &serde_json::json!({}))
+pub async fn get_lpr_runtime_status() -> Result<LprRuntimeStatusPayload, String> {
+    tauri::async_runtime::spawn_blocking(|| invoke_lpr_runtime("status", &serde_json::json!({})))
+        .await
+        .map_err(|error| format!("Failed to join runtime status task: {}", error))?
 }
 
 #[tauri::command]
-pub fn scan_lpr_targets(
+pub async fn scan_lpr_targets(
     request: LprTargetScanRequestPayload,
 ) -> Result<LprTargetScanResponsePayload, String> {
-    invoke_lpr_runtime("scan-targets", &request)
+    tauri::async_runtime::spawn_blocking(move || invoke_lpr_runtime("scan-targets", &request))
+        .await
+        .map_err(|error| format!("Failed to join target scan task: {}", error))?
 }
 
 #[tauri::command]
-pub fn analyze_lpr_frame(
+pub async fn analyze_lpr_frame(
     request: LprFrameAnalysisRequestPayload,
 ) -> Result<LprFrameAnalysisResponsePayload, String> {
-    invoke_lpr_runtime("analyze-frame", &request)
+    tauri::async_runtime::spawn_blocking(move || invoke_lpr_runtime("analyze-frame", &request))
+        .await
+        .map_err(|error| format!("Failed to join frame analysis task: {}", error))?
 }
 
 #[tauri::command]
-pub fn analyze_lpr_interval(
+pub async fn analyze_lpr_interval(
     request: LprIntervalAnalysisRequestPayload,
 ) -> Result<LprIntervalAnalysisResponsePayload, String> {
-    invoke_lpr_runtime("analyze-interval", &request)
+    tauri::async_runtime::spawn_blocking(move || invoke_lpr_runtime("analyze-interval", &request))
+        .await
+        .map_err(|error| format!("Failed to join interval analysis task: {}", error))?
 }
 
 #[tauri::command]
-pub fn export_lpr_evidence(
+pub async fn export_lpr_evidence(
     request: LprEvidenceExportRequestPayload,
 ) -> Result<LprEvidenceExportResponsePayload, String> {
-    let json_path = PathBuf::from(&request.output_path);
-    if let Some(parent) = json_path.parent() {
-        if !parent.as_os_str().is_empty() {
-            fs::create_dir_all(parent)
-                .map_err(|error| format!("Failed to create evidence directory: {}", error))?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let json_path = PathBuf::from(&request.output_path);
+        if let Some(parent) = json_path.parent() {
+            if !parent.as_os_str().is_empty() {
+                fs::create_dir_all(parent)
+                    .map_err(|error| format!("Failed to create evidence directory: {}", error))?;
+            }
         }
-    }
 
-    let image_path = json_path.with_extension("png");
-    export_frame_image_internal(&FrameExportRequest {
-        output_path: image_path.to_string_lossy().to_string(),
-        source_path: request.source_path.clone(),
-        time_ms: request.time_ms,
-        marker_rect: request.marker_rect.clone(),
-    })?;
+        let image_path = json_path.with_extension("png");
+        export_frame_image_internal(&FrameExportRequest {
+            output_path: image_path.to_string_lossy().to_string(),
+            source_path: request.source_path.clone(),
+            time_ms: request.time_ms,
+            marker_rect: request.marker_rect.clone(),
+        })?;
 
-    let exported_at_ms = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|error| format!("System clock error while exporting evidence: {}", error))?
-        .as_millis() as u64;
+        let exported_at_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|error| format!("System clock error while exporting evidence: {}", error))?
+            .as_millis() as u64;
 
-    let snapshot = serde_json::json!({
-        "exportedAtMs": exported_at_ms,
-        "sourcePath": request.source_path,
-        "timeMs": request.time_ms,
-        "interval": request.interval,
-        "markerRect": request.marker_rect,
-        "targetTrack": request.target_track,
-        "acceptedCandidate": request.accepted_candidate,
-        "candidates": request.candidates,
-        "samples": request.samples,
-        "imagePath": image_path.to_string_lossy(),
-    });
+        let snapshot = serde_json::json!({
+            "exportedAtMs": exported_at_ms,
+            "sourcePath": request.source_path,
+            "timeMs": request.time_ms,
+            "interval": request.interval,
+            "markerRect": request.marker_rect,
+            "targetTrack": request.target_track,
+            "acceptedCandidate": request.accepted_candidate,
+            "candidates": request.candidates,
+            "samples": request.samples,
+            "imagePath": image_path.to_string_lossy(),
+        });
 
-    let serialized_snapshot = serde_json::to_vec_pretty(&snapshot)
-        .map_err(|error| format!("Failed to serialize evidence snapshot: {}", error))?;
-    fs::write(&json_path, serialized_snapshot)
-        .map_err(|error| format!("Failed to write evidence snapshot: {}", error))?;
+        let serialized_snapshot = serde_json::to_vec_pretty(&snapshot)
+            .map_err(|error| format!("Failed to serialize evidence snapshot: {}", error))?;
+        fs::write(&json_path, serialized_snapshot)
+            .map_err(|error| format!("Failed to write evidence snapshot: {}", error))?;
 
-    Ok(LprEvidenceExportResponsePayload {
-        json_path: json_path.to_string_lossy().to_string(),
-        image_path: image_path.to_string_lossy().to_string(),
+        Ok(LprEvidenceExportResponsePayload {
+            json_path: json_path.to_string_lossy().to_string(),
+            image_path: image_path.to_string_lossy().to_string(),
+        })
     })
+    .await
+    .map_err(|error| format!("Failed to join evidence export task: {}", error))?
 }
 
 #[cfg(test)]

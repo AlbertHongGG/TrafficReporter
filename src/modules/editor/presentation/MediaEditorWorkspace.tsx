@@ -1,21 +1,18 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { listen } from '@tauri-apps/api/event';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import {
   AlertCircle,
-  Check,
   FileOutput,
   FilePlus2,
   Film,
   ImageDown,
   Import,
-  LoaderCircle,
   Link2,
   Pause,
   Play,
-  RefreshCw,
   Scissors,
-  Search,
   SkipBack,
   SkipForward,
   Square,
@@ -63,6 +60,13 @@ import {
 import { createLogger, getErrorMessage, serializeError } from '../../../utils/logger';
 import { openExportWindow } from '../../export/infrastructure/exportApi';
 import { preparePendingExportSession } from '../../export/application/exportSession';
+import {
+  PLATE_ACTION_EVENT,
+  PLATE_SESSION_REQUEST_EVENT,
+  type PlateWindowAction,
+  type PlateWindowSessionSnapshot,
+} from '../application/plateWindow';
+import { emitPlateWindowSession, openPlateWindow } from '../infrastructure/plateWindowApi';
 import type {
   LprRuntimeStatus,
   LprTargetTrack,
@@ -124,13 +128,6 @@ interface MediaEditorWorkspaceProps {
   isActive?: boolean;
 }
 
-interface CountryHintInputProps {
-  initialValue: string;
-  disabled: boolean;
-  onCommit: (value: string) => void;
-  onDraftChange: (value: string) => void;
-}
-
 function rulerStepForZoom(zoom: number) {
   return (
     RULER_STEP_CANDIDATES_MS.find((stepMs) => msToPx(stepMs, zoom) >= 92)
@@ -178,10 +175,6 @@ function defaultLprEvidenceFileName(fileState: EditorFileState, playheadMs: numb
   return replaceExtension(baseName, `${timeLabel}${candidateLabel}.json`);
 }
 
-function formatConfidence(confidence: number) {
-  return `${Math.round(clamp(confidence, 0, 1) * 100)}%`;
-}
-
 function buildTargetTracksFromDetections(detections: LprTrackedRegion[]): LprTargetTrack[] {
   return detections.map((detection, index) => ({
     id: detection.id,
@@ -206,14 +199,6 @@ function getClosestTrackFrame(track: LprTargetTrack, playheadMs: number, toleran
   return Math.abs(frame.timeMs - playheadMs) <= toleranceMs ? frame : null;
 }
 
-function formatIntervalLabel(interval: TimelineIntervalSelection | null) {
-  if (!interval) {
-    return '--';
-  }
-
-  return `${formatTransportTime(interval.startMs)} - ${formatTransportTime(interval.endMs)}`;
-}
-
 function normalizeLprInterval(interval: TimelineIntervalSelection): TimelineIntervalSelection {
   const startMs = Math.max(0, Math.round(interval.startMs));
   const endMs = Math.max(0, Math.round(interval.endMs));
@@ -223,33 +208,6 @@ function normalizeLprInterval(interval: TimelineIntervalSelection): TimelineInte
     endMs: Math.max(startMs, endMs),
   };
 }
-
-const CountryHintInput: React.FC<CountryHintInputProps> = ({ initialValue, disabled, onCommit, onDraftChange }) => {
-  const [value, setValue] = useState(initialValue);
-
-  const handleChange = (nextValue: string) => {
-    setValue(nextValue);
-    onDraftChange(nextValue);
-  };
-
-  return (
-    <input
-      type="text"
-      className={styles.lprInput}
-      value={value}
-      onChange={(event) => handleChange(event.target.value)}
-      onBlur={() => onCommit(value)}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter') {
-          onCommit(value);
-          event.currentTarget.blur();
-        }
-      }}
-      placeholder="country hints"
-      disabled={disabled}
-    />
-  );
-};
 
 export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isActive = true }) => {
   const [state, dispatch] = useReducer(editorReducer, initialEditorState);
@@ -266,6 +224,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     previewAsset: null,
     hasActiveVideo: false,
   });
+  const [liveOverlayPlayheadMs, setLiveOverlayPlayheadMs] = useState(0);
 
   const zoomRef = useRef(DEFAULT_ZOOM);
   const pendingZoomAnchorRef = useRef<{ anchorMs: number; viewportX: number } | null>(null);
@@ -344,6 +303,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     [currentPlayheadMs, playbackEntries],
   );
   const previewState = currentIsPlaying ? livePreviewState : committedPreviewState;
+  const lprPreviewPlayheadMs = currentIsPlaying ? liveOverlayPlayheadMs : currentPlayheadMs;
   const missingFiles = useMemo(
     () => state.files.filter((fileState) => fileState.asset.status === 'missing'),
     [state.files],
@@ -355,22 +315,26 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     [lprState.selectedTargetTrackId, lprState.targetTracks],
   );
   const lprSelectedTrackFrame = useMemo(
-    () => (lprSelectedTrack ? getClosestTrackFrame(lprSelectedTrack, currentPlayheadMs) : null),
-    [currentPlayheadMs, lprSelectedTrack],
+    () => (lprSelectedTrack ? getClosestTrackFrame(lprSelectedTrack, lprPreviewPlayheadMs) : null),
+    [lprPreviewPlayheadMs, lprSelectedTrack],
   );
   const lprOverlayTracks = useMemo(
     () => lprState.targetTracks
       .map((track) => ({
         track,
-        frame: getClosestTrackFrame(track, currentPlayheadMs),
+        frame: getClosestTrackFrame(track, lprPreviewPlayheadMs),
       }))
       .filter((entry): entry is { track: LprTargetTrack; frame: LprTrackedRegion } => Boolean(entry.frame)),
-    [currentPlayheadMs, lprState.targetTracks],
+    [lprPreviewPlayheadMs, lprState.targetTracks],
   );
   const lprTopCandidate = lprState.candidates.find((candidate) => candidate.id === lprState.acceptedCandidateId)
     ?? lprState.candidates[0]
     ?? null;
-  const canAnalyzeRange = Boolean(activeFile && !lprBusy && lprSelectedTrackFrame);
+  const canAnalyzeRange = Boolean(activeFile && !lprBusy && lprSelectedTrackFrame && lprState.interval);
+
+  useEffect(() => {
+    setLiveOverlayPlayheadMs(currentPlayheadMs);
+  }, [activeFile?.id, currentPlayheadMs]);
 
   const refreshLprRuntimeStatus = useCallback(async () => {
     try {
@@ -410,6 +374,9 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
 
   const applyLiveTransportFrame = useCallback((playheadMs: number) => {
     livePlayheadMsRef.current = playheadMs;
+    React.startTransition(() => {
+      setLiveOverlayPlayheadMs(playheadMs);
+    });
 
     if (currentTimecodeRef.current) {
       currentTimecodeRef.current.textContent = formatTransportTime(playheadMs);
@@ -1040,6 +1007,19 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     } satisfies TimelineIntervalSelection);
   }, [activeClips, lprState.interval, selectedClip]);
 
+  const buildPlateWindowSnapshot = useCallback((): PlateWindowSessionSnapshot => ({
+    workspaceName: state.workspaceName,
+    activeFileName: activeFile?.asset.name ?? null,
+    hasActiveFile: Boolean(activeFile),
+    runtimeStatus: lprRuntimeStatus,
+    lpr: lprState,
+    explicitInterval: lprState.interval,
+    effectiveInterval: lprState.interval,
+    canAnalyzeRange,
+    topCandidate: lprTopCandidate,
+    anchorTimeMs: Math.max(0, Math.round(livePlayheadMsRef.current)),
+  }), [activeFile, canAnalyzeRange, lprRuntimeStatus, lprState, lprTopCandidate, state.workspaceName]);
+
   const handleSetIntervalBoundary = (boundary: 'start' | 'end') => {
     const currentInterval = resolveSuggestedInterval(livePlayheadMsRef.current);
     dispatch({
@@ -1182,6 +1162,19 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       return;
     }
 
+    if (!lprState.interval) {
+      const errorMessage = 'Set Clip, In, or Out before running Range.';
+      updateLprJob({
+        status: 'failed',
+        progress: 1,
+        stage: 'Interval',
+        detail: 'Range analysis requires an explicit interval.',
+        error: errorMessage,
+      });
+      setWorkspaceFeedback(errorMessage);
+      return;
+    }
+
     if (!lprSelectedTrackFrame) {
       const errorMessage = 'Select a target on the current frame before running Range.';
       updateLprJob({
@@ -1195,7 +1188,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       return;
     }
 
-    const interval = normalizeLprInterval(resolveSuggestedInterval(livePlayheadMsRef.current));
+    const interval = normalizeLprInterval(lprState.interval);
     const countryHints = applyCountryHints(
       latestCountryHintDraftRef.current ?? (activeFile.lpr.countryHints.join(', ')),
     );
@@ -1299,6 +1292,98 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       setWorkspaceFeedback(getErrorMessage(error, 'Unable to export the LPR evidence snapshot.'));
     }
   };
+
+  const handleOpenPlateWindow = async () => {
+    await openPlateWindow();
+    await emitPlateWindowSession(buildPlateWindowSnapshot()).catch(() => undefined);
+  };
+
+  const handlePlateWindowAction = React.useEffectEvent(async (action: PlateWindowAction) => {
+    switch (action.type) {
+      case 'refresh-runtime':
+        await refreshLprRuntimeStatus();
+        break;
+      case 'use-clip-interval':
+        handleUseClipInterval();
+        break;
+      case 'set-interval-boundary':
+        handleSetIntervalBoundary(action.boundary);
+        break;
+      case 'clear-interval':
+        dispatch({ type: 'clear-lpr-interval' });
+        break;
+      case 'set-country-hints':
+        latestCountryHintDraftRef.current = action.value;
+        applyCountryHints(action.value);
+        break;
+      case 'scan-targets':
+        await handleScanLprTargets();
+        break;
+      case 'analyze-frame':
+        await handleAnalyzeLprFrame();
+        break;
+      case 'analyze-range':
+        await handleAnalyzeLprInterval();
+        break;
+      case 'toggle-dense-sampling':
+        dispatch({ type: 'set-lpr-toggles', toggles: { useDenseSampling: !lprState.useDenseSampling } });
+        break;
+      case 'export-evidence':
+        await handleExportLprEvidence();
+        break;
+      case 'clear-results':
+        dispatch({ type: 'clear-lpr-results' });
+        break;
+      case 'select-target-track':
+        handleSelectTargetTrack(action.targetTrackId);
+        break;
+      case 'accept-candidate':
+        dispatch({ type: 'accept-lpr-candidate', candidateId: action.candidateId });
+        break;
+      default:
+        break;
+    }
+  });
+
+  const handlePlateWindowSessionRequest = React.useEffectEvent(async () => {
+    await emitPlateWindowSession(buildPlateWindowSnapshot()).catch(() => undefined);
+  });
+
+  useEffect(() => {
+    let disposed = false;
+    let actionCleanup: (() => void) | undefined;
+    let requestCleanup: (() => void) | undefined;
+
+    void listen<PlateWindowAction>(PLATE_ACTION_EVENT, (event) => {
+      if (disposed) {
+        return;
+      }
+
+      void handlePlateWindowAction(event.payload);
+    }).then((unlisten) => {
+      actionCleanup = unlisten;
+    });
+
+    void listen(PLATE_SESSION_REQUEST_EVENT, () => {
+      if (disposed) {
+        return;
+      }
+
+      void handlePlateWindowSessionRequest();
+    }).then((unlisten) => {
+      requestCleanup = unlisten;
+    });
+
+    return () => {
+      disposed = true;
+      actionCleanup?.();
+      requestCleanup?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    void emitPlateWindowSession(buildPlateWindowSnapshot()).catch(() => undefined);
+  }, [buildPlateWindowSnapshot]);
 
   const handleMarkerPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!activeFile?.markerRect) {
@@ -1405,6 +1490,10 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
           <button type="button" className={styles.toolbarButton} onClick={() => void handleOpenExportWindow()}>
             <FileOutput size={14} />
             Export
+          </button>
+          <button type="button" className={styles.toolbarButton} onClick={() => void handleOpenPlateWindow()}>
+            <Target size={14} />
+            Plate
           </button>
           <button type="button" className={styles.primaryButton} onClick={() => void handleImportClick()}>
             <Import size={14} />
@@ -1706,163 +1795,6 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
               </div>
             </div>
           </section>
-
-          <aside className={styles.lprPanel}>
-            <div className={`${styles.panelHeader} ${styles.lprPanelHeader}`}>
-              <div className={styles.lprHeaderMeta}>
-                <strong>Plate</strong>
-                <span className={`${styles.lprRuntimeBadge} ${lprRuntimeStatus?.available ? styles.lprRuntimeBadgeReady : styles.lprRuntimeBadgeMissing}`}>
-                  {lprRuntimeStatus?.available ? 'local' : 'offline'}
-                </span>
-              </div>
-              <button type="button" className={styles.iconButton} onClick={() => void refreshLprRuntimeStatus()}>
-                <RefreshCw size={14} />
-              </button>
-            </div>
-
-            <div className={styles.lprPanelContent}>
-              <section className={styles.lprSection}>
-                <div className={styles.lprActionRow}>
-                  <button type="button" className={styles.toolbarButton} onClick={handleUseClipInterval} disabled={!activeFile}>
-                    Clip
-                  </button>
-                  <button type="button" className={styles.toolbarButton} onClick={() => handleSetIntervalBoundary('start')} disabled={!activeFile}>
-                    In
-                  </button>
-                  <button type="button" className={styles.toolbarButton} onClick={() => handleSetIntervalBoundary('end')} disabled={!activeFile}>
-                    Out
-                  </button>
-                  <button type="button" className={styles.toolbarButton} onClick={() => dispatch({ type: 'clear-lpr-interval' })} disabled={!lprState.interval}>
-                    Clear
-                  </button>
-                </div>
-                <div className={styles.lprIntervalValue}>{formatIntervalLabel(lprState.interval ?? resolveSuggestedInterval(currentPlayheadMs))}</div>
-              </section>
-
-              <section className={styles.lprSection}>
-                <div className={styles.lprField}>
-                  <CountryHintInput
-                    key={activeFile?.id ?? 'no-file'}
-                    initialValue={(activeFile?.lpr.countryHints ?? []).join(', ')}
-                    disabled={!activeFile}
-                    onDraftChange={(value) => {
-                      latestCountryHintDraftRef.current = value;
-                    }}
-                    onCommit={(value) => {
-                      latestCountryHintDraftRef.current = value;
-                      applyCountryHints(value);
-                    }}
-                  />
-                </div>
-              </section>
-
-              <section className={styles.lprSection}>
-                <div className={styles.lprActionColumn}>
-                  <button type="button" className={styles.primaryButton} onClick={() => void handleScanLprTargets()} disabled={!activeFile || lprBusy}>
-                    <Target size={14} />
-                    Targets
-                  </button>
-                  <button type="button" className={styles.toolbarButton} onClick={() => void handleAnalyzeLprFrame()} disabled={!activeFile || lprBusy}>
-                    <Search size={14} />
-                    Frame
-                  </button>
-                  <button type="button" className={styles.toolbarButton} onClick={() => void handleAnalyzeLprInterval()} disabled={!canAnalyzeRange}>
-                    <Target size={14} />
-                    Range
-                  </button>
-                  <button
-                    type="button"
-                    className={`${styles.lprToggle} ${lprState.useDenseSampling ? styles.lprToggleActive : ''}`}
-                    onClick={() => dispatch({ type: 'set-lpr-toggles', toggles: { useDenseSampling: !lprState.useDenseSampling } })}
-                    disabled={!activeFile}
-                  >
-                    More Samples
-                  </button>
-                  <button type="button" className={styles.toolbarButton} onClick={() => void handleExportLprEvidence()} disabled={!activeFile || (!lprTopCandidate && lprState.samples.length === 0)}>
-                    <FileOutput size={14} />
-                    Evidence
-                  </button>
-                  <button type="button" className={styles.toolbarButton} onClick={() => dispatch({ type: 'clear-lpr-results' })} disabled={lprState.candidates.length === 0 && lprState.targetTracks.length === 0}>
-                    <X size={14} />
-                    Reset
-                  </button>
-                </div>
-
-                <div className={styles.lprStatusCard}>
-                  <div className={styles.lprStatusRow}>
-                    {lprBusy ? <LoaderCircle size={14} className={styles.spinningIcon} /> : lprTopCandidate ? <Check size={14} /> : <AlertCircle size={14} />}
-                    <span>{lprJob.detail || lprRuntimeStatus?.detail || 'Local analysis ready.'}</span>
-                  </div>
-                  {lprJob.error && <div className={styles.lprStatusError}>{lprJob.error}</div>}
-                </div>
-              </section>
-
-              <section className={styles.lprSection}>
-                <div className={styles.lprHeadline}>
-                  <span>{lprTopCandidate?.text ?? '--'}</span>
-                  <strong>{lprTopCandidate ? formatConfidence(lprTopCandidate.confidence) : '0%'}</strong>
-                </div>
-                <div className={styles.lprCandidateList}>
-                  {lprState.candidates.length === 0 && <div className={styles.lprEmpty}>No candidates yet.</div>}
-                  {lprState.candidates.map((candidate) => (
-                    <button
-                      key={candidate.id}
-                      type="button"
-                      className={`${styles.lprCandidate} ${candidate.id === lprState.acceptedCandidateId ? styles.lprCandidateActive : ''}`}
-                      onClick={() => dispatch({ type: 'accept-lpr-candidate', candidateId: candidate.id })}
-                    >
-                      <span>{candidate.text}</span>
-                      <span>{formatConfidence(candidate.confidence)}</span>
-                    </button>
-                  ))}
-                </div>
-              </section>
-
-              <section className={styles.lprSection}>
-                <div className={styles.lprCompactHeader}>Targets</div>
-                <div className={styles.lprTrackList}>
-                  {lprState.targetTracks.length === 0 && <div className={styles.lprEmpty}>Scan to pick a target.</div>}
-                  {lprState.targetTracks.map((track) => (
-                    <button
-                      key={track.id}
-                      type="button"
-                      className={`${styles.lprTrackItem} ${track.id === lprState.selectedTargetTrackId ? styles.lprTrackItemActive : ''}`}
-                      onClick={() => handleSelectTargetTrack(track.id)}
-                    >
-                      <span>{track.label}</span>
-                      <span>{formatConfidence(track.confidence)}</span>
-                    </button>
-                  ))}
-                </div>
-              </section>
-
-              <section className={styles.lprSection}>
-                <div className={styles.lprCompactHeader}>Samples</div>
-                <div className={styles.lprSampleList}>
-                  {lprState.samples.length === 0 && <div className={styles.lprEmpty}>No samples.</div>}
-                  {lprState.samples.map((sample) => (
-                    <div key={sample.id} className={styles.lprSamplePill}>
-                      <span>{formatTransportTime(sample.timeMs)}</span>
-                      <span>{formatConfidence(sample.quality?.overallScore ?? 0)}</span>
-                    </div>
-                  ))}
-                </div>
-              </section>
-
-              <section className={styles.lprSection}>
-                <div className={styles.lprCompactHeader}>History</div>
-                <div className={styles.lprHistoryList}>
-                  {lprState.history.length === 0 && <div className={styles.lprEmpty}>No history.</div>}
-                  {lprState.history.slice().reverse().map((entry) => (
-                    <div key={entry.id} className={styles.lprHistoryItem}>
-                      <span>{entry.summary}</span>
-                      <span>{entry.interval ? formatIntervalLabel(entry.interval) : 'frame'}</span>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            </div>
-          </aside>
         </main>
       </div>
 

@@ -4,7 +4,8 @@
   "description": "enables the default permissions",
   "windows": [
     "main",
-    "export"
+    "export",
+    "plate"
   ],
   "permissions": [
     "core:default",

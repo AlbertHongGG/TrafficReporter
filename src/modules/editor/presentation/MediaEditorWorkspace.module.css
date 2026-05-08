@@ -174,9 +174,8 @@
 
 .mainPanel {
   min-width: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  grid-template-rows: minmax(0, 1fr) 148px;
+  display: flex;
+  flex-direction: column;
 }
 
 .previewPanel,
@@ -188,13 +187,11 @@
 }
 
 .previewPanel {
-  grid-column: 1;
-  grid-row: 1;
+  flex: 1 1 auto;
 }
 
 .timelinePanel {
-  grid-column: 1;
-  grid-row: 2;
+  flex: 0 0 148px;
 }
 
 .previewPanel {

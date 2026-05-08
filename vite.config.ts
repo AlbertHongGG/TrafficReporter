@@ -14,6 +14,7 @@ export default defineConfig({
       input: {
         main: resolve(__dirname, 'index.html'),
         export: resolve(__dirname, 'export.html'),
+        plate: resolve(__dirname, 'plate.html'),
       },
     },
   },
