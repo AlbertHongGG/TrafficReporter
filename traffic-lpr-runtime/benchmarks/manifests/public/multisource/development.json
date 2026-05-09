@@ -36,7 +36,7 @@
     {
       "id": "ccpd-blur-017",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0476412835249-95_70-142,444_513,593-515,597_166,554_143,451_492,494-0_0_1_30_25_25_17-67-220_ccpd_base_023512.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0476412835249-95_70-142,444_513,593-515,597_166,554_143,451_492,494-0_0_1_30_25_25_17-67-220_ccpd_base_023512.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.19722222222222222,
@@ -83,7 +83,7 @@
     {
       "id": "ccpd-blur-007",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0389-1_23-179,441_504,541-504,541_219,536_179,441_464,446-0_0_5_25_20_31_32-67-3_ccpd_blur_015269.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0389-1_23-179,441_504,541-504,541_219,536_179,441_464,446-0_0_5_25_20_31_32-67-3_ccpd_blur_015269.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.24861111111111112,
@@ -129,7 +129,7 @@
     {
       "id": "ccpd-blur-003",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/029633620689655173-90_242-240,520_570,602-570,602_276,599_240,525_538,520-10_2_3_24_29_27_24_30-109-135_ccpd_green_017312.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/029633620689655173-90_242-240,520_570,602-570,602_276,599_240,525_538,520-10_2_3_24_29_27_24_30-109-135_ccpd_green_017312.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3333333333333333,
@@ -176,7 +176,7 @@
     {
       "id": "ccpd-blur-015",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0438146551724-94_81-114,431_449,568-459,568_117,534_113,427_455,461-0_0_18_7_25_27_24-146-121_ccpd_base_016088.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0438146551724-94_81-114,431_449,568-459,568_117,534_113,427_455,461-0_0_18_7_25_27_24-146-121_ccpd_base_016088.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.15833333333333333,
@@ -223,7 +223,7 @@
     {
       "id": "ccpd-blur-001",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0165-4_8-248,479_443,550-430,550_248,537_261,479_443,492-0_0_10_13_24_29_29-85-5_ccpd_blur_003535.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0165-4_8-248,479_443,550-430,550_248,537_261,479_443,492-0_0_10_13_24_29_29-85-5_ccpd_blur_003535.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.34444444444444444,
@@ -269,7 +269,7 @@
     {
       "id": "ccpd-blur-013",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0492313218391-106_69-258,445_544,614-531,626_249,539_252,436_534,523-0_0_17_17_33_27_30-141-128_ccpd_base_024320.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0492313218391-106_69-258,445_544,614-531,626_249,539_252,436_534,523-0_0_17_17_33_27_30-141-128_ccpd_base_024320.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.35833333333333334,
@@ -316,7 +316,7 @@
     {
       "id": "uc3m-lp-blur-006",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/uc3m-lp/01495.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/uc3m-lp/01495.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.2560344827586207,
@@ -367,7 +367,7 @@
     {
       "id": "uc3m-lp-blur-014",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/uc3m-lp/01237.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/uc3m-lp/01237.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3541666666666667,
@@ -418,7 +418,7 @@
     {
       "id": "uc3m-lp-blur-012",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/uc3m-lp/01437.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/uc3m-lp/01437.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.5297413793103448,
@@ -469,7 +469,7 @@
     {
       "id": "uc3m-lp-blur-020",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/uc3m-lp/01459.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/uc3m-lp/01459.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.15,
@@ -520,7 +520,7 @@
     {
       "id": "uc3m-lp-blur-016",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/uc3m-lp/01260.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/uc3m-lp/01260.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.32198275862068965,
@@ -571,7 +571,7 @@
     {
       "id": "uc3m-lp-blur-002",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/uc3m-lp/01271.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/uc3m-lp/01271.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.8218390804597702,
@@ -622,7 +622,7 @@
     {
       "id": "ccpd-angle-007",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0278-31_17-327,467_477,622-477,543_346,622_327,546_458,467-0_0_23_31_20_30_31-118-47_ccpd_tilt_017783.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0278-31_17-327,467_477,622-477,543_346,622_327,546_458,467-0_0_23_31_20_30_31-118-47_ccpd_tilt_017783.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.45416666666666666,
@@ -669,7 +669,7 @@
     {
       "id": "ccpd-angle-011",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0480-22_2-391,289_627,459-627,377_433,459_391,371_585,289-0_0_6_6_30_29_28-152-101_ccpd_rotate_000203.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0480-22_2-391,289_627,459-627,377_433,459_391,371_585,289-0_0_6_6_30_29_28-152-101_ccpd_rotate_000203.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.5430555555555555,
@@ -716,7 +716,7 @@
     {
       "id": "ccpd-angle-005",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0429-28_10-244,416_454,587-432,587_244,485_266,416_454,518-0_0_5_27_27_33_15-70-97_ccpd_rotate_029414.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0429-28_10-244,416_454,587-432,587_244,485_266,416_454,518-0_0_5_27_27_33_15-70-97_ccpd_rotate_029414.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3388888888888889,
@@ -763,7 +763,7 @@
     {
       "id": "ccpd-angle-003",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0327-15_31-298,441_512,569-490,517_298,569_320,493_512,441-1_2_29_7_26_6_30-70-105_ccpd_tilt_012089.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0327-15_31-298,441_512,569-490,517_298,569_320,493_512,441-1_2_29_7_26_6_30-70-105_ccpd_tilt_012089.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.41388888888888886,
@@ -810,7 +810,7 @@
     {
       "id": "ccpd-angle-015",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0395-23_35-223,504_421,671-403,591_223,671_241,584_421,504-0_0_21_15_33_25_31-60-64_ccpd_tilt_017009.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0395-23_35-223,504_421,671-403,591_223,671_241,584_421,504-0_0_21_15_33_25_31-60-64_ccpd_tilt_017009.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.30972222222222223,
@@ -857,7 +857,7 @@
     {
       "id": "ccpd-angle-009",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0299-24_16-184,501_353,649-353,578_195,649_184,572_342,501-0_0_3_30_6_27_33-99-55_ccpd_rotate_022473.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0299-24_16-184,501_353,649-353,578_195,649_184,572_342,501-0_0_3_30_6_27_33-99-55_ccpd_rotate_022473.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.25555555555555554,
@@ -904,7 +904,7 @@
     {
       "id": "uc3m-lp-angle-008",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/uc3m-lp/01707.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/uc3m-lp/01707.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.30517241379310345,
@@ -955,7 +955,7 @@
     {
       "id": "uc3m-lp-angle-018",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/uc3m-lp/01460.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/uc3m-lp/01460.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.17442528735632185,
@@ -1006,7 +1006,7 @@
     {
       "id": "uc3m-lp-angle-016",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/uc3m-lp/01566.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/uc3m-lp/01566.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3626436781609195,
@@ -1057,7 +1057,7 @@
     {
       "id": "uc3m-lp-angle-002",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/uc3m-lp/01669.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/uc3m-lp/01669.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.710632183908046,
@@ -1108,7 +1108,7 @@
     {
       "id": "uc3m-lp-angle-014",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/uc3m-lp/01678.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/uc3m-lp/01678.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.42169540229885055,
@@ -1159,7 +1159,7 @@
     {
       "id": "uc3m-lp-angle-020",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/uc3m-lp/01512.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/uc3m-lp/01512.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.5647988505747127,
@@ -1210,7 +1210,7 @@
     {
       "id": "ccpd-challenge-017",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0236-0_10-237,406_445,501-430,498_237,501_252,409_445,406-0_0_33_13_25_30_33-43-3_ccpd_blur_029576.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0236-0_10-237,406_445,501-430,498_237,501_252,409_445,406-0_0_33_13_25_30_33-43-3_ccpd_blur_029576.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.32916666666666666,
@@ -1258,7 +1258,7 @@
     {
       "id": "ccpd-challenge-005",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0332-4_19-226,447_488,553-488,553_248,533_226,447_466,467-0_0_2_17_26_26_27-37-5_ccpd_blur_001585.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0332-4_19-226,447_488,553-488,553_248,533_226,447_466,467-0_0_2_17_26_26_27-37-5_ccpd_blur_001585.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3138888888888889,
@@ -1306,7 +1306,7 @@
     {
       "id": "ccpd-challenge-015",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/035-22_6-251,425_454,569-435,569_251,494_270,425_454,500-0_0_28_19_33_27_32-174-18_ccpd_rotate_009912.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/035-22_6-251,425_454,569-435,569_251,494_270,425_454,500-0_0_28_19_33_27_32-174-18_ccpd_rotate_009912.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3486111111111111,
@@ -1355,7 +1355,7 @@
     {
       "id": "ccpd-challenge-001",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0255-5_16-219,454_420,560-420,560_236,541_219,454_403,473-0_0_1_30_27_32_27-41-3_ccpd_challenge_008407.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0255-5_16-219,454_420,560-420,560_236,541_219,454_403,473-0_0_1_30_27_32_27-41-3_ccpd_challenge_008407.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.30416666666666664,
@@ -1402,7 +1402,7 @@
     {
       "id": "ccpd-challenge-016",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0119-8_2-273,463_413,534-413,515_278,534_273,482_408,463-0_0_19_32_30_32_10-166-17_ccpd_challenge_026076.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0119-8_2-273,463_413,534-413,515_278,534_273,482_408,463-0_0_19_32_30_32_10-166-17_ccpd_challenge_026076.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.37916666666666665,
@@ -1449,7 +1449,7 @@
     {
       "id": "ccpd-challenge-019",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0187-13_19-248,477_403,578-403,578_256,544_248,477_395,511-0_0_0_9_27_26_25-82-2_ccpd_challenge_009657.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0187-13_19-248,477_403,578-403,578_256,544_248,477_395,511-0_0_0_9_27_26_25-82-2_ccpd_challenge_009657.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.34444444444444444,
@@ -1495,7 +1495,7 @@
     {
       "id": "ccpd-challenge-009",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0189-11_0-407,524_570,621-557,621_407,590_420,524_570,555-5_9_12_23_30_30_30-96-92_ccpd_challenge_029909.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0189-11_0-407,524_570,621-557,621_407,590_420,524_570,555-5_9_12_23_30_30_30-96-92_ccpd_challenge_029909.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.5652777777777778,
@@ -1541,7 +1541,7 @@
     {
       "id": "ccpd-challenge-003",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0194-2_2-278,468_504,540-504,530_284,540_278,478_498,468-0_0_17_16_29_24_27-87-21_ccpd_challenge_000788.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0194-2_2-278,468_504,540-504,530_284,540_278,478_498,468-0_0_17_16_29_24_27-87-21_ccpd_challenge_000788.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3861111111111111,
@@ -1587,7 +1587,7 @@
     {
       "id": "uc3m-lp-challenge-008",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/uc3m-lp/00447.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/uc3m-lp/00447.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.4771551724137931,
@@ -1640,7 +1640,7 @@
     {
       "id": "uc3m-lp-challenge-014",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/uc3m-lp/00308.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/uc3m-lp/00308.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.5729166666666666,
@@ -1693,7 +1693,7 @@
     {
       "id": "uc3m-lp-challenge-002",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/uc3m-lp/01718.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/uc3m-lp/01718.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.4366379310344828,
@@ -1746,7 +1746,7 @@
     {
       "id": "uc3m-lp-challenge-012",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/uc3m-lp/01500.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/uc3m-lp/01500.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.22198275862068967,
@@ -1799,7 +1799,7 @@
     {
       "id": "uc3m-lp-challenge-010",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/uc3m-lp/00302.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/uc3m-lp/00302.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.7089120370370371,
@@ -1852,7 +1852,7 @@
     {
       "id": "ccpd-small-plate-011",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0838-31_29-270,273_520,553-520,403_275,553_270,423_515,273-0_0_6_24_10_30_27-42-90_ccpd_fn_005969.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0838-31_29-270,273_520,553-520,403_275,553_270,423_515,273-0_0_6_24_10_30_27-42-90_ccpd_fn_005969.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.375,
@@ -1901,7 +1901,7 @@
     {
       "id": "ccpd-small-plate-017",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0042-4_5-312,480_402,519-402,512_318,519_312,487_396,480-0_0_21_27_24_33_7-129-14_ccpd_fn_000304.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0042-4_5-312,480_402,519-402,512_318,519_312,487_396,480-0_0_21_27_24_33_7-129-14_ccpd_fn_000304.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.43333333333333335,
@@ -1948,7 +1948,7 @@
     {
       "id": "ccpd-small-plate-005",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0079-1_1-334,486_459,539-459,539_334,536_334,486_459,489-0_0_22_32_26_25_20-145-13_ccpd_fn_029949.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0079-1_1-334,486_459,539-459,539_334,536_334,486_459,489-0_0_22_32_26_25_20-145-13_ccpd_fn_029949.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.4638888888888889,
@@ -1995,7 +1995,7 @@
     {
       "id": "ccpd-small-plate-007",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0690-15_42-120,491_461,660-461,660_166,579_120,491_415,572-11_3_24_27_33_15_17-106-24_ccpd_fn_017046.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0690-15_42-120,491_461,660-461,660_166,579_120,491_415,572-11_3_24_27_33_15_17-106-24_ccpd_fn_017046.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.16666666666666666,
@@ -2042,7 +2042,7 @@
     {
       "id": "ccpd-small-plate-009",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0032-0_2-282,459_367,491-366,490_282,491_283,460_367,459-0_0_3_30_25_25_18-77-4_ccpd_fn_019477.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0032-0_2-282,459_367,491-366,490_282,491_283,460_367,459-0_0_3_30_25_25_18-77-4_ccpd_fn_019477.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.39166666666666666,
@@ -2089,7 +2089,7 @@
     {
       "id": "ccpd-small-plate-020",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0036-1_4-291,520_385,552-382,552_291,550_294,520_385,522-0_0_27_31_31_9_25-98-2_ccpd_fn_020243.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0036-1_4-291,520_385,552-382,552_291,550_294,520_385,522-0_0_27_31_31_9_25-98-2_ccpd_fn_020243.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.4041666666666667,
@@ -2136,7 +2136,7 @@
     {
       "id": "ccpd-small-plate-016",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0030-0_1-308,516_393,546-392,546_308,546_309,516_393,516-0_0_2_25_25_24_5-85-5_ccpd_fn_000362.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0030-0_1-308,516_393,546-392,546_308,546_309,516_393,516-0_0_2_25_25_24_5-85-5_ccpd_fn_000362.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.42777777777777776,
@@ -2183,7 +2183,7 @@
     {
       "id": "ccpd-small-plate-018",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0046-2_1-352,497_454,535-453,535_352,530_353,497_454,502-0_0_20_27_16_30_33-76-10_ccpd_fn_009171.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0046-2_1-352,497_454,535-453,535_352,530_353,497_454,502-0_0_20_27_16_30_33-76-10_ccpd_fn_009171.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.4888888888888889,
@@ -2230,7 +2230,7 @@
     {
       "id": "uc3m-lp-small-plate-008",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/uc3m-lp/00223.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/uc3m-lp/00223.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.6442901234567902,
@@ -2281,7 +2281,7 @@
     {
       "id": "uc3m-lp-small-plate-006",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/uc3m-lp/00093.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/uc3m-lp/00093.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.763695987654321,
@@ -2332,7 +2332,7 @@
     {
       "id": "uc3m-lp-small-plate-002",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/uc3m-lp/00077.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/uc3m-lp/00077.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.7316743827160493,
@@ -2383,7 +2383,7 @@
     {
       "id": "uc3m-lp-small-plate-004",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/uc3m-lp/00268.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/uc3m-lp/00268.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.5140817901234568,
@@ -2434,7 +2434,7 @@
     {
       "id": "uc3m-lp-small-plate-012",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/uc3m-lp/01867.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/uc3m-lp/01867.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.986328125,
@@ -2485,7 +2485,7 @@
     {
       "id": "ccpd-weather-012",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0167-2_4-217,528_409,601-407,592_217,601_219,537_409,528-0_0_21_15_29_30_30-100-37_ccpd_weather_016888.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0167-2_4-217,528_409,601-407,592_217,601_219,537_409,528-0_0_21_15_29_30_30-100-37_ccpd_weather_016888.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3013888888888889,
@@ -2531,7 +2531,7 @@
     {
       "id": "ccpd-weather-001",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0466-0_4-183,442_537,552-537,552_191,550_183,442_529,444-0_0_33_23_33_31_32-56-52_ccpd_weather_002303.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0466-0_4-183,442_537,552-537,552_191,550_183,442_529,444-0_0_33_23_33_31_32-56-52_ccpd_weather_002303.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.25416666666666665,
@@ -2577,7 +2577,7 @@
     {
       "id": "ccpd-weather-014",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0226-4_0-253,606_466,695-461,695_253,677_258,606_466,624-0_0_23_26_32_30_6-131-59_ccpd_weather_019594.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0226-4_0-253,606_466,695-461,695_253,677_258,606_466,624-0_0_23_26_32_30_6-131-59_ccpd_weather_019594.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.35138888888888886,
@@ -2623,7 +2623,7 @@
     {
       "id": "ccpd-weather-008",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0549-7_11-166,535_489,677-489,677_174,638_166,535_481,574-0_0_8_31_25_29_3-88-55_ccpd_weather_016800.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0549-7_11-166,535_489,677-489,677_174,638_166,535_481,574-0_0_8_31_25_29_3-88-55_ccpd_weather_016800.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.23055555555555557,
@@ -2669,7 +2669,7 @@
     {
       "id": "ccpd-weather-013",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0620-0_2-237,516_621,651-615,651_237,647_243,516_621,520-0_0_10_27_22_29_28-53-40_ccpd_weather_010637.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0620-0_2-237,516_621,651-615,651_237,647_243,516_621,520-0_0_10_27_22_29_28-53-40_ccpd_weather_010637.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.32916666666666666,
@@ -2715,7 +2715,7 @@
     {
       "id": "ccpd-weather-007",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0947-18_16-179,406_523,636-518,636_179,520_184,406_523,522-0_0_7_15_30_26_32-64-54_ccpd_weather_002292.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0947-18_16-179,406_523,636-518,636_179,520_184,406_523,522-0_0_7_15_30_26_32-64-54_ccpd_weather_002292.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.24861111111111112,
@@ -2761,7 +2761,7 @@
     {
       "id": "ccpd-weather-009",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0341-3_10-133,495_407,599-407,599_143,582_133,495_397,512-0_0_33_24_5_31_25-79-51_ccpd_weather_023702.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0341-3_10-133,495_407,599-407,599_143,582_133,495_397,512-0_0_33_24_5_31_25-79-51_ccpd_weather_023702.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.18472222222222223,
@@ -2807,7 +2807,7 @@
     {
       "id": "ccpd-weather-004",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0354-5_5-361,554_612,672-612,650_361,672_361,576_612,554-0_0_7_32_31_32_2-89-38_ccpd_weather_002380.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0354-5_5-361,554_612,672-612,650_361,672_361,576_612,554-0_0_7_32_31_32_2-89-38_ccpd_weather_002380.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.5013888888888889,
@@ -2853,7 +2853,7 @@
     {
       "id": "ccpd-weather-003",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0449-7_14-271,312_553,445-540,410_271,445_284,347_553,312-0_0_8_8_27_27_32-58-93_ccpd_weather_023909.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0449-7_14-271,312_553,445-540,410_271,445_284,347_553,312-0_0_8_8_27_27_32-58-93_ccpd_weather_023909.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3763888888888889,
@@ -2899,7 +2899,7 @@
     {
       "id": "ccpd-weather-010",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0359-10_3-235,444_483,565-483,521_244,565_235,488_474,444-0_0_2_22_30_31_31-98-72_ccpd_weather_028425.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0359-10_3-235,444_483,565-483,521_244,565_235,488_474,444-0_0_2_22_30_31_31-98-72_ccpd_weather_028425.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3263888888888889,
@@ -2945,7 +2945,7 @@
     {
       "id": "ccpd-weather-015",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0142-0_1-333,414_519,478-519,475_336,478_333,417_516,414-0_0_12_33_2_33_31-79-23_ccpd_weather_027287.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0142-0_1-333,414_519,478-519,475_336,478_333,417_516,414-0_0_12_33_2_33_31-79-23_ccpd_weather_027287.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.4625,
@@ -2991,7 +2991,7 @@
     {
       "id": "ccpd-low-light-014",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0238-3_3-277,433_478,532-478,519_278,532_277,446_477,433-0_0_28_24_14_33_26-30-2_ccpd_blur_001565.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0238-3_3-277,433_478,532-478,519_278,532_277,446_477,433-0_0_28_24_14_33_26-30-2_ccpd_blur_001565.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.38472222222222224,
@@ -3039,7 +3039,7 @@
     {
       "id": "ccpd-low-light-016",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0368-11_9-287,436_505,577-505,533_290,577_287,480_502,436-0_0_7_11_33_30_28-18-2_ccpd_blur_016429.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0368-11_9-287,436_505,577-505,533_290,577_287,480_502,436-0_0_7_11_33_30_28-18-2_ccpd_blur_016429.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.39861111111111114,
@@ -3087,7 +3087,7 @@
     {
       "id": "ccpd-low-light-001",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0384-19_13-148,383_337,553-337,491_159,553_148,445_326,383-0_0_23_26_2_29_29-40-28_ccpd_rotate_004842.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0384-19_13-148,383_337,553-337,491_159,553_148,445_326,383-0_0_23_26_2_29_29-40-28_ccpd_rotate_004842.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.20555555555555555,
@@ -3136,7 +3136,7 @@
     {
       "id": "ccpd-low-light-017",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0243-9_9-269,443_449,556-448,527_269,556_270,472_449,443-0_0_29_20_30_29_33-46-9_ccpd_challenge_020349.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0243-9_9-269,443_449,556-448,527_269,556_270,472_449,443-0_0_29_20_30_29_33-46-9_ccpd_challenge_020349.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3736111111111111,
@@ -3183,7 +3183,7 @@
     {
       "id": "ccpd-low-light-003",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0326-4_26-205,496_465,601-465,601_240,584_205,496_430,513-0_0_17_32_26_27_16-47-4_ccpd_challenge_008380.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0326-4_26-205,496_465,601-465,601_240,584_205,496_430,513-0_0_17_32_26_27_16-47-4_ccpd_challenge_008380.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.2847222222222222,
@@ -3230,7 +3230,7 @@
     {
       "id": "ccpd-low-light-013",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0526-18_44-106,482_371,648-371,648_151,574_106,482_326,556-0_0_23_3_33_26_27-21-104_ccpd_db_002844.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0526-18_44-106,482_371,648-371,648_151,574_106,482_326,556-0_0_23_3_33_26_27-21-104_ccpd_db_002844.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.14722222222222223,
@@ -3277,7 +3277,7 @@
     {
       "id": "ccpd-low-light-005",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0187715517241-90_92-259,508_516,598-521,585_275,592_274,502_520,495-10_0_27_32_26_32_4-41-40_ccpd_base_001025.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0187715517241-90_92-259,508_516,598-521,585_275,592_274,502_520,495-10_0_27_32_26_32_4-41-40_ccpd_base_001025.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3597222222222222,
@@ -3324,7 +3324,7 @@
     {
       "id": "ccpd-low-light-009",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0307-2_10-236,455_488,557-488,557_250,548_236,455_474,464-0_0_24_29_31_17_29-22-2_ccpd_db_002794.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0307-2_10-236,455_488,557-488,557_250,548_236,455_474,464-0_0_24_29_31_17_29-22-2_ccpd_db_002794.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3277777777777778,
@@ -3371,7 +3371,7 @@
     {
       "id": "ccpd-low-light-019",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0205-1_5-212,491_424,572-424,572_216,565_212,491_420,498-0_0_15_3_26_25_32-24-1_ccpd_db_002983.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0205-1_5-212,491_424,572-424,572_216,565_212,491_420,498-0_0_15_3_26_25_32-24-1_ccpd_db_002983.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.29444444444444445,
@@ -3418,7 +3418,7 @@
     {
       "id": "uc3m-lp-low-light-004",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/uc3m-lp/00390.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/uc3m-lp/00390.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.32195216049382713,
@@ -3469,7 +3469,7 @@
     {
       "id": "uc3m-lp-low-light-008",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/uc3m-lp/00929.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/uc3m-lp/00929.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.8138503086419753,
@@ -3520,7 +3520,7 @@
     {
       "id": "uc3m-lp-low-light-010",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/uc3m-lp/00016.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/uc3m-lp/00016.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.17727623456790123,
@@ -3571,7 +3571,7 @@
     {
       "id": "uc3m-lp-low-light-012",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/uc3m-lp/00511.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/uc3m-lp/00511.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.44396551724137934,
@@ -3622,7 +3622,7 @@
     {
       "id": "ccpd-high-exposure-017",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0220581896552-98_84-260,489_483,590-495,607_266,560_256,474_485,521-0_0_9_1_33_29_24-173-36_ccpd_base_027768.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0220581896552-98_84-260,489_483,590-495,607_266,560_256,474_485,521-0_0_9_1_33_29_24-173-36_ccpd_base_027768.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3611111111111111,
@@ -3669,7 +3669,7 @@
     {
       "id": "ccpd-high-exposure-007",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0080316091954-87_93-345,528_500,596-508,585_348,598_346,539_506,526-0_0_21_3_26_27_33-186-22_ccpd_base_028827.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0080316091954-87_93-345,528_500,596-508,585_348,598_346,539_506,526-0_0_21_3_26_27_33-186-22_ccpd_base_028827.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.4791666666666667,
@@ -3716,7 +3716,7 @@
     {
       "id": "ccpd-high-exposure-018",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0200742337165-95_83-293,306_509,401-504,400_297,380_303,305_510,325-0_0_7_29_26_28_2-175-41_ccpd_base_018597.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0200742337165-95_83-293,306_509,401-504,400_297,380_303,305_510,325-0_0_7_29_26_28_2-175-41_ccpd_base_018597.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.40694444444444444,
@@ -3763,7 +3763,7 @@
     {
       "id": "ccpd-high-exposure-009",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0192816091954-90_88-224,482_485,554-483,568_228,565_227,472_482,475-0_0_10_30_30_24_8-184-45_ccpd_base_026208.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0192816091954-90_88-224,482_485,554-483,568_228,565_227,472_482,475-0_0_10_30_30_24_8-184-45_ccpd_base_026208.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3111111111111111,
@@ -3810,7 +3810,7 @@
     {
       "id": "ccpd-high-exposure-003",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0158836206897-88_93-243,506_470,581-477,587_230,593_230,509_477,503-0_0_11_27_2_33_32-192-22_ccpd_base_018865.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0158836206897-88_93-243,506_470,581-477,587_230,593_230,509_477,503-0_0_11_27_2_33_32-192-22_ccpd_base_018865.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3375,
@@ -3857,7 +3857,7 @@
     {
       "id": "ccpd-high-exposure-020",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0248742816092-90_89-230,546_520,630-539,631_233,638_231,536_537,529-0_0_19_7_32_32_29-180-31_ccpd_base_024436.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0248742816092-90_89-230,546_520,630-539,631_233,638_231,536_537,529-0_0_19_7_32_32_29-180-31_ccpd_base_024436.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3194444444444444,
@@ -3904,7 +3904,7 @@
     {
       "id": "ccpd-high-exposure-001",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/ccpd/0186781609195-90_88-219,522_490,614-500,616_224,608_208,522_484,530-0_0_20_30_30_30_23-161-73_ccpd_base_009575.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/ccpd/0186781609195-90_88-219,522_490,614-500,616_224,608_208,522_484,530-0_0_20_30_30_30_23-161-73_ccpd_base_009575.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.30416666666666664,
@@ -3951,7 +3951,7 @@
     {
       "id": "uc3m-lp-high-exposure-008",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/uc3m-lp/00817.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/uc3m-lp/00817.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.4411651234567901,
@@ -4002,7 +4002,7 @@
     {
       "id": "uc3m-lp-high-exposure-014",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/uc3m-lp/01053.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/uc3m-lp/01053.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.2197145061728395,
@@ -4053,7 +4053,7 @@
     {
       "id": "uc3m-lp-high-exposure-012",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/uc3m-lp/00831.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/uc3m-lp/00831.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.2353395061728395,
@@ -4104,7 +4104,7 @@
     {
       "id": "uc3m-lp-high-exposure-004",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/uc3m-lp/01146.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/uc3m-lp/01146.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.19232253086419754,
@@ -4155,7 +4155,7 @@
     {
       "id": "uc3m-lp-high-exposure-010",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases/uc3m-lp/01172.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/multisource-hardcases/uc3m-lp/01172.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.24238505747126438,

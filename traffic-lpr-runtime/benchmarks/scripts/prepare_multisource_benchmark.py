@@ -3,9 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
-import re
 from collections import Counter, defaultdict
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 from zipfile import ZipFile
@@ -15,79 +13,22 @@ import numpy as np
 from huggingface_hub import hf_hub_download
 from remotezip import RemoteZip
 
-
-CCPD_REPO_ID = 'zenitsu09/ccpd-subset-30k'
-CCPD_ARCHIVE_NAME = 'ccpd_subset_30k.zip'
-UC3M_ARCHIVE_CONTENT_URL = 'https://zenodo.org/api/records/17152029/files/UC3M-LP.zip/content'
-PROVINCES = [
-    '皖', '沪', '津', '渝', '冀', '晋', '蒙', '辽', '吉', '黑', '苏', '浙', '京', '闽', '赣', '鲁', '豫', '鄂', '湘', '粤', '桂', '琼', '川', '贵', '云', '藏', '陕', '甘', '青', '宁', '新', '警', '学', 'O'
-]
-ALPHABETS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'J', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'O']
-ADS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'J', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'O']
-PLATE_TEXT_PATTERN = re.compile(r'^[A-Z0-9]{5,8}$')
-HARD_CASE_CATEGORIES = ['blur', 'angle', 'challenge', 'small-plate', 'weather', 'low-light', 'high-exposure']
-
-
-@dataclass(frozen=True, slots=True)
-class CcpdSample:
-    archive_name: str
-    subset: str
-    x1: int
-    y1: int
-    x2: int
-    y2: int
-    expected_text: str
-    raw_plate_text: str
-    brightness: int
-    blur: int
-
-
-@dataclass(frozen=True, slots=True)
-class ArchiveSource:
-    kind: str
-    location: str
-
-
-@dataclass(slots=True)
-class BenchmarkSourceSample:
-    dataset_key: str
-    dataset_name: str
-    archive_member: str
-    expected_text: str
-    bbox: tuple[int, int, int, int] | None
-    split: str
-    brightness: float
-    blur_score: float
-    plate_area_ratio: float | None
-    angle_degrees: float | None
-    tags: list[str]
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-    @property
-    def unique_name(self) -> str:
-        return f'{self.dataset_key}:{self.archive_member}'
-
-    def dominant_category(self) -> str:
-        for category in HARD_CASE_CATEGORIES:
-          if category in self.tags:
-              return category
-        return 'challenge'
-
-    def hardness_score(self) -> float:
-        score = 0.0
-        if 'blur' in self.tags:
-            score += 0.25
-        if 'angle' in self.tags:
-            score += 0.2
-        if 'small-plate' in self.tags:
-            score += 0.2
-        if 'low-light' in self.tags or 'high-exposure' in self.tags:
-            score += 0.15
-        if 'weather' in self.tags:
-            score += 0.15
-        if 'challenge' in self.tags:
-            score += 0.2
-        return score
+from common import (
+    ArchiveSource,
+    BenchmarkSourceSample,
+    CCPD_ARCHIVE_NAME,
+    CCPD_REPO_ID,
+    HARD_CASE_CATEGORIES,
+    PLATE_TEXT_PATTERN,
+    UC3M_ARCHIVE_CONTENT_URL,
+    build_marker_rect,
+    default_frame_analysis_options,
+    parse_ccpd_name,
+    quantile,
+    quantile_float,
+    resolve_benchmark_paths,
+    normalize_expected_text,
+)
 
 
 def main() -> int:
@@ -95,7 +36,7 @@ def main() -> int:
     parser.add_argument('--datasets', nargs='+', default=['ccpd', 'uc3m-lp'], choices=['ccpd', 'uc3m-lp'], help='Datasets to include in the generated public benchmark.')
     parser.add_argument('--per-category', type=int, default=20, help='How many unique cases to keep per hard-case category across sources.')
     parser.add_argument('--seed', type=int, default=7, help='Deterministic sampling seed.')
-    parser.add_argument('--runtime-root', type=Path, default=Path(__file__).resolve().parents[1], help='traffic-lpr-runtime project root.')
+    parser.add_argument('--runtime-root', type=Path, default=Path(__file__).resolve().parents[2], help='traffic-lpr-runtime project root.')
     parser.add_argument('--output-manifest', type=Path, default=None, help='Path for the combined benchmark manifest JSON.')
     parser.add_argument('--output-images', type=Path, default=None, help='Directory where sampled images will be extracted.')
     parser.add_argument('--cache-dir', type=Path, default=None, help='Directory for downloaded dataset archives.')
@@ -104,10 +45,11 @@ def main() -> int:
     args = parser.parse_args()
 
     runtime_root = args.runtime_root.resolve()
-    cache_dir = (args.cache_dir or (runtime_root / '.runtime' / 'public-datasets')).resolve()
-    output_manifest = (args.output_manifest or (runtime_root / 'benchmarks' / 'public-multisource-hardcases.json')).resolve()
-    output_images = (args.output_images or (runtime_root / '.runtime' / 'public-datasets' / 'multisource-hardcases')).resolve()
-    split_output_dir = (args.split_output_dir or (runtime_root / 'benchmarks' / 'multisource-manifests')).resolve()
+    paths = resolve_benchmark_paths(runtime_root)
+    cache_dir = (args.cache_dir or paths.cache_root).resolve()
+    output_manifest = (args.output_manifest or (paths.public_multisource_manifest_root / 'all.json')).resolve()
+    output_images = (args.output_images or (paths.dataset_root / 'multisource-hardcases')).resolve()
+    split_output_dir = (args.split_output_dir or paths.public_multisource_manifest_root).resolve()
 
     archive_sources: dict[str, ArchiveSource] = {}
     all_samples: list[BenchmarkSourceSample] = []
@@ -147,12 +89,12 @@ def _load_ccpd(cache_dir: Path) -> tuple[ArchiveSource, list[BenchmarkSourceSamp
             repo_id=CCPD_REPO_ID,
             repo_type='dataset',
             filename=CCPD_ARCHIVE_NAME,
-            local_dir=cache_dir / 'hf-cache',
+            local_dir=cache_dir / 'hf-hub',
         )
     ).resolve()
 
     with ZipFile(archive_path) as archive:
-        parsed = [_parse_ccpd_name(Path(name).name) for name in archive.namelist() if name.lower().endswith('.jpg')]
+        parsed = [parse_ccpd_name(Path(name).name) for name in archive.namelist() if name.lower().endswith('.jpg')]
     samples = [sample for sample in parsed if sample is not None]
     thresholds = _build_ccpd_thresholds(samples)
 
@@ -348,7 +290,7 @@ def _parse_uc3m_lps_annotation(annotation: dict[str, Any], image_width: int, ima
         if not isinstance(plate, dict):
             continue
         raw_text = plate.get('lp_id')
-        normalized_text = _normalize_expected_text(str(raw_text)) if raw_text is not None else ''
+        normalized_text = normalize_expected_text(str(raw_text)) if raw_text is not None else ''
         if not normalized_text or not PLATE_TEXT_PATTERN.match(normalized_text):
             continue
         bbox, angle_degrees = _bbox_from_annotation(plate, image_width, image_height)
@@ -375,7 +317,7 @@ def _find_plate_text(value: Any) -> str | None:
             lowered_key = key.lower()
             if lowered_key in {'imagepath', 'image_path', 'filename', 'file_name', 'path'}:
                 continue
-            normalized = _normalize_expected_text(raw_value)
+            normalized = normalize_expected_text(raw_value)
             if not normalized or not PLATE_TEXT_PATTERN.match(normalized):
                 continue
             priority = 1
@@ -525,13 +467,13 @@ def _polygon_tilt_degrees(points: list[tuple[float, float]]) -> float:
     return min(degrees, 90.0 - degrees)
 
 
-def _build_ccpd_thresholds(samples: list[CcpdSample]) -> dict[str, int]:
+def _build_ccpd_thresholds(samples: list[Any]) -> dict[str, int]:
     brightness = sorted(sample.brightness for sample in samples)
     blur = sorted(sample.blur for sample in samples)
     return {
-        'lowBrightness': _quantile(brightness, 0.10),
-        'highBrightness': _quantile(brightness, 0.90),
-        'highBlur': _quantile(blur, 0.90),
+        'lowBrightness': quantile(brightness, 0.10),
+        'highBrightness': quantile(brightness, 0.90),
+        'highBlur': quantile(blur, 0.90),
     }
 
 
@@ -541,24 +483,12 @@ def _build_uc3m_thresholds(samples: list[BenchmarkSourceSample]) -> dict[str, fl
     plate_area_ratio = sorted(sample.plate_area_ratio for sample in samples if sample.plate_area_ratio is not None)
     angles = sorted(sample.angle_degrees for sample in samples if sample.angle_degrees is not None)
     return {
-        'lowBrightness': _quantile_float(brightness, 0.15),
-        'highBrightness': _quantile_float(brightness, 0.85),
-        'lowBlurScore': _quantile_float(blur_score, 0.15),
-        'smallPlateRatio': _quantile_float(plate_area_ratio, 0.15) if plate_area_ratio else 0.0,
-        'angleDegrees': _quantile_float(angles, 0.75) if angles else 12.0,
+        'lowBrightness': quantile_float(brightness, 0.15),
+        'highBrightness': quantile_float(brightness, 0.85),
+        'lowBlurScore': quantile_float(blur_score, 0.15),
+        'smallPlateRatio': quantile_float(plate_area_ratio, 0.15) if plate_area_ratio else 0.0,
+        'angleDegrees': quantile_float(angles, 0.75) if angles else 12.0,
     }
-
-
-def _quantile(values: list[int], probability: float) -> int:
-    index = int((len(values) - 1) * probability)
-    return int(values[index])
-
-
-def _quantile_float(values: list[float], probability: float) -> float:
-    if not values:
-        return 0.0
-    index = int((len(values) - 1) * probability)
-    return float(values[index])
 
 
 def _select_balanced_samples(samples: list[BenchmarkSourceSample], per_category: int, seed: int) -> dict[str, list[BenchmarkSourceSample]]:
@@ -621,7 +551,6 @@ def _materialize_manifest(
                 if image is None:
                     continue
                 height, width = image.shape[:2]
-                marker_rect = _build_marker_rect(sample.bbox, width, height)
                 dataset_counts[sample.dataset_key] += 1
                 split_counts[sample.split] += 1
                 case_tags = sorted(set(sample.tags + [category]))
@@ -634,21 +563,13 @@ def _materialize_manifest(
                     'mode': 'frame',
                     'sourcePath': destination.resolve().as_posix(),
                     'timeMs': 0,
-                    'markerRect': marker_rect,
+                    'markerRect': build_marker_rect(sample.bbox, width, height),
                     'targetVehicleKind': 'vehicle',
                     'selectedTargetBox': None,
                     'countryHints': ['tw', 'es', 'eu'] if sample.dataset_key == 'uc3m-lp' else [],
                     'expectedText': sample.expected_text,
                     'tags': case_tags,
-                    'analysisOptions': {
-                        'persistArtifacts': False,
-                        'trackerMode': 'legacy',
-                        'fusionMode': 'aligned-char',
-                        'restorationMode': 'mambairv2',
-                        'enableRectification': True,
-                        'enableEnhancement': True,
-                        'enableRecognizerComparison': True,
-                    },
+                    'analysisOptions': default_frame_analysis_options(),
                     'metadata': metadata,
                 })
     finally:
@@ -673,18 +594,6 @@ def _open_archive(source: ArchiveSource) -> Any:
     if source.kind == 'remote':
         return RemoteZip(source.location)
     raise ValueError(f'Unsupported archive source kind: {source.kind}')
-
-
-def _build_marker_rect(bbox: tuple[int, int, int, int] | None, width: int, height: int) -> dict[str, float] | None:
-    if bbox is None:
-        return None
-    x1, y1, x2, y2 = bbox
-    return {
-        'x': max(0.0, min(x1 / max(width, 1), 1.0)),
-        'y': max(0.0, min(y1 / max(height, 1), 1.0)),
-        'width': max(0.0, min((x2 - x1) / max(width, 1), 1.0)),
-        'height': max(0.0, min((y2 - y1) / max(height, 1), 1.0)),
-    }
 
 
 def _build_split_manifests(manifest: dict[str, Any], split_output_dir: Path, seed: int) -> dict[str, str]:
@@ -719,58 +628,10 @@ def _build_split_manifests(manifest: dict[str, Any], split_output_dir: Path, see
             },
             'cases': cases,
         }
-        output_path = split_output_dir / f'public-multisource-{split_name}.json'
+        output_path = split_output_dir / f'{split_name}.json'
         output_path.write_text(json.dumps(split_manifest, ensure_ascii=False, indent=2), encoding='utf-8')
         outputs[split_name] = str(output_path)
     return outputs
-
-
-def _parse_ccpd_name(file_name: str) -> CcpdSample | None:
-    stem = Path(file_name).stem
-    parts = stem.split('-')
-    if len(parts) < 7:
-        return None
-
-    try:
-        x1, y1 = (int(value) for value in parts[2].split('_')[0].split(','))
-        x2, y2 = (int(value) for value in parts[2].split('_')[1].split(','))
-        plate_indices = [int(value) for value in parts[4].split('_')]
-        brightness = int(parts[5])
-        blur = int(parts[6].split('_', 1)[0])
-        subset = stem.rsplit('_', 2)[1]
-    except (IndexError, ValueError):
-        return None
-
-    raw_plate_text = _decode_plate_text(plate_indices)
-    expected_text = _normalize_expected_text(raw_plate_text)
-    if not expected_text:
-        return None
-
-    return CcpdSample(
-        archive_name=file_name,
-        subset=subset,
-        x1=x1,
-        y1=y1,
-        x2=x2,
-        y2=y2,
-        expected_text=expected_text,
-        raw_plate_text=raw_plate_text,
-        brightness=brightness,
-        blur=blur,
-    )
-
-
-def _decode_plate_text(indices: list[int]) -> str:
-    if len(indices) < 2:
-        return ''
-    province = PROVINCES[indices[0]] if 0 <= indices[0] < len(PROVINCES) else ''
-    alpha = ALPHABETS[indices[1]] if 0 <= indices[1] < len(ALPHABETS) else ''
-    suffix = ''.join(ADS[index] for index in indices[2:] if 0 <= index < len(ADS))
-    return f'{province}{alpha}{suffix}'
-
-
-def _normalize_expected_text(text: str) -> str:
-    return ''.join(character for character in text.upper() if character.isdigit() or ('A' <= character <= 'Z'))
 
 
 if __name__ == '__main__':

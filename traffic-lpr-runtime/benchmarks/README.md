@@ -1,6 +1,16 @@
 # Benchmark Notes
 
-Build your benchmark around target-centric hard cases from moving-camera footage.
+Build benchmarks around target-centric hard cases from moving-camera footage.
+
+## Layout
+
+- `benchmarks/scripts/` stores generator entrypoints and shared helpers.
+- `benchmarks/manifests/templates/` stores hand-authored templates such as the local sample manifest.
+- `benchmarks/manifests/public/` stores committed public benchmark manifests.
+- `.runtime/benchmarks/cache/` stores disposable download caches.
+- `.runtime/benchmarks/datasets/` stores materialized benchmark images referenced by generated manifests.
+
+Keep only reusable benchmark definitions under `benchmarks/`. Smoke outputs, extracted images, transient downloads, and one-off analysis artifacts belong under `.runtime/` and can be deleted safely.
 
 Recommended annotation fields per case:
 
@@ -13,7 +23,7 @@ Recommended annotation fields per case:
 - `expectedText`: normalized plate text without punctuation
 - `countryHints`: `['TW']` for Taiwan-first OCR priors
 - `tags`: conditions such as `night`, `blur`, `angle`, `small-plate`, `glare`, `occlusion`, `moving-camera`
-- `analysisOptions`: ablation switches for tracker / fusion / restoration / OCR comparison
+- `analysisOptions`: ablation switches for tracker, fusion, restoration, and OCR comparison
 
 Suggested benchmark splits:
 
@@ -29,10 +39,10 @@ For a repeatable public hard-case benchmark that does not depend on your own foo
 
 ```powershell
 cd traffic-lpr-runtime
-.\.venv\Scripts\python.exe benchmarks\prepare_public_benchmark.py --per-category 25
+.\.venv\Scripts\python.exe benchmarks\scripts\prepare_public_benchmark.py --per-category 25
 ```
 
-The script downloads the public `zenitsu09/ccpd-subset-30k` archive from Hugging Face into `.runtime/public-datasets/hf-cache/`, samples a balanced hard-case mix, extracts only the sampled images into `.runtime/public-datasets/ccpd-hardcases/`, and writes `benchmarks/public-ccpd-hardcases.json`.
+The script downloads the public `zenitsu09/ccpd-subset-30k` archive from Hugging Face into `.runtime/benchmarks/cache/hf-hub/`, samples a balanced hard-case mix, extracts only the sampled images into `.runtime/benchmarks/datasets/ccpd-hardcases/`, and writes `benchmarks/manifests/public/ccpd-hardcases.json`.
 
 The generated manifest emphasizes these categories:
 
@@ -48,7 +58,7 @@ Run the benchmark with:
 
 ```powershell
 cd traffic-lpr-runtime
-.\.venv\Scripts\python.exe -m traffic_lpr_runtime benchmark-run < benchmarks\public-ccpd-hardcases.json
+.\.venv\Scripts\python.exe -m traffic_lpr_runtime benchmark-run < benchmarks\manifests\public\ccpd-hardcases.json
 ```
 
 This public benchmark is image-based, so it measures the OCR, rectification, restoration, and ranking stack on hard cases without overfitting to your own video. Keep interval/video benchmarks separate when you want to evaluate tracker behavior.
@@ -59,7 +69,7 @@ To reduce China-only bias and keep a second public domain in the loop, build a c
 
 ```powershell
 cd traffic-lpr-runtime
-.\.venv\Scripts\python.exe benchmarks\prepare_multisource_benchmark.py --datasets ccpd uc3m-lp --per-category 20 --uc3m-split test
+.\.venv\Scripts\python.exe benchmarks\scripts\prepare_multisource_benchmark.py --datasets ccpd uc3m-lp --per-category 20 --uc3m-split test
 ```
 
 This workflow:
@@ -67,21 +77,21 @@ This workflow:
 - keeps the existing CCPD hard-case buckets for blur, angle, weather, low-light, and small plates
 - adds `UC3M-LP` as a European/Spanish counterweight so public evaluation is not dominated by Chinese plates
 - reads the UC3M-LP archive through HTTP range requests instead of requiring a full 4.5 GB download up front
-- emits a combined manifest plus three stratified manifests under `benchmarks/multisource-manifests/`:
-	development, holdout, and challenge
+- emits a combined manifest plus three stratified manifests under `benchmarks/manifests/public/multisource/`:
+development, holdout, and challenge
 
-The combined output is written to `benchmarks/public-multisource-hardcases.json`, and sampled images are extracted under `.runtime/public-datasets/multisource-hardcases/`.
+The combined output is written to `benchmarks/manifests/public/multisource/all.json`, and sampled images are extracted under `.runtime/benchmarks/datasets/multisource-hardcases/`.
 
 Run the resulting benchmark exactly the same way:
 
 ```powershell
 cd traffic-lpr-runtime
-.\.venv\Scripts\python.exe -m traffic_lpr_runtime benchmark-run < benchmarks\public-multisource-hardcases.json
+.\.venv\Scripts\python.exe -m traffic_lpr_runtime benchmark-run < benchmarks\manifests\public\multisource\all.json
 ```
 
 Use the split manifests when you want to separate daily iteration from the harder review set:
 
 ```powershell
 cd traffic-lpr-runtime
-.\.venv\Scripts\python.exe -m traffic_lpr_runtime benchmark-run < benchmarks\multisource-manifests\public-multisource-development.json
+.\.venv\Scripts\python.exe -m traffic_lpr_runtime benchmark-run < benchmarks\manifests\public\multisource\development.json
 ```

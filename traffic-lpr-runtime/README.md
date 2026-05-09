@@ -64,7 +64,7 @@ Example usage:
 
 ```powershell
 cd traffic-lpr-runtime
-.\.venv\Scripts\python.exe -m traffic_lpr_runtime benchmark-run < benchmarks\sample-manifest.json
+.\.venv\Scripts\python.exe -m traffic_lpr_runtime benchmark-run < benchmarks\manifests\templates\sample-manifest.json
 ```
 
 Each case can target either `frame` or `interval` mode and may include `analysisOptions` for ablations such as:
@@ -75,14 +75,14 @@ Each case can target either `frame` or `interval` mode and may include `analysis
 - `persistArtifacts`: store cropped / rectified / restored intermediate images under `.runtime/analysis/`
 - `ocrModelNames`: compare multiple OCR heads on the same plate crop
 
-Start by copying [benchmarks/sample-manifest.json](benchmarks/sample-manifest.json) and replacing the placeholder `sourcePath`, `selectedTargetBox`, and `expectedText` values with your own difficult cases.
+Start by copying [benchmarks/manifests/templates/sample-manifest.json](benchmarks/manifests/templates/sample-manifest.json) and replacing the placeholder `sourcePath`, `selectedTargetBox`, and `expectedText` values with your own difficult cases.
 
 The benchmark output includes per-case exact match, top-3 match, and character error rate so you can compare tracker / fusion / restoration changes against the same hard-case set.
 
 If you want a public benchmark set that does not depend on your own clips, see [benchmarks/README.md](benchmarks/README.md) and run either:
 
-- `benchmarks/prepare_public_benchmark.py` for the existing CCPD-only hard-case manifest
-- `benchmarks/prepare_multisource_benchmark.py --datasets ccpd uc3m-lp` for a more diverse public benchmark that adds UC3M-LP as a European counterweight
+- `benchmarks/scripts/prepare_public_benchmark.py` for the existing CCPD-only hard-case manifest
+- `benchmarks/scripts/prepare_multisource_benchmark.py --datasets ccpd uc3m-lp` for a more diverse public benchmark that adds UC3M-LP as a European counterweight
 
 The UC3M-LP path uses HTTP range reads against the published Zenodo archive, so the generator can sample real cases without forcing a full archive download before manifest creation.
 
