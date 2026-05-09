@@ -27,7 +27,7 @@ import {
   type PlateWindowSessionSnapshot,
 } from '../application/plateWindow';
 import { requestPlateWindowSession, sendPlateWindowAction } from '../infrastructure/plateWindowApi';
-import { buildDefaultLprState, clamp, formatTransportTime } from '../domain/model';
+import { buildDefaultLprState, clamp, formatRulerLabel, formatTransportTime } from '../domain/model';
 import type { LprFrameSample, LprPlateCandidate, TimelineIntervalSelection } from '../../../shared/contracts';
 import { createLogger, getErrorSummary, serializeError } from '../../../utils/logger';
 import styles from './PlateWindow.module.css';
@@ -43,6 +43,10 @@ function formatIntervalLabel(interval: TimelineIntervalSelection | null) {
     return '--';
   }
   return `${formatTransportTime(interval.startMs)} - ${formatTransportTime(interval.endMs)}`;
+}
+
+function formatSampleTimestamp(milliseconds: number) {
+  return formatRulerLabel(milliseconds);
 }
 
 type TabType = 'candidates' | 'targets' | 'evidence' | 'samples' | 'history';
@@ -177,6 +181,7 @@ export const PlateWindow: React.FC = () => {
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const [activeTab, setActiveTab] = React.useState<TabType>('candidates');
   const [selectedEvidenceSampleId, setSelectedEvidenceSampleId] = React.useState<string | null>(null);
+  const [isEvidenceSelectionPinned, setIsEvidenceSelectionPinned] = React.useState(false);
 
   const lprState = snapshot?.lpr ?? buildDefaultLprState();
   const runtimeStatus = snapshot?.runtimeStatus ?? null;
@@ -184,16 +189,16 @@ export const PlateWindow: React.FC = () => {
   const isBusy = lprState.job.status === 'queued' || lprState.job.status === 'running';
   const currentPlayheadMs = snapshot?.playheadMs ?? 0;
   const evidenceSamples = React.useMemo(() => buildEvidenceSamples(lprState.samples, topCandidate), [lprState.samples, topCandidate]);
+  const playheadEvidenceSample = React.useMemo(
+    () => evidenceSamples.find((entry) => entry.sample.timeMs === currentPlayheadMs) ?? null,
+    [currentPlayheadMs, evidenceSamples],
+  );
   const activeEvidenceSample = React.useMemo(() => {
-    const exactSample = evidenceSamples.find((entry) => entry.sample.timeMs === currentPlayheadMs);
-    if (exactSample) {
-      return exactSample;
+    if (isEvidenceSelectionPinned && selectedEvidenceSampleId) {
+      return evidenceSamples.find((entry) => entry.sample.id === selectedEvidenceSampleId) ?? playheadEvidenceSample ?? evidenceSamples[0] ?? null;
     }
-    if (selectedEvidenceSampleId) {
-      return evidenceSamples.find((entry) => entry.sample.id === selectedEvidenceSampleId) ?? evidenceSamples[0] ?? null;
-    }
-    return evidenceSamples[0] ?? null;
-  }, [currentPlayheadMs, evidenceSamples, selectedEvidenceSampleId]);
+    return playheadEvidenceSample ?? evidenceSamples[0] ?? null;
+  }, [evidenceSamples, isEvidenceSelectionPinned, playheadEvidenceSample, selectedEvidenceSampleId]);
 
   React.useEffect(() => {
     let disposed = false;
@@ -230,10 +235,16 @@ export const PlateWindow: React.FC = () => {
   }, [lprState.workflowMode]);
 
   React.useEffect(() => {
-    if (activeEvidenceSample) {
-      setSelectedEvidenceSampleId(activeEvidenceSample.sample.id);
+    if (isEvidenceSelectionPinned && selectedEvidenceSampleId) {
+      const stillExists = evidenceSamples.some((entry) => entry.sample.id === selectedEvidenceSampleId);
+      if (!stillExists) {
+        setIsEvidenceSelectionPinned(false);
+      }
+      return;
     }
-  }, [activeEvidenceSample?.sample.id]);
+
+    setSelectedEvidenceSampleId(playheadEvidenceSample?.sample.id ?? evidenceSamples[0]?.sample.id ?? null);
+  }, [evidenceSamples, isEvidenceSelectionPinned, playheadEvidenceSample?.sample.id, selectedEvidenceSampleId]);
 
   const sendAction = React.useCallback(async (action: Parameters<typeof sendPlateWindowAction>[0]) => {
     try {
@@ -466,10 +477,13 @@ export const PlateWindow: React.FC = () => {
                                 key={entry.sample.id}
                                 type="button"
                                 className={`${styles.evidenceChip} ${entry.sample.id === activeEvidenceSample.sample.id ? styles.evidenceChipActive : ''}`}
-                                onClick={() => setSelectedEvidenceSampleId(entry.sample.id)}
+                                onClick={() => {
+                                  setSelectedEvidenceSampleId(entry.sample.id);
+                                  setIsEvidenceSelectionPinned(true);
+                                }}
                               >
                                 <div className={styles.evidenceChipTopRow}>
-                                  <span className={styles.evidenceChipTime}>{formatTransportTime(entry.sample.timeMs)}</span>
+                                  <span className={styles.evidenceChipTime}>{formatSampleTimestamp(entry.sample.timeMs)}</span>
                                   <span className={styles.evidenceChipBadge}>{formatConfidence(entry.sample.quality?.overallScore ?? 0)}</span>
                                 </div>
                                 <strong className={styles.evidenceChipText}>{entry.matchingCandidate?.text ?? samplePrimaryText(entry.sample)}</strong>
@@ -483,7 +497,7 @@ export const PlateWindow: React.FC = () => {
                               <div>
                                 <div className={styles.evidenceCardTitleRow}>
                                   <Eye size={14} className={styles.mutedIcon} />
-                                  <strong>Decision Frame {formatTransportTime(activeEvidenceSample.sample.timeMs)}</strong>
+                                  <strong>Decision Frame {formatSampleTimestamp(activeEvidenceSample.sample.timeMs)}</strong>
                                 </div>
                                 <span className={styles.evidenceCardSubtitle}>{evidenceReason(activeEvidenceSample)}</span>
                               </div>
@@ -500,7 +514,7 @@ export const PlateWindow: React.FC = () => {
                               {activeEvidenceSample.artifacts.map((artifact) => (
                                 <div key={artifact.key} className={styles.evidencePreviewCard}>
                                   <div className={styles.evidencePreviewLabel}><Image size={12} className={styles.mutedIcon} /> {artifact.label}</div>
-                                  <img className={styles.evidencePreviewImage} src={toImageSrc(artifact.path)} alt={`${artifact.label} ${formatTransportTime(activeEvidenceSample.sample.timeMs)}`} />
+                                  <img className={styles.evidencePreviewImage} src={toImageSrc(artifact.path)} alt={`${artifact.label} ${formatSampleTimestamp(activeEvidenceSample.sample.timeMs)}`} />
                                 </div>
                               ))}
                             </div>
@@ -552,9 +566,9 @@ export const PlateWindow: React.FC = () => {
                               type="button"
                               className={styles.infoItemTimeButton}
                               onClick={() => void handleSeekToSample(sample.id, sample.timeMs)}
-                              title={`Jump to ${formatTransportTime(sample.timeMs)}`}
+                              title={`Jump to ${formatSampleTimestamp(sample.timeMs)}`}
                             >
-                              <span className={styles.infoItemTime}>{formatTransportTime(sample.timeMs)}</span>
+                              <span className={styles.infoItemTime}>{formatSampleTimestamp(sample.timeMs)}</span>
                             </button>
                           </div>
                           <span className={styles.infoItemText}>{samplePrimaryText(sample)}</span>

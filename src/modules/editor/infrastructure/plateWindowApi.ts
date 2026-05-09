@@ -75,7 +75,7 @@ export async function openPlateWindow() {
   const plateWindow = new WebviewWindow(PLATE_WINDOW_LABEL, {
     url: PLATE_WINDOW_URL,
     title: 'Plate',
-    width: 860,
+    width: 720,
     height: 860,
     minWidth: 720,
     minHeight: 560,
