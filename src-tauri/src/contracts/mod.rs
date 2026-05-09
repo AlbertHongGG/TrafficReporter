@@ -249,6 +249,9 @@ pub struct LprEvidenceExportRequestPayload {
 pub struct LprEvidenceExportResponsePayload {
     pub json_path: String,
     pub image_path: String,
+    pub bundle_dir: String,
+    pub exported_file_count: usize,
+    pub decision_frame_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

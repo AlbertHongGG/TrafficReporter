@@ -4,6 +4,7 @@ import type {
   LprPlateCandidate,
   LprResultHistoryEntry,
   LprSessionState,
+  LprTrackedRegion,
   LprTargetTrack,
   TimelineIntervalSelection,
   MediaProbeResult,
@@ -329,6 +330,43 @@ export function getActiveFile(state: EditorWorkspaceState) {
   }
 
   return state.files.find((file) => file.id === state.activeFileId) ?? null;
+}
+
+export function findClosestTrackFrame(
+  track: Pick<LprTargetTrack, 'frames'>,
+  playheadMs: number,
+  toleranceMs = 360,
+): LprTrackedRegion | null {
+  const { frames } = track;
+  if (frames.length === 0) {
+    return null;
+  }
+
+  let low = 0;
+  let high = frames.length - 1;
+
+  while (low <= high) {
+    const mid = (low + high) >> 1;
+    const frameTimeMs = frames[mid].timeMs;
+    if (frameTimeMs === playheadMs) {
+      return frames[mid];
+    }
+    if (frameTimeMs < playheadMs) {
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  const rightIndex = Math.min(low, frames.length - 1);
+  const leftIndex = Math.max(0, high);
+  const leftFrame = frames[leftIndex];
+  const rightFrame = frames[rightIndex];
+  const closestFrame = Math.abs(leftFrame.timeMs - playheadMs) <= Math.abs(rightFrame.timeMs - playheadMs)
+    ? leftFrame
+    : rightFrame;
+
+  return Math.abs(closestFrame.timeMs - playheadMs) <= toleranceMs ? closestFrame : null;
 }
 
 export function findClipAtPlayhead(clips: TimelineClip[], playheadMs: number) {

@@ -1,0 +1,722 @@
+{
+  "summary": {
+    "datasets": [
+      "ccpd",
+      "uc3m-lp"
+    ],
+    "caseCount": 14,
+    "categoryCounts": {
+      "blur": 2,
+      "angle": 2,
+      "challenge": 2,
+      "small-plate": 2,
+      "weather": 2,
+      "low-light": 2,
+      "high-exposure": 2
+    },
+    "datasetCounts": {
+      "ccpd": 8,
+      "uc3m-lp": 6
+    },
+    "splitCounts": {
+      "blur": 1,
+      "test": 6,
+      "rotate": 2,
+      "challenge": 1,
+      "fn": 1,
+      "weather": 2,
+      "base": 1
+    }
+  },
+  "cases": [
+    {
+      "id": "ccpd-blur-001",
+      "mode": "frame",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases-smoke/ccpd/0165-4_8-248,479_443,550-430,550_248,537_261,479_443,492-0_0_10_13_24_29_29-85-5_ccpd_blur_003535.jpg",
+      "timeMs": 0,
+      "markerRect": {
+        "x": 0.34444444444444444,
+        "y": 0.41293103448275864,
+        "width": 0.2708333333333333,
+        "height": 0.061206896551724135
+      },
+      "targetVehicleKind": "vehicle",
+      "selectedTargetBox": null,
+      "countryHints": [],
+      "expectedText": "ALP055",
+      "tags": [
+        "blur",
+        "ccpd",
+        "china",
+        "public-dataset"
+      ],
+      "analysisOptions": {
+        "persistArtifacts": false,
+        "trackerMode": "legacy",
+        "fusionMode": "aligned-char",
+        "restorationMode": "mambairv2",
+        "enableRectification": true,
+        "enableEnhancement": true,
+        "enableRecognizerComparison": true
+      },
+      "metadata": {
+        "dataset": "CCPD subset 30k",
+        "rawPlateText": "皖ALP055",
+        "subset": "blur",
+        "brightness": 85,
+        "blur": 5,
+        "bbox": {
+          "x1": 248,
+          "y1": 479,
+          "x2": 443,
+          "y2": 550
+        },
+        "dominantCategory": "blur",
+        "hardnessScore": 0.25
+      }
+    },
+    {
+      "id": "uc3m-lp-blur-002",
+      "mode": "frame",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases-smoke/uc3m-lp/01271.jpg",
+      "timeMs": 0,
+      "markerRect": {
+        "x": 0.8218390804597702,
+        "y": 0.48836206896551726,
+        "width": 0.08160919540229886,
+        "height": 0.03706896551724138
+      },
+      "targetVehicleKind": "vehicle",
+      "selectedTargetBox": null,
+      "countryHints": [
+        "tw",
+        "es",
+        "eu"
+      ],
+      "expectedText": "AD277SB",
+      "tags": [
+        "blur",
+        "europe",
+        "public-dataset",
+        "spain",
+        "uc3m-lp"
+      ],
+      "analysisOptions": {
+        "persistArtifacts": false,
+        "trackerMode": "legacy",
+        "fusionMode": "aligned-char",
+        "restorationMode": "mambairv2",
+        "enableRectification": true,
+        "enableEnhancement": true,
+        "enableRecognizerComparison": true
+      },
+      "metadata": {
+        "dataset": "UC3M-LP",
+        "annotationMember": "UC3M-LP/test/01248.json",
+        "split": "test",
+        "bbox": {
+          "x1": 5720,
+          "y1": 2266,
+          "x2": 6288,
+          "y2": 2438
+        },
+        "angleDegrees": 5.830416830737505,
+        "imageStem": "01271",
+        "dominantCategory": "blur",
+        "hardnessScore": 0.25
+      }
+    },
+    {
+      "id": "ccpd-angle-001",
+      "mode": "frame",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases-smoke/ccpd/0510-25_0-296,415_523,603-475,603_296,519_344,415_523,499-0_7_1_32_25_25_1-152-130_ccpd_rotate_006006.jpg",
+      "timeMs": 0,
+      "markerRect": {
+        "x": 0.4111111111111111,
+        "y": 0.3577586206896552,
+        "width": 0.31527777777777777,
+        "height": 0.16206896551724137
+      },
+      "targetVehicleKind": "vehicle",
+      "selectedTargetBox": null,
+      "countryHints": [],
+      "expectedText": "HB811B",
+      "tags": [
+        "angle",
+        "blur",
+        "ccpd",
+        "challenge",
+        "china",
+        "public-dataset",
+        "rotate"
+      ],
+      "analysisOptions": {
+        "persistArtifacts": false,
+        "trackerMode": "legacy",
+        "fusionMode": "aligned-char",
+        "restorationMode": "mambairv2",
+        "enableRectification": true,
+        "enableEnhancement": true,
+        "enableRecognizerComparison": true
+      },
+      "metadata": {
+        "dataset": "CCPD subset 30k",
+        "rawPlateText": "皖HB811B",
+        "subset": "rotate",
+        "brightness": 152,
+        "blur": 130,
+        "bbox": {
+          "x1": 296,
+          "y1": 415,
+          "x2": 523,
+          "y2": 603
+        },
+        "dominantCategory": "angle",
+        "hardnessScore": 0.65
+      }
+    },
+    {
+      "id": "uc3m-lp-angle-002",
+      "mode": "frame",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases-smoke/uc3m-lp/01669.jpg",
+      "timeMs": 0,
+      "markerRect": {
+        "x": 0.710632183908046,
+        "y": 0.32413793103448274,
+        "width": 0.05373563218390805,
+        "height": 0.052370689655172414
+      },
+      "targetVehicleKind": "vehicle",
+      "selectedTargetBox": null,
+      "countryHints": [
+        "tw",
+        "es",
+        "eu"
+      ],
+      "expectedText": "AD005DN",
+      "tags": [
+        "angle",
+        "europe",
+        "public-dataset",
+        "spain",
+        "uc3m-lp"
+      ],
+      "analysisOptions": {
+        "persistArtifacts": false,
+        "trackerMode": "legacy",
+        "fusionMode": "aligned-char",
+        "restorationMode": "mambairv2",
+        "enableRectification": true,
+        "enableEnhancement": true,
+        "enableRecognizerComparison": true
+      },
+      "metadata": {
+        "dataset": "UC3M-LP",
+        "annotationMember": "UC3M-LP/test/01629.json",
+        "split": "test",
+        "bbox": {
+          "x1": 4946,
+          "y1": 1504,
+          "x2": 5320,
+          "y2": 1747
+        },
+        "angleDegrees": 24.491901028231553,
+        "imageStem": "01669",
+        "dominantCategory": "angle",
+        "hardnessScore": 0.2
+      }
+    },
+    {
+      "id": "ccpd-challenge-001",
+      "mode": "frame",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases-smoke/ccpd/0255-5_16-219,454_420,560-420,560_236,541_219,454_403,473-0_0_1_30_27_32_27-41-3_ccpd_challenge_008407.jpg",
+      "timeMs": 0,
+      "markerRect": {
+        "x": 0.30416666666666664,
+        "y": 0.3913793103448276,
+        "width": 0.2791666666666667,
+        "height": 0.09137931034482759
+      },
+      "targetVehicleKind": "vehicle",
+      "selectedTargetBox": null,
+      "countryHints": [],
+      "expectedText": "AB6383",
+      "tags": [
+        "ccpd",
+        "challenge",
+        "china",
+        "low-light",
+        "public-dataset"
+      ],
+      "analysisOptions": {
+        "persistArtifacts": false,
+        "trackerMode": "legacy",
+        "fusionMode": "aligned-char",
+        "restorationMode": "mambairv2",
+        "enableRectification": true,
+        "enableEnhancement": true,
+        "enableRecognizerComparison": true
+      },
+      "metadata": {
+        "dataset": "CCPD subset 30k",
+        "rawPlateText": "皖AB6383",
+        "subset": "challenge",
+        "brightness": 41,
+        "blur": 3,
+        "bbox": {
+          "x1": 219,
+          "y1": 454,
+          "x2": 420,
+          "y2": 560
+        },
+        "dominantCategory": "challenge",
+        "hardnessScore": 0.35
+      }
+    },
+    {
+      "id": "uc3m-lp-challenge-002",
+      "mode": "frame",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases-smoke/uc3m-lp/01709.jpg",
+      "timeMs": 0,
+      "markerRect": {
+        "x": 0.4051724137931034,
+        "y": 0.5094827586206897,
+        "width": 0.06695402298850575,
+        "height": 0.052586206896551725
+      },
+      "targetVehicleKind": "vehicle",
+      "selectedTargetBox": null,
+      "countryHints": [
+        "tw",
+        "es",
+        "eu"
+      ],
+      "expectedText": "AD826BW",
+      "tags": [
+        "angle",
+        "challenge",
+        "europe",
+        "high-exposure",
+        "public-dataset",
+        "spain",
+        "uc3m-lp"
+      ],
+      "analysisOptions": {
+        "persistArtifacts": false,
+        "trackerMode": "legacy",
+        "fusionMode": "aligned-char",
+        "restorationMode": "mambairv2",
+        "enableRectification": true,
+        "enableEnhancement": true,
+        "enableRecognizerComparison": true
+      },
+      "metadata": {
+        "dataset": "UC3M-LP",
+        "annotationMember": "UC3M-LP/test/01669.json",
+        "split": "test",
+        "bbox": {
+          "x1": 2820,
+          "y1": 2364,
+          "x2": 3286,
+          "y2": 2608
+        },
+        "angleDegrees": 18.172984314847035,
+        "imageStem": "01709",
+        "dominantCategory": "challenge",
+        "hardnessScore": 0.55
+      }
+    },
+    {
+      "id": "ccpd-small-plate-001",
+      "mode": "frame",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases-smoke/ccpd/0047-0_0-380,596_487,633-487,633_380,633_380,596_487,596-3_5_8_5_24_24_33-38-10_ccpd_fn_008627.jpg",
+      "timeMs": 0,
+      "markerRect": {
+        "x": 0.5277777777777778,
+        "y": 0.5137931034482759,
+        "width": 0.1486111111111111,
+        "height": 0.03189655172413793
+      },
+      "targetVehicleKind": "vehicle",
+      "selectedTargetBox": null,
+      "countryHints": [],
+      "expectedText": "FJF009",
+      "tags": [
+        "ccpd",
+        "challenge",
+        "china",
+        "fn",
+        "low-light",
+        "public-dataset",
+        "small-plate"
+      ],
+      "analysisOptions": {
+        "persistArtifacts": false,
+        "trackerMode": "legacy",
+        "fusionMode": "aligned-char",
+        "restorationMode": "mambairv2",
+        "enableRectification": true,
+        "enableEnhancement": true,
+        "enableRecognizerComparison": true
+      },
+      "metadata": {
+        "dataset": "CCPD subset 30k",
+        "rawPlateText": "渝FJF009",
+        "subset": "fn",
+        "brightness": 38,
+        "blur": 10,
+        "bbox": {
+          "x1": 380,
+          "y1": 596,
+          "x2": 487,
+          "y2": 633
+        },
+        "dominantCategory": "small-plate",
+        "hardnessScore": 0.55
+      }
+    },
+    {
+      "id": "uc3m-lp-small-plate-002",
+      "mode": "frame",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases-smoke/uc3m-lp/00077.jpg",
+      "timeMs": 0,
+      "markerRect": {
+        "x": 0.7316743827160493,
+        "y": 0.6491769547325102,
+        "width": 0.08931327160493827,
+        "height": 0.023919753086419752
+      },
+      "targetVehicleKind": "vehicle",
+      "selectedTargetBox": null,
+      "countryHints": [
+        "tw",
+        "es",
+        "eu"
+      ],
+      "expectedText": "AD766FN",
+      "tags": [
+        "europe",
+        "public-dataset",
+        "small-plate",
+        "spain",
+        "uc3m-lp"
+      ],
+      "analysisOptions": {
+        "persistArtifacts": false,
+        "trackerMode": "legacy",
+        "fusionMode": "aligned-char",
+        "restorationMode": "mambairv2",
+        "enableRectification": true,
+        "enableEnhancement": true,
+        "enableRecognizerComparison": true
+      },
+      "metadata": {
+        "dataset": "UC3M-LP",
+        "annotationMember": "UC3M-LP/test/00075.json",
+        "split": "test",
+        "bbox": {
+          "x1": 3793,
+          "y1": 2524,
+          "x2": 4256,
+          "y2": 2617
+        },
+        "angleDegrees": 0.7472938768260555,
+        "imageStem": "00077",
+        "dominantCategory": "small-plate",
+        "hardnessScore": 0.2
+      }
+    },
+    {
+      "id": "ccpd-weather-001",
+      "mode": "frame",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases-smoke/ccpd/0466-0_4-183,442_537,552-537,552_191,550_183,442_529,444-0_0_33_23_33_31_32-56-52_ccpd_weather_002303.jpg",
+      "timeMs": 0,
+      "markerRect": {
+        "x": 0.25416666666666665,
+        "y": 0.3810344827586207,
+        "width": 0.49166666666666664,
+        "height": 0.09482758620689655
+      },
+      "targetVehicleKind": "vehicle",
+      "selectedTargetBox": null,
+      "countryHints": [],
+      "expectedText": "A9Z978",
+      "tags": [
+        "ccpd",
+        "china",
+        "public-dataset",
+        "weather"
+      ],
+      "analysisOptions": {
+        "persistArtifacts": false,
+        "trackerMode": "legacy",
+        "fusionMode": "aligned-char",
+        "restorationMode": "mambairv2",
+        "enableRectification": true,
+        "enableEnhancement": true,
+        "enableRecognizerComparison": true
+      },
+      "metadata": {
+        "dataset": "CCPD subset 30k",
+        "rawPlateText": "皖A9Z978",
+        "subset": "weather",
+        "brightness": 56,
+        "blur": 52,
+        "bbox": {
+          "x1": 183,
+          "y1": 442,
+          "x2": 537,
+          "y2": 552
+        },
+        "dominantCategory": "weather",
+        "hardnessScore": 0.15
+      }
+    },
+    {
+      "id": "ccpd-weather-002",
+      "mode": "frame",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases-smoke/ccpd/0395-4_19-104,558_407,667-407,667_128,646_104,558_383,579-0_0_18_6_27_32_27-88-32_ccpd_weather_011196.jpg",
+      "timeMs": 0,
+      "markerRect": {
+        "x": 0.14444444444444443,
+        "y": 0.4810344827586207,
+        "width": 0.42083333333333334,
+        "height": 0.0939655172413793
+      },
+      "targetVehicleKind": "vehicle",
+      "selectedTargetBox": null,
+      "countryHints": [],
+      "expectedText": "AUG383",
+      "tags": [
+        "ccpd",
+        "china",
+        "public-dataset",
+        "weather"
+      ],
+      "analysisOptions": {
+        "persistArtifacts": false,
+        "trackerMode": "legacy",
+        "fusionMode": "aligned-char",
+        "restorationMode": "mambairv2",
+        "enableRectification": true,
+        "enableEnhancement": true,
+        "enableRecognizerComparison": true
+      },
+      "metadata": {
+        "dataset": "CCPD subset 30k",
+        "rawPlateText": "皖AUG383",
+        "subset": "weather",
+        "brightness": 88,
+        "blur": 32,
+        "bbox": {
+          "x1": 104,
+          "y1": 558,
+          "x2": 407,
+          "y2": 667
+        },
+        "dominantCategory": "weather",
+        "hardnessScore": 0.15
+      }
+    },
+    {
+      "id": "ccpd-low-light-001",
+      "mode": "frame",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases-smoke/ccpd/0384-19_13-148,383_337,553-337,491_159,553_148,445_326,383-0_0_23_26_2_29_29-40-28_ccpd_rotate_004842.jpg",
+      "timeMs": 0,
+      "markerRect": {
+        "x": 0.20555555555555555,
+        "y": 0.33017241379310347,
+        "width": 0.2625,
+        "height": 0.14655172413793102
+      },
+      "targetVehicleKind": "vehicle",
+      "selectedTargetBox": null,
+      "countryHints": [],
+      "expectedText": "AZ2C55",
+      "tags": [
+        "angle",
+        "ccpd",
+        "challenge",
+        "china",
+        "low-light",
+        "public-dataset",
+        "rotate"
+      ],
+      "analysisOptions": {
+        "persistArtifacts": false,
+        "trackerMode": "legacy",
+        "fusionMode": "aligned-char",
+        "restorationMode": "mambairv2",
+        "enableRectification": true,
+        "enableEnhancement": true,
+        "enableRecognizerComparison": true
+      },
+      "metadata": {
+        "dataset": "CCPD subset 30k",
+        "rawPlateText": "皖AZ2C55",
+        "subset": "rotate",
+        "brightness": 40,
+        "blur": 28,
+        "bbox": {
+          "x1": 148,
+          "y1": 383,
+          "x2": 337,
+          "y2": 553
+        },
+        "dominantCategory": "low-light",
+        "hardnessScore": 0.55
+      }
+    },
+    {
+      "id": "uc3m-lp-low-light-002",
+      "mode": "frame",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases-smoke/uc3m-lp/00308.jpg",
+      "timeMs": 0,
+      "markerRect": {
+        "x": 0.5729166666666666,
+        "y": 0.7325102880658436,
+        "width": 0.07503858024691358,
+        "height": 0.021347736625514403
+      },
+      "targetVehicleKind": "vehicle",
+      "selectedTargetBox": null,
+      "countryHints": [
+        "tw",
+        "es",
+        "eu"
+      ],
+      "expectedText": "AN774LR",
+      "tags": [
+        "challenge",
+        "europe",
+        "low-light",
+        "public-dataset",
+        "small-plate",
+        "spain",
+        "uc3m-lp"
+      ],
+      "analysisOptions": {
+        "persistArtifacts": false,
+        "trackerMode": "legacy",
+        "fusionMode": "aligned-char",
+        "restorationMode": "mambairv2",
+        "enableRectification": true,
+        "enableEnhancement": true,
+        "enableRecognizerComparison": true
+      },
+      "metadata": {
+        "dataset": "UC3M-LP",
+        "annotationMember": "UC3M-LP/test/00302.json",
+        "split": "test",
+        "bbox": {
+          "x1": 2970,
+          "y1": 2848,
+          "x2": 3359,
+          "y2": 2931
+        },
+        "angleDegrees": 0.5937173962125541,
+        "imageStem": "00308",
+        "dominantCategory": "low-light",
+        "hardnessScore": 0.55
+      }
+    },
+    {
+      "id": "ccpd-high-exposure-001",
+      "mode": "frame",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases-smoke/ccpd/0186781609195-90_88-219,522_490,614-500,616_224,608_208,522_484,530-0_0_20_30_30_30_23-161-73_ccpd_base_009575.jpg",
+      "timeMs": 0,
+      "markerRect": {
+        "x": 0.30416666666666664,
+        "y": 0.45,
+        "width": 0.3763888888888889,
+        "height": 0.07931034482758621
+      },
+      "targetVehicleKind": "vehicle",
+      "selectedTargetBox": null,
+      "countryHints": [],
+      "expectedText": "AW666Z",
+      "tags": [
+        "base",
+        "ccpd",
+        "china",
+        "high-exposure",
+        "public-dataset"
+      ],
+      "analysisOptions": {
+        "persistArtifacts": false,
+        "trackerMode": "legacy",
+        "fusionMode": "aligned-char",
+        "restorationMode": "mambairv2",
+        "enableRectification": true,
+        "enableEnhancement": true,
+        "enableRecognizerComparison": true
+      },
+      "metadata": {
+        "dataset": "CCPD subset 30k",
+        "rawPlateText": "皖AW666Z",
+        "subset": "base",
+        "brightness": 161,
+        "blur": 73,
+        "bbox": {
+          "x1": 219,
+          "y1": 522,
+          "x2": 490,
+          "y2": 614
+        },
+        "dominantCategory": "high-exposure",
+        "hardnessScore": 0.15
+      }
+    },
+    {
+      "id": "uc3m-lp-high-exposure-002",
+      "mode": "frame",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/public-datasets/multisource-hardcases-smoke/uc3m-lp/01170.jpg",
+      "timeMs": 0,
+      "markerRect": {
+        "x": 0.31537356321839083,
+        "y": 0.2786637931034483,
+        "width": 0.18721264367816093,
+        "height": 0.06616379310344828
+      },
+      "targetVehicleKind": "vehicle",
+      "selectedTargetBox": null,
+      "countryHints": [
+        "tw",
+        "es",
+        "eu"
+      ],
+      "expectedText": "AD885VV",
+      "tags": [
+        "europe",
+        "high-exposure",
+        "public-dataset",
+        "spain",
+        "uc3m-lp"
+      ],
+      "analysisOptions": {
+        "persistArtifacts": false,
+        "trackerMode": "legacy",
+        "fusionMode": "aligned-char",
+        "restorationMode": "mambairv2",
+        "enableRectification": true,
+        "enableEnhancement": true,
+        "enableRecognizerComparison": true
+      },
+      "metadata": {
+        "dataset": "UC3M-LP",
+        "annotationMember": "UC3M-LP/test/01151.json",
+        "split": "test",
+        "bbox": {
+          "x1": 2195,
+          "y1": 1293,
+          "x2": 3498,
+          "y2": 1600
+        },
+        "angleDegrees": 2.109711729162709,
+        "imageStem": "01170",
+        "dominantCategory": "high-exposure",
+        "hardnessScore": 0.15
+      }
+    }
+  ]
+}

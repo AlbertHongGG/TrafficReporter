@@ -24,6 +24,8 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --upgrade --force-reinstall --index-url https://download.pytorch.org/whl/cu128 torch torchvision
 ```
 
+If this environment was created before the multi-source benchmark update, run `.\.venv\Scripts\python.exe -m pip install -e .` again so `remotezip` is available for the UC3M-LP remote archive workflow.
+
 The final command is required on NVIDIA Windows machines. `pip install -e .` pulls the CPU-only PyTorch wheel from PyPI by default, while the local LPR pipeline needs the CUDA-enabled `torch` and `torchvision` builds so that:
 
 - the Ultralytics vehicle detector runs on `cuda:0`
@@ -77,4 +79,20 @@ Start by copying [benchmarks/sample-manifest.json](benchmarks/sample-manifest.js
 
 The benchmark output includes per-case exact match, top-3 match, and character error rate so you can compare tracker / fusion / restoration changes against the same hard-case set.
 
-If you want a public benchmark set that does not depend on your own clips, see [benchmarks/README.md](benchmarks/README.md) and run `benchmarks/prepare_public_benchmark.py` to build a balanced CCPD hard-case manifest from a directly downloadable public subset.
+If you want a public benchmark set that does not depend on your own clips, see [benchmarks/README.md](benchmarks/README.md) and run either:
+
+- `benchmarks/prepare_public_benchmark.py` for the existing CCPD-only hard-case manifest
+- `benchmarks/prepare_multisource_benchmark.py --datasets ccpd uc3m-lp` for a more diverse public benchmark that adds UC3M-LP as a European counterweight
+
+The UC3M-LP path uses HTTP range reads against the published Zenodo archive, so the generator can sample real cases without forcing a full archive download before manifest creation.
+
+## Evidence Export
+
+The desktop export action now writes an evidence bundle instead of only a single PNG + JSON pair. The bundle contains:
+
+- `source-frame.png` for the exported editor frame
+- `decision-frames/` with copied original / rectified / enhanced / restored / working crops when those artifacts exist
+- per-frame `frame.json` metadata for the selected decision frames
+- the top-level snapshot JSON you chose from the export dialog
+
+This makes it possible to review not only the final string, but also which frame(s) supported that decision and what the preprocessing stack produced for each one.

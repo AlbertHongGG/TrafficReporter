@@ -201,4 +201,7 @@ export interface LprEvidenceExportRequest {
 export interface LprEvidenceExportResponse {
   jsonPath: string;
   imagePath: string;
+  bundleDir: string;
+  exportedFileCount: number;
+  decisionFrameCount: number;
 }

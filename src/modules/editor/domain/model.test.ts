@@ -5,6 +5,7 @@ import {
   DEFAULT_ZOOM,
   buildDefaultWorkspaceState,
   buildEditorFileState,
+  findClosestTrackFrame,
 } from './model'
 
 describe('editor model', () => {
@@ -47,5 +48,19 @@ describe('editor model', () => {
     expect(fileState.renderProfile).toEqual(DEFAULT_RENDER_PROFILE)
     expect(fileState.zoom).toBe(DEFAULT_ZOOM)
     expect(fileState.markerRect).toBeNull()
+  })
+
+  it('finds the closest tracked frame with binary-search semantics', () => {
+    const track = {
+      frames: [
+        { id: 'f1', timeMs: 100, box: { x: 0, y: 0, width: 0.1, height: 0.1 }, confidence: 0.9, className: 'car' },
+        { id: 'f2', timeMs: 260, box: { x: 0, y: 0, width: 0.1, height: 0.1 }, confidence: 0.9, className: 'car' },
+        { id: 'f3', timeMs: 410, box: { x: 0, y: 0, width: 0.1, height: 0.1 }, confidence: 0.9, className: 'car' },
+      ],
+    }
+
+    expect(findClosestTrackFrame(track, 260)?.id).toBe('f2')
+    expect(findClosestTrackFrame(track, 280)?.id).toBe('f2')
+    expect(findClosestTrackFrame(track, 800, 100)).toBeNull()
   })
 })

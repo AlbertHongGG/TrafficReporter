@@ -52,3 +52,36 @@ cd traffic-lpr-runtime
 ```
 
 This public benchmark is image-based, so it measures the OCR, rectification, restoration, and ranking stack on hard cases without overfitting to your own video. Keep interval/video benchmarks separate when you want to evaluate tracker behavior.
+
+## Multi-Source Workflow
+
+To reduce China-only bias and keep a second public domain in the loop, build a combined CCPD + UC3M-LP manifest with:
+
+```powershell
+cd traffic-lpr-runtime
+.\.venv\Scripts\python.exe benchmarks\prepare_multisource_benchmark.py --datasets ccpd uc3m-lp --per-category 20 --uc3m-split test
+```
+
+This workflow:
+
+- keeps the existing CCPD hard-case buckets for blur, angle, weather, low-light, and small plates
+- adds `UC3M-LP` as a European/Spanish counterweight so public evaluation is not dominated by Chinese plates
+- reads the UC3M-LP archive through HTTP range requests instead of requiring a full 4.5 GB download up front
+- emits a combined manifest plus three stratified manifests under `benchmarks/multisource-manifests/`:
+	development, holdout, and challenge
+
+The combined output is written to `benchmarks/public-multisource-hardcases.json`, and sampled images are extracted under `.runtime/public-datasets/multisource-hardcases/`.
+
+Run the resulting benchmark exactly the same way:
+
+```powershell
+cd traffic-lpr-runtime
+.\.venv\Scripts\python.exe -m traffic_lpr_runtime benchmark-run < benchmarks\public-multisource-hardcases.json
+```
+
+Use the split manifests when you want to separate daily iteration from the harder review set:
+
+```powershell
+cd traffic-lpr-runtime
+.\.venv\Scripts\python.exe -m traffic_lpr_runtime benchmark-run < benchmarks\multisource-manifests\public-multisource-development.json
+```

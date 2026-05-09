@@ -24,6 +24,7 @@ export interface PlateWindowSessionSnapshot {
   canAnalyzeRange: boolean;
   topCandidate: LprPlateCandidate | null;
   anchorTimeMs: number;
+  playheadMs: number;
 }
 
 export type PlateWindowAction =
@@ -39,7 +40,8 @@ export type PlateWindowAction =
   | { type: 'export-evidence' }
   | { type: 'clear-results' }
   | { type: 'select-target-track'; targetTrackId: string }
-  | { type: 'accept-candidate'; candidateId: string };
+  | { type: 'accept-candidate'; candidateId: string }
+  | { type: 'seek-to-sample'; sampleId: string; timeMs: number };
 
 export function samplePrimaryText(sample: LprFrameSample) {
   return sample.candidates[0]?.text ?? '--';

@@ -31,6 +31,7 @@ import {
   DEFAULT_MARKER_RECT,
   DEFAULT_ZOOM,
   findClipAtPlayhead,
+  findClosestTrackFrame,
   formatRulerLabel,
   formatTransportTime,
   getActiveFile,
@@ -185,20 +186,6 @@ function buildTargetTracksFromDetections(detections: LprTrackedRegion[]): LprTar
   }));
 }
 
-function getClosestTrackFrame(track: LprTargetTrack, playheadMs: number, toleranceMs = 360) {
-  if (track.frames.length === 0) {
-    return null;
-  }
-
-  const frame = track.frames.reduce((closestFrame, candidate) => {
-    const closestDelta = Math.abs(closestFrame.timeMs - playheadMs);
-    const candidateDelta = Math.abs(candidate.timeMs - playheadMs);
-    return candidateDelta < closestDelta ? candidate : closestFrame;
-  });
-
-  return Math.abs(frame.timeMs - playheadMs) <= toleranceMs ? frame : null;
-}
-
 function normalizeLprInterval(interval: TimelineIntervalSelection): TimelineIntervalSelection {
   const startMs = Math.max(0, Math.round(interval.startMs));
   const endMs = Math.max(0, Math.round(interval.endMs));
@@ -304,6 +291,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
   );
   const previewState = currentIsPlaying ? livePreviewState : committedPreviewState;
   const lprPreviewPlayheadMs = currentIsPlaying ? liveOverlayPlayheadMs : currentPlayheadMs;
+  const deferredOverlayPlayheadMs = React.useDeferredValue(lprPreviewPlayheadMs);
   const missingFiles = useMemo(
     () => state.files.filter((fileState) => fileState.asset.status === 'missing'),
     [state.files],
@@ -315,17 +303,17 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     [lprState.selectedTargetTrackId, lprState.targetTracks],
   );
   const lprSelectedTrackFrame = useMemo(
-    () => (lprSelectedTrack ? getClosestTrackFrame(lprSelectedTrack, lprPreviewPlayheadMs) : null),
+    () => (lprSelectedTrack ? findClosestTrackFrame(lprSelectedTrack, lprPreviewPlayheadMs) : null),
     [lprPreviewPlayheadMs, lprSelectedTrack],
   );
   const lprOverlayTracks = useMemo(
     () => lprState.targetTracks
       .map((track) => ({
         track,
-        frame: getClosestTrackFrame(track, lprPreviewPlayheadMs),
+        frame: findClosestTrackFrame(track, deferredOverlayPlayheadMs),
       }))
       .filter((entry): entry is { track: LprTargetTrack; frame: LprTrackedRegion } => Boolean(entry.frame)),
-    [lprPreviewPlayheadMs, lprState.targetTracks],
+    [deferredOverlayPlayheadMs, lprState.targetTracks],
   );
   const lprTopCandidate = lprState.candidates.find((candidate) => candidate.id === lprState.acceptedCandidateId)
     ?? lprState.candidates[0]
@@ -1026,6 +1014,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     canAnalyzeRange,
     topCandidate: lprTopCandidate,
     anchorTimeMs: Math.max(0, Math.round(livePlayheadMsRef.current)),
+    playheadMs: Math.max(0, Math.round(livePlayheadMsRef.current)),
   }), [activeFile, canAnalyzeRange, lprRuntimeStatus, lprState, lprTopCandidate, state.workspaceName]);
 
   const handleSetIntervalBoundary = (boundary: 'start' | 'end') => {
@@ -1298,7 +1287,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         samples: lprState.samples,
       });
 
-      setWorkspaceFeedback(`Evidence exported to ${response.jsonPath} with frame ${response.imagePath}`);
+      setWorkspaceFeedback(`Evidence bundle exported to ${response.bundleDir} with ${response.decisionFrameCount} decision frames and ${response.exportedFileCount} files.`);
     } catch (error) {
       log.error('Failed to export LPR evidence.', serializeError(error));
       setWorkspaceFeedback(getErrorSummary(error, 'Unable to export the LPR evidence snapshot.'));
@@ -1351,6 +1340,12 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         break;
       case 'accept-candidate':
         dispatch({ type: 'accept-lpr-candidate', candidateId: action.candidateId });
+        break;
+      case 'seek-to-sample':
+        dispatch({ type: 'set-playhead', playheadMs: Math.max(0, Math.round(action.timeMs)) });
+        if (currentIsPlaying) {
+          dispatch({ type: 'set-playing', isPlaying: false });
+        }
         break;
       default:
         break;

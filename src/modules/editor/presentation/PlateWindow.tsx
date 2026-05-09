@@ -1,5 +1,6 @@
 import React from 'react';
 import { listen } from '@tauri-apps/api/event';
+import { convertFileSrc } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import {
@@ -8,8 +9,10 @@ import {
   Clock,
   Crop,
   Database,
+  Eye,
   FileOutput,
   Globe,
+  Image,
   LoaderCircle,
   RefreshCw,
   RotateCcw,
@@ -25,7 +28,7 @@ import {
 } from '../application/plateWindow';
 import { requestPlateWindowSession, sendPlateWindowAction } from '../infrastructure/plateWindowApi';
 import { buildDefaultLprState, clamp, formatTransportTime } from '../domain/model';
-import type { TimelineIntervalSelection } from '../../../shared/contracts';
+import type { LprFrameSample, LprPlateCandidate, TimelineIntervalSelection } from '../../../shared/contracts';
 import { createLogger, getErrorSummary, serializeError } from '../../../utils/logger';
 import styles from './PlateWindow.module.css';
 
@@ -42,7 +45,20 @@ function formatIntervalLabel(interval: TimelineIntervalSelection | null) {
   return `${formatTransportTime(interval.startMs)} - ${formatTransportTime(interval.endMs)}`;
 }
 
-type TabType = 'candidates' | 'targets' | 'samples' | 'history';
+type TabType = 'candidates' | 'targets' | 'evidence' | 'samples' | 'history';
+
+type EvidenceArtifact = {
+  key: string;
+  label: string;
+  path: string;
+};
+
+type EvidenceSample = {
+  sample: LprFrameSample;
+  matchingCandidate: LprPlateCandidate | null;
+  artifacts: EvidenceArtifact[];
+  score: number;
+};
 
 const tabContentVariants: Variants = {
   hidden: { opacity: 0, y: 10, filter: 'blur(4px)' },
@@ -56,16 +72,128 @@ const listItemVariants: Variants = {
   exit: { opacity: 0, scale: 0.95, transition: { duration: 0.15 } },
 };
 
+function normalizePlateText(value: string | null | undefined) {
+  return (value ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+function asArtifacts(sample: LprFrameSample): EvidenceArtifact[] {
+  const diagnostics = asRecord(sample.diagnostics);
+  const plateProcessing = asRecord(diagnostics?.plateProcessing);
+  const artifacts = asRecord(plateProcessing?.artifacts);
+  const result: EvidenceArtifact[] = [];
+  for (const [key, label] of [
+    ['original', 'Original'],
+    ['rectified', 'Rectified'],
+    ['enhanced', 'Enhanced'],
+    ['restored', 'Restored'],
+    ['working', 'Working'],
+  ] satisfies Array<[string, string]>) {
+    const rawPath = artifacts?.[key];
+    if (typeof rawPath === 'string' && rawPath) {
+      result.push({ key, label, path: rawPath });
+    }
+  }
+
+  if (result.length === 0 && sample.imagePath) {
+    result.push({ key: 'working', label: 'Working', path: sample.imagePath });
+  }
+  return result;
+}
+
+function toImageSrc(path: string) {
+  return convertFileSrc(path);
+}
+
+function scoreEvidenceSample(sample: LprFrameSample, acceptedText: string) {
+  const normalizedAccepted = normalizePlateText(acceptedText);
+  const matchingCandidate = sample.candidates.find((candidate) => normalizePlateText(candidate.text) === normalizedAccepted) ?? null;
+  const primaryCandidate = sample.candidates[0] ?? null;
+  const baseConfidence = matchingCandidate?.confidence ?? primaryCandidate?.confidence ?? 0;
+  const qualityScore = sample.quality?.overallScore ?? 0;
+  const artifactWeight = asArtifacts(sample).length > 0 ? 0.08 : 0;
+  const exactBoost = matchingCandidate ? 0.22 : 0;
+  return {
+    matchingCandidate,
+    score: (baseConfidence * 0.62) + (qualityScore * 0.30) + exactBoost + artifactWeight,
+  };
+}
+
+function buildEvidenceSamples(samples: LprFrameSample[], topCandidate: LprPlateCandidate | null): EvidenceSample[] {
+  const acceptedText = normalizePlateText(topCandidate?.text);
+  return samples
+    .map((sample) => {
+      const { matchingCandidate, score } = scoreEvidenceSample(sample, acceptedText);
+      return {
+        sample,
+        matchingCandidate,
+        artifacts: asArtifacts(sample),
+        score,
+      } satisfies EvidenceSample;
+    })
+    .filter((entry) => entry.artifacts.length > 0 || entry.matchingCandidate !== null || entry.sample.candidates.length > 0)
+    .sort((left, right) => right.score - left.score)
+    .slice(0, 6);
+}
+
+function formatMetric(value: number | null | undefined) {
+  if (typeof value !== 'number' || Number.isNaN(value)) {
+    return '--';
+  }
+  return `${Math.round(clamp(value, 0, 1) * 100)}%`;
+}
+
+function evidenceReason(entry: EvidenceSample) {
+  if (entry.matchingCandidate) {
+    return `Matched ${entry.matchingCandidate.text} with ${formatConfidence(entry.matchingCandidate.confidence)}`;
+  }
+  return `Top OCR sample ${samplePrimaryText(entry.sample)}`;
+}
+
+function qualityMetrics(sample: LprFrameSample): Array<[string, number | null | undefined]> {
+  const quality = sample.quality;
+  return [
+    ['Sharpness', quality?.sharpness],
+    ['Contrast', quality?.contrast],
+    ['Angle', quality?.angleScore],
+    ['Glare', quality?.glareScore],
+    ['Legibility', quality?.legibilityScore],
+  ];
+}
+
+function evidenceCandidates(sample: LprFrameSample) {
+  return sample.candidates.slice(0, 3);
+}
+
 export const PlateWindow: React.FC = () => {
   const [snapshot, setSnapshot] = React.useState<PlateWindowSessionSnapshot | null>(null);
   const [countryHintsDraft, setCountryHintsDraft] = React.useState('');
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const [activeTab, setActiveTab] = React.useState<TabType>('candidates');
+  const [selectedEvidenceSampleId, setSelectedEvidenceSampleId] = React.useState<string | null>(null);
 
   const lprState = snapshot?.lpr ?? buildDefaultLprState();
   const runtimeStatus = snapshot?.runtimeStatus ?? null;
   const topCandidate = snapshot?.topCandidate ?? lprState.candidates[0] ?? null;
   const isBusy = lprState.job.status === 'queued' || lprState.job.status === 'running';
+  const currentPlayheadMs = snapshot?.playheadMs ?? 0;
+  const evidenceSamples = React.useMemo(() => buildEvidenceSamples(lprState.samples, topCandidate), [lprState.samples, topCandidate]);
+  const activeEvidenceSample = React.useMemo(() => {
+    const exactSample = evidenceSamples.find((entry) => entry.sample.timeMs === currentPlayheadMs);
+    if (exactSample) {
+      return exactSample;
+    }
+    if (selectedEvidenceSampleId) {
+      return evidenceSamples.find((entry) => entry.sample.id === selectedEvidenceSampleId) ?? evidenceSamples[0] ?? null;
+    }
+    return evidenceSamples[0] ?? null;
+  }, [currentPlayheadMs, evidenceSamples, selectedEvidenceSampleId]);
 
   React.useEffect(() => {
     let disposed = false;
@@ -101,6 +229,12 @@ export const PlateWindow: React.FC = () => {
     if (lprState.workflowMode === 'review') setActiveTab('candidates');
   }, [lprState.workflowMode]);
 
+  React.useEffect(() => {
+    if (activeEvidenceSample) {
+      setSelectedEvidenceSampleId(activeEvidenceSample.sample.id);
+    }
+  }, [activeEvidenceSample?.sample.id]);
+
   const sendAction = React.useCallback(async (action: Parameters<typeof sendPlateWindowAction>[0]) => {
     try {
       await sendPlateWindowAction(action);
@@ -114,6 +248,10 @@ export const PlateWindow: React.FC = () => {
   const closeWindow = React.useCallback(async () => {
     await getCurrentWindow().close();
   }, []);
+
+  const handleSeekToSample = React.useCallback(async (sampleId: string, timeMs: number) => {
+    await sendAction({ type: 'seek-to-sample', sampleId, timeMs });
+  }, [sendAction]);
 
   return (
     <div className={styles.window}>
@@ -254,6 +392,10 @@ export const PlateWindow: React.FC = () => {
                   Targets {lprState.targetTracks.length > 0 && <span className={styles.tabCount}>{lprState.targetTracks.length}</span>}
                   {activeTab === 'targets' && <motion.div layoutId="activeTabIndicator" className={styles.activeTabIndicator} />}
                 </button>
+                <button type="button" className={`${styles.tabBtn} ${activeTab === 'evidence' ? styles.tabBtnActive : ''}`} onClick={() => setActiveTab('evidence')}>
+                  Evidence {evidenceSamples.length > 0 && <span className={styles.tabCount}>{evidenceSamples.length}</span>}
+                  {activeTab === 'evidence' && <motion.div layoutId="activeTabIndicator" className={styles.activeTabIndicator} />}
+                </button>
                 <button type="button" className={`${styles.tabBtn} ${activeTab === 'samples' ? styles.tabBtnActive : ''}`} onClick={() => setActiveTab('samples')}>
                   Samples {lprState.samples.length > 0 && <span className={styles.tabCount}>{lprState.samples.length}</span>}
                   {activeTab === 'samples' && <motion.div layoutId="activeTabIndicator" className={styles.activeTabIndicator} />}
@@ -310,18 +452,114 @@ export const PlateWindow: React.FC = () => {
                     </motion.div>
                   )}
 
+                  {activeTab === 'evidence' && (
+                    <motion.div key="evidence" variants={tabContentVariants} initial="hidden" animate="show" exit="exit" className={styles.evidenceLayout}>
+                      {evidenceSamples.length === 0 && <div className={styles.emptyInline}>No evidence frames with saved artifacts yet. Enable artifact persistence or run frame/range analysis.</div>}
+                      {evidenceSamples.length > 0 && activeEvidenceSample && (
+                        <>
+                          <div className={styles.evidenceRail}>
+                            {evidenceSamples.map((entry) => (
+                              <motion.button
+                                layout
+                                variants={listItemVariants}
+                                whileTap={{ scale: 0.98 }}
+                                key={entry.sample.id}
+                                type="button"
+                                className={`${styles.evidenceChip} ${entry.sample.id === activeEvidenceSample.sample.id ? styles.evidenceChipActive : ''}`}
+                                onClick={() => setSelectedEvidenceSampleId(entry.sample.id)}
+                              >
+                                <div className={styles.evidenceChipTopRow}>
+                                  <span className={styles.evidenceChipTime}>{formatTransportTime(entry.sample.timeMs)}</span>
+                                  <span className={styles.evidenceChipBadge}>{formatConfidence(entry.sample.quality?.overallScore ?? 0)}</span>
+                                </div>
+                                <strong className={styles.evidenceChipText}>{entry.matchingCandidate?.text ?? samplePrimaryText(entry.sample)}</strong>
+                                <span className={styles.evidenceChipReason}>{evidenceReason(entry)}</span>
+                              </motion.button>
+                            ))}
+                          </div>
+
+                          <div className={styles.evidenceCard}>
+                            <div className={styles.evidenceCardHeader}>
+                              <div>
+                                <div className={styles.evidenceCardTitleRow}>
+                                  <Eye size={14} className={styles.mutedIcon} />
+                                  <strong>Decision Frame {formatTransportTime(activeEvidenceSample.sample.timeMs)}</strong>
+                                </div>
+                                <span className={styles.evidenceCardSubtitle}>{evidenceReason(activeEvidenceSample)}</span>
+                              </div>
+                              <button
+                                type="button"
+                                className={styles.evidenceJumpButton}
+                                onClick={() => void handleSeekToSample(activeEvidenceSample.sample.id, activeEvidenceSample.sample.timeMs)}
+                              >
+                                Jump To Frame
+                              </button>
+                            </div>
+
+                            <div className={styles.evidencePreviewGrid}>
+                              {activeEvidenceSample.artifacts.map((artifact) => (
+                                <div key={artifact.key} className={styles.evidencePreviewCard}>
+                                  <div className={styles.evidencePreviewLabel}><Image size={12} className={styles.mutedIcon} /> {artifact.label}</div>
+                                  <img className={styles.evidencePreviewImage} src={toImageSrc(artifact.path)} alt={`${artifact.label} ${formatTransportTime(activeEvidenceSample.sample.timeMs)}`} />
+                                </div>
+                              ))}
+                            </div>
+
+                            <div className={styles.evidenceMetaGrid}>
+                              <div className={styles.evidenceMetaSection}>
+                                <div className={styles.evidenceMetaTitle}>Quality</div>
+                                <div className={styles.evidenceMetricList}>
+                                  {qualityMetrics(activeEvidenceSample.sample).map(([label, value]) => (
+                                    <div key={label} className={styles.evidenceMetricRow}>
+                                      <span>{label}</span>
+                                      <strong>{formatMetric(value)}</strong>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                              <div className={styles.evidenceMetaSection}>
+                                <div className={styles.evidenceMetaTitle}>Top OCR Outputs</div>
+                                <div className={styles.evidenceCandidateList}>
+                                  {evidenceCandidates(activeEvidenceSample.sample).map((candidate) => (
+                                    <div key={candidate.id} className={styles.evidenceCandidateRow}>
+                                      <span>{candidate.text}</span>
+                                      <strong>{formatConfidence(candidate.confidence)}</strong>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </motion.div>
+                  )}
+
                   {/* SAMPLES TAB */}
                   {activeTab === 'samples' && (
                     <motion.div key="samples" variants={tabContentVariants} initial="hidden" animate="show" exit="exit" className={styles.listContainer}>
                       {lprState.samples.length === 0 && <div className={styles.emptyInline}>No extracted samples.</div>}
                       {lprState.samples.map((sample) => (
-                        <motion.div layout variants={listItemVariants} key={sample.id} className={styles.infoItemRow}>
+                        <motion.div
+                          layout
+                          variants={listItemVariants}
+                          key={sample.id}
+                          className={`${styles.infoItemRow} ${sample.timeMs === currentPlayheadMs ? styles.infoItemRowActive : ''}`}
+                        >
                           <div className={styles.infoItemMeta}>
                             <Clock size={12} className={styles.mutedIcon} />
-                            <span className={styles.infoItemTime}>{formatTransportTime(sample.timeMs)}</span>
+                            <button
+                              type="button"
+                              className={styles.infoItemTimeButton}
+                              onClick={() => void handleSeekToSample(sample.id, sample.timeMs)}
+                              title={`Jump to ${formatTransportTime(sample.timeMs)}`}
+                            >
+                              <span className={styles.infoItemTime}>{formatTransportTime(sample.timeMs)}</span>
+                            </button>
                           </div>
                           <span className={styles.infoItemText}>{samplePrimaryText(sample)}</span>
                           <span className={styles.infoItemBadge}>Q: {formatConfidence(sample.quality?.overallScore ?? 0)}</span>
+                          {sample.timeMs === currentPlayheadMs && <motion.div layoutId="activeSample" className={styles.activeListItemGlow} />}
                         </motion.div>
                       ))}
                     </motion.div>
