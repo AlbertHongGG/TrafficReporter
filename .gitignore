@@ -42,3 +42,7 @@ traffic-lpr-runtime/**/__pycache__/
 
 *.mp4
 *.pt
+
+
+UFPR-ALPR*
+AOLP*

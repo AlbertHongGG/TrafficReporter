@@ -38,6 +38,7 @@ interface SyncVideoOptions {
   previewMuted: boolean;
   previewVolume: number;
   forceSeek?: boolean;
+  scrubbing?: boolean;
 }
 
 export function getPlaybackPreviewState(
@@ -110,6 +111,11 @@ export function usePlaybackController({
   const gapAnchorRef = useRef<{ originPlayheadMs: number; startedAt: number } | null>(null);
   const livePlayheadMsRef = useRef(playheadMs);
   const lastPreviewKeyRef = useRef<string>('');
+  const pendingPausedVideoSeekRef = useRef<{
+    clipId: string;
+    assetUrl: string;
+    expectedTime: number;
+  } | null>(null);
   const latestStateRef = useRef({
     isPlaying,
     playheadMs,
@@ -145,6 +151,47 @@ export function usePlaybackController({
     handlePreviewChange?.(previewState);
   }, []);
 
+  const flushPendingPausedVideoSeek = useCallback(() => {
+    const element = videoRef.current;
+    const pendingSeek = pendingPausedVideoSeekRef.current;
+    if (!element || !pendingSeek) {
+      return;
+    }
+
+    if (element.dataset.clipId !== pendingSeek.clipId || element.dataset.assetUrl !== pendingSeek.assetUrl) {
+      pendingPausedVideoSeekRef.current = null;
+      return;
+    }
+
+    if (element.readyState < HTMLMediaElement.HAVE_METADATA || element.seeking) {
+      return;
+    }
+
+    pendingPausedVideoSeekRef.current = null;
+    syncMediaTime(element, pendingSeek.expectedTime, 0);
+  }, [videoRef]);
+
+  useEffect(() => {
+    const element = videoRef.current;
+    if (!element) {
+      return undefined;
+    }
+
+    const handleSeekSettled = () => {
+      flushPendingPausedVideoSeek();
+    };
+
+    element.addEventListener('loadedmetadata', handleSeekSettled);
+    element.addEventListener('canplay', handleSeekSettled);
+    element.addEventListener('seeked', handleSeekSettled);
+
+    return () => {
+      element.removeEventListener('loadedmetadata', handleSeekSettled);
+      element.removeEventListener('canplay', handleSeekSettled);
+      element.removeEventListener('seeked', handleSeekSettled);
+    };
+  }, [flushPendingPausedVideoSeek, videoRef]);
+
   const syncVideoElement = useCallback(
     (
       activeVideoEntry: PlaybackTimelineEntry | null,
@@ -154,6 +201,7 @@ export function usePlaybackController({
         previewMuted: isPreviewMuted,
         previewVolume: currentPreviewVolume,
         forceSeek = false,
+        scrubbing = false,
       }: SyncVideoOptions,
     ) => {
       const element = videoRef.current;
@@ -162,10 +210,14 @@ export function usePlaybackController({
       }
 
       if (!activeVideoEntry || !activeVideoEntry.asset.url) {
+        pendingPausedVideoSeekRef.current = null;
         element.pause();
         element.muted = true;
         element.volume = 0;
         delete element.dataset.clipId;
+        delete element.dataset.assetUrl;
+        element.removeAttribute('src');
+        element.load();
         return true;
       }
 
@@ -178,6 +230,7 @@ export function usePlaybackController({
       element.dataset.clipId = activeVideoEntry.clip.id;
 
       if (sourceChanged) {
+        pendingPausedVideoSeekRef.current = null;
         element.dataset.assetUrl = activeVideoEntry.asset.url;
         element.src = activeVideoEntry.asset.url;
         element.load();
@@ -189,6 +242,17 @@ export function usePlaybackController({
 
           element.muted = shouldMute;
           element.volume = shouldMute ? 0 : currentPreviewVolume;
+          if (!playing) {
+            pendingPausedVideoSeekRef.current = {
+              clipId: activeVideoEntry.clip.id,
+              assetUrl: activeVideoEntry.asset.url,
+              expectedTime,
+            };
+            flushPendingPausedVideoSeek();
+            element.pause();
+            return;
+          }
+
           syncMediaTime(element, expectedTime, 0);
           if (playing) {
             void element.play().catch(() => {
@@ -204,6 +268,19 @@ export function usePlaybackController({
         element.addEventListener('canplay', syncWhenReady, { once: true });
         return false;
       }
+
+      if (!playing && scrubbing) {
+        pendingPausedVideoSeekRef.current = {
+          clipId: activeVideoEntry.clip.id,
+          assetUrl: activeVideoEntry.asset.url,
+          expectedTime,
+        };
+        flushPendingPausedVideoSeek();
+        element.pause();
+        return true;
+      }
+
+      pendingPausedVideoSeekRef.current = null;
 
       const maxDriftSeconds = forceSeek || clipChanged
         ? 0
@@ -294,25 +371,27 @@ export function usePlaybackController({
     finishPlayback(clamp(livePlayheadMsRef.current, 0, currentTimelineDurationMs));
   };
 
-  const seekTo = (nextPlayheadMs: number, preservePlayback = false) => {
+  const seekTo = (nextPlayheadMs: number, preservePlayback = false, commit = true) => {
     const {
       isPlaying: currentlyPlaying,
       playheadMs: currentPlayheadMs,
       timelineDurationMs: currentTimelineDurationMs,
     } = latestStateRef.current;
     const boundedPlayheadMs = clamp(nextPlayheadMs, 0, currentTimelineDurationMs);
+    const continuePlayback = preservePlayback && currentlyPlaying;
     const result = syncTransport(boundedPlayheadMs, {
-      playing: preservePlayback && currentlyPlaying,
+      playing: continuePlayback,
       previewMuted: true,
       previewVolume: 0,
       forceSeek: true,
+      scrubbing: !commit && !continuePlayback,
     });
 
-    if (Math.abs(currentPlayheadMs - boundedPlayheadMs) >= 1) {
+    if (commit && Math.abs(currentPlayheadMs - boundedPlayheadMs) >= 1) {
       dispatch({ type: 'set-playhead', playheadMs: boundedPlayheadMs });
     }
 
-    if (preservePlayback && currentlyPlaying) {
+    if (continuePlayback) {
       gapAnchorRef.current = result.snapshot.activeVideoEntry
         ? null
         : {

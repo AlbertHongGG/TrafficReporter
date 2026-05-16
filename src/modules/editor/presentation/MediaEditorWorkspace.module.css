@@ -201,7 +201,8 @@
 }
 
 .timelinePanel {
-  flex: 0 0 148px;
+  flex: 0 1 auto;
+  max-height: 40vh;
 }
 
 .previewPanel {
@@ -584,30 +585,23 @@
   cursor: nwse-resize;
 }
 
-/* Transport Overlay (Hovers over video bottom) */
-.transportOverlay {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: 40px 16px 12px;
-  background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 100%);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  opacity: 0;
-  transition: opacity 0.3s ease;
+.transportRow {
+  flex: 0 0 56px;
+  display: grid;
+  grid-template-columns: 320px 1fr 320px;
+  align-items: center;
+  gap: 16px;
+  padding: 0 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(20, 20, 22, 0.6), rgba(15, 15, 17, 0.9));
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  z-index: 10;
 }
 
-.previewContainer:hover .transportOverlay {
-  opacity: 1;
-}
-
-.transportMainRow {
+.transportLeftGroup {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  width: 100%;
+  gap: 8px;
 }
 
 .transportTime {
@@ -616,7 +610,7 @@
   gap: 4px;
   font-family: var(--font-mono);
   font-size: 14px;
-  padding: 0 4px;
+  padding: 0 2px;
 }
 
 .timecode {
@@ -638,42 +632,66 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 140px;
+  width: 156px;
+  justify-self: end;
 }
 
-.volumeGroup input {
-  width: 80px;
-  accent-color: var(--text-secondary);
-  height: 3px;
+.volumeGroup input.volumeSlider {
+  width: 92px;
+  height: 4px;
+  appearance: none;
+  -webkit-appearance: none;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
 }
 
-.transportButtons {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
+.volumeGroup input.volumeSlider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  box-shadow: 0 0 8px rgba(212, 175, 55, 0.5);
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+
+.volumeGroup input.volumeSlider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+.playIconOffset {
+  margin-left: 2px;
 }
 
 .transportPrimary {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
-  background: var(--text-primary);
+  background: var(--accent-primary);
   color: #000;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.1s, background 0.2s;
+  transition: transform 0.15s, background 0.2s, box-shadow 0.2s;
   border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(212, 175, 55, 0.25);
 }
 
 .transportPrimary:hover {
-  background: #fff;
-  transform: scale(1.05);
+  background: var(--accent-primary-hover);
+  transform: scale(1.08);
+  box-shadow: 0 6px 20px rgba(212, 175, 55, 0.4);
 }
 
-.transportSpacer {
-  width: 140px; /* Balances the volume group for centering */
+.transportPrimary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
 }
 
 /* --- TIMELINE PANEL --- */
@@ -703,15 +721,10 @@
   padding-bottom: 8px;
 }
 
-.timelineCanvasSingle {
-  display: flex;
-  flex-direction: column;
-}
-
 .rulerRow,
 .trackRow {
   display: grid;
-  grid-template-columns: 200px minmax(0, 1fr);
+  grid-template-columns: var(--timeline-label-width) var(--timeline-width);
 }
 
 .stickyCell {
@@ -727,11 +740,18 @@
   padding: 0 12px;
 }
 
-.rulerRow .stickyCell {
+.rulerLabel {
   font-size: 10px;
   text-transform: uppercase;
   color: var(--text-muted);
   font-weight: 600;
+}
+
+.rulerMeta,
+.trackHint {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
 }
 
 .rulerSurface {
@@ -740,11 +760,6 @@
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border-subtle);
   cursor: pointer;
-}
-
-.rulerSurfaceSingle {
-  display: block;
-  width: 100%;
   text-align: left;
 }
 
@@ -769,7 +784,7 @@
   position: relative;
   height: 44px;
   border-bottom: 1px solid var(--border-subtle);
-  background: 
+  background:
     repeating-linear-gradient(
       90deg,
       rgba(255, 255, 255, 0.02) 0,
@@ -778,10 +793,7 @@
       transparent var(--grid-step)
     ),
     var(--bg-base);
-}
-
-.singleTrackLane {
-  height: 44px;
+  cursor: pointer;
 }
 
 .trackLabelBlock {
@@ -810,6 +822,11 @@
   border: 1px solid var(--border-strong);
   overflow: hidden;
   box-shadow: var(--shadow-sm);
+  cursor: grab;
+}
+
+.clip:active {
+  cursor: grabbing;
 }
 
 .clipSelected {
@@ -906,6 +923,20 @@
   height: 8px;
   background: var(--accent-primary);
   clip-path: polygon(0 0, 100% 0, 50% 100%);
+}
+
+@media (max-width: 900px) {
+  .transportRow {
+    grid-template-columns: 1fr;
+    height: auto;
+    padding: 10px 12px;
+  }
+
+  .transportTime,
+  .volumeGroup,
+  .transportButtons {
+    justify-self: start;
+  }
 }
 
 .dragGhost {

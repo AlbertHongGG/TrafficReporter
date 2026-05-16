@@ -86,6 +86,7 @@ const log = createLogger('MediaEditorWorkspace');
 
 const RULER_STEP_CANDIDATES_MS = [1, 2, 5, 10, 20, 50, 100, 250, 500, 1000, 2000, 5000, 10000, 15000, 30000, 60000, 120000, 300000];
 const MIN_TIMELINE_PADDING_MS = 60000;
+const TIMELINE_LABEL_WIDTH_PX = 200;
 
 type ClipInteraction =
   | {
@@ -116,6 +117,12 @@ type MarkerInteraction = {
   startClientX: number;
   startClientY: number;
   originRect: VideoMarkerRect;
+};
+
+type TimelineScrubState = {
+  pointerId: number;
+  surfaceLeft: number;
+  preservePlayback: boolean;
 };
 
 interface PreviewViewport {
@@ -205,6 +212,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(0);
   const [timelineScrollLeft, setTimelineScrollLeft] = useState(0);
   const [interaction, setInteraction] = useState<ClipInteraction | null>(null);
+  const [timelineScrub, setTimelineScrub] = useState<TimelineScrubState | null>(null);
   const [markerInteraction, setMarkerInteraction] = useState<MarkerInteraction | null>(null);
   const [previewViewport, setPreviewViewport] = useState<PreviewViewport>({ left: 0, top: 0, width: 0, height: 0 });
   const [livePreviewState, setLivePreviewState] = useState<PlaybackPreviewState>({
@@ -242,7 +250,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
   );
   const timelineDurationMs = useMemo(() => getTimelineDuration(activeClips), [activeClips]);
   const timelineVisibleWidthPx = useMemo(
-    () => Math.max(240, timelineViewportWidth - 8),
+    () => Math.max(240, timelineViewportWidth - TIMELINE_LABEL_WIDTH_PX),
     [timelineViewportWidth],
   );
   const visibleDurationMs = useMemo(
@@ -289,8 +297,10 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     () => getPlaybackPreviewState(playbackEntries, currentPlayheadMs),
     [currentPlayheadMs, playbackEntries],
   );
-  const previewState = currentIsPlaying ? livePreviewState : committedPreviewState;
-  const lprPreviewPlayheadMs = currentIsPlaying ? liveOverlayPlayheadMs : currentPlayheadMs;
+  const isTimelineScrubbing = timelineScrub !== null;
+  const displayPlayheadMs = currentIsPlaying || isTimelineScrubbing ? liveOverlayPlayheadMs : currentPlayheadMs;
+  const previewState = currentIsPlaying || isTimelineScrubbing ? livePreviewState : committedPreviewState;
+  const lprPreviewPlayheadMs = currentIsPlaying || isTimelineScrubbing ? liveOverlayPlayheadMs : currentPlayheadMs;
   const deferredOverlayPlayheadMs = React.useDeferredValue(lprPreviewPlayheadMs);
   const missingFiles = useMemo(
     () => state.files.filter((fileState) => fileState.asset.status === 'missing'),
@@ -362,9 +372,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
 
   const applyLiveTransportFrame = useCallback((playheadMs: number) => {
     livePlayheadMsRef.current = playheadMs;
-    React.startTransition(() => {
-      setLiveOverlayPlayheadMs(playheadMs);
-    });
+    setLiveOverlayPlayheadMs(playheadMs);
 
     if (currentTimecodeRef.current) {
       currentTimecodeRef.current.textContent = formatTransportTime(playheadMs);
@@ -507,7 +515,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     event.preventDefault();
 
     const bounds = scroller.getBoundingClientRect();
-    const cursorX = clamp(event.clientX - bounds.left, 0, timelineVisibleWidthPx);
+    const cursorX = clamp(event.clientX - bounds.left - TIMELINE_LABEL_WIDTH_PX, 0, timelineVisibleWidthPx);
     const currentTimelineZoom = zoomRef.current;
     const cursorTimelineX = Math.max(0, scroller.scrollLeft + cursorX);
     const anchorMs = pxToMs(cursorTimelineX, currentTimelineZoom);
@@ -557,6 +565,39 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     }
   }, [activeClips.length, activeFile, fitZoom, timelineViewportWidth]);
 
+  const seekTimelineFromClientX = useCallback((clientX: number, surfaceLeft: number, preservePlayback: boolean, commit = false) => {
+    const scroller = scrollRef.current;
+    if (!scroller) {
+      return;
+    }
+
+    const localX = Math.max(0, clientX - surfaceLeft + scroller.scrollLeft);
+    seekTo(pxToMs(localX, zoomRef.current), preservePlayback, commit);
+  }, [seekTo]);
+
+  const handleTimelineScrubStart = (event: React.PointerEvent<HTMLElement>) => {
+    if (event.button !== 0 || !activeFile || !scrollRef.current) {
+      return;
+    }
+
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+
+    const surfaceLeft = event.currentTarget.getBoundingClientRect().left;
+    const preservePlayback = activeFile.isPlaying;
+
+    if (activeFile.selectedClipIds.length > 0) {
+      dispatch({ type: 'set-selection', clipIds: [] });
+    }
+
+    seekTimelineFromClientX(event.clientX, surfaceLeft, preservePlayback, false);
+    setTimelineScrub({
+      pointerId: event.pointerId,
+      surfaceLeft,
+      preservePlayback,
+    });
+  };
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
@@ -586,6 +627,55 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedClip, togglePlay]);
+
+  useEffect(() => {
+    if (!timelineScrub) {
+      return undefined;
+    }
+
+    const handlePointerMove = (event: PointerEvent) => {
+      if (event.pointerId !== timelineScrub.pointerId) {
+        return;
+      }
+
+      seekTimelineFromClientX(event.clientX, timelineScrub.surfaceLeft, timelineScrub.preservePlayback, false);
+    };
+
+    const handlePointerUp = (event: PointerEvent) => {
+      if (event.pointerId !== timelineScrub.pointerId) {
+        return;
+      }
+
+      seekTimelineFromClientX(event.clientX, timelineScrub.surfaceLeft, timelineScrub.preservePlayback, true);
+      setTimelineScrub(null);
+    };
+
+    const handlePointerCancel = (event: PointerEvent) => {
+      if (event.pointerId !== timelineScrub.pointerId) {
+        return;
+      }
+
+      seekTo(livePlayheadMsRef.current, timelineScrub.preservePlayback, true);
+      setTimelineScrub(null);
+    };
+
+    const cancelScrub = () => {
+      seekTo(livePlayheadMsRef.current, timelineScrub.preservePlayback, true);
+      setTimelineScrub(null);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerCancel);
+    window.addEventListener('blur', cancelScrub);
+
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerCancel);
+      window.removeEventListener('blur', cancelScrub);
+    };
+  }, [seekTimelineFromClientX, seekTo, timelineScrub]);
 
   useEffect(() => {
     if (!interaction || !activeFile) {
@@ -926,16 +1016,6 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       log.error('Failed to relink media file.', serializeError(error));
       setImportFeedback(getErrorSummary(error, 'Failed to relink video.'));
     }
-  };
-
-  const handleTimelineSeek = (event: React.PointerEvent<HTMLElement>) => {
-    if (!activeFile || !scrollRef.current) {
-      return;
-    }
-
-    const bounds = scrollRef.current.getBoundingClientRect();
-    const localX = event.clientX - bounds.left + scrollRef.current.scrollLeft;
-    seekTo(pxToMs(localX, activeFile.zoom), activeFile.isPlaying);
   };
 
   const handleClipPointerDown = (event: React.PointerEvent<HTMLDivElement>, clip: TimelineClip) => {
@@ -1471,6 +1551,13 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     height: `${activeFile.markerRect.height * previewViewport.height}px`,
   } : undefined;
 
+  const timelineCanvasStyle = {
+    width: `${timelineWidthPx + TIMELINE_LABEL_WIDTH_PX}px`,
+    '--timeline-label-width': `${TIMELINE_LABEL_WIDTH_PX}px`,
+    '--timeline-width': `${timelineWidthPx}px`,
+    '--playhead-left': `${msToPx(displayPlayheadMs, currentZoom)}px`,
+  } as React.CSSProperties;
+
   return (
     <div className={styles.editor}>
       <section className={styles.toolbar}>
@@ -1664,59 +1751,17 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
                   Clear
                 </button>
               </div>
-
-              <div className={styles.transportOverlay}>
-                <div className={styles.transportTime}>
-                  <span ref={currentTimecodeRef} className={styles.timecode}>{formatTransportTime(currentPlayheadMs)}</span>
-                  <span className={styles.timecodeDivider}>/</span>
-                  <span className={styles.timecodeDuration}>{formatTransportTime(timelineDurationMs)}</span>
-                </div>
-
-                <div className={styles.transportMainRow}>
-                  <div className={styles.volumeGroup}>
-                    <button
-                      type="button"
-                      className={styles.iconButton}
-                      onClick={() => dispatch({ type: 'set-preview-muted', previewMuted: !currentPreviewMuted })}
-                      disabled={!activeFile}
-                    >
-                      {currentPreviewMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
-                    </button>
-                    <input
-                      type="range"
-                      min={0}
-                      max={1}
-                      step={0.01}
-                      value={currentPreviewVolume}
-                      onChange={(event) =>
-                        dispatch({
-                          type: 'set-preview-volume',
-                          previewVolume: Number(event.target.value),
-                        })}
-                      disabled={!activeFile}
-                    />
-                  </div>
-
-                  <div className={styles.transportButtons}>
-                    <button type="button" className={styles.iconButton} onClick={() => seekBy(-1000)} disabled={timelineDurationMs === 0}>
-                      <SkipBack size={16} />
-                    </button>
-                    <button type="button" className={styles.transportPrimary} onClick={togglePlay} disabled={timelineDurationMs === 0}>
-                      {currentIsPlaying ? <Pause size={18} /> : <Play size={18} />}
-                    </button>
-                    <button type="button" className={styles.iconButton} onClick={() => seekBy(1000)} disabled={timelineDurationMs === 0}>
-                      <SkipForward size={16} />
-                    </button>
-                  </div>
-
-                  <div className={styles.transportSpacer} />
-                </div>
-              </div>
             </div>
           </section>
 
-          <section className={styles.timelinePanel}>
-            <div className={styles.panelHeader}>
+          <div className={styles.transportRow}>
+            <div className={styles.transportLeftGroup}>
+              <div className={styles.transportTime}>
+                <span ref={currentTimecodeRef} className={styles.timecode}>{formatTransportTime(displayPlayheadMs)}</span>
+                <span className={styles.timecodeDivider}>/</span>
+                <span className={styles.timecodeDuration}>{formatTransportTime(timelineDurationMs)}</span>
+              </div>
+              <div className={styles.toolbarDivider} />
               <div className={styles.timelineActions}>
                 <button
                   type="button"
@@ -1733,71 +1778,144 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
                   className={styles.iconButton}
                   onClick={() => dispatch({ type: 'split-clip', clipId: selectedClip?.id ?? '', atMs: livePlayheadMsRef.current })}
                   disabled={!selectedClip}
+                  aria-label="Split selected clip"
                 >
                   <Scissors size={14} />
                 </button>
-                <button type="button" className={styles.iconButton} onClick={() => dispatch({ type: 'delete-selected-clips' })} disabled={!selectedClip}>
+                <button
+                  type="button"
+                  className={styles.iconButton}
+                  onClick={() => dispatch({ type: 'delete-selected-clips' })}
+                  disabled={!selectedClip}
+                  aria-label="Delete selected clip"
+                >
                   <Trash2 size={14} />
                 </button>
-                <div className={styles.toolbarDivider} />
-                <span className={styles.timelineHint}>Space Play/Pause</span>
-                <span className={styles.timelineHint}>S Split</span>
-                <span className={styles.timelineHint}>M Clip Mute</span>
-                <span className={styles.timelineHint}>Del Delete</span>
               </div>
             </div>
 
+            <div className={styles.transportButtons}>
+              <button
+                type="button"
+                className={styles.iconButton}
+                onClick={() => seekBy(-1000)}
+                disabled={timelineDurationMs === 0}
+                aria-label="Seek backward one second"
+              >
+                <SkipBack size={16} />
+              </button>
+              <button
+                type="button"
+                className={styles.transportPrimary}
+                onClick={togglePlay}
+                disabled={timelineDurationMs === 0}
+                aria-label={currentIsPlaying ? 'Pause playback' : 'Start playback'}
+              >
+                {currentIsPlaying ? <Pause size={18} /> : <Play size={18} className={styles.playIconOffset} />}
+              </button>
+              <button
+                type="button"
+                className={styles.iconButton}
+                onClick={() => seekBy(1000)}
+                disabled={timelineDurationMs === 0}
+                aria-label="Seek forward one second"
+              >
+                <SkipForward size={16} />
+              </button>
+            </div>
+
+            <div className={styles.volumeGroup}>
+              <button
+                type="button"
+                className={styles.iconButton}
+                onClick={() => dispatch({ type: 'set-preview-muted', previewMuted: !currentPreviewMuted })}
+                disabled={!activeFile}
+                aria-label={currentPreviewMuted ? 'Unmute preview' : 'Mute preview'}
+              >
+                {currentPreviewMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+              </button>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.01}
+                value={currentPreviewVolume}
+                onChange={(event) =>
+                  dispatch({
+                    type: 'set-preview-volume',
+                    previewVolume: Number(event.target.value),
+                  })}
+                disabled={!activeFile}
+                aria-label="Adjust preview volume"
+                className={styles.volumeSlider}
+              />
+            </div>
+          </div>
+
+          <section className={styles.timelinePanel}>
             <div className={styles.timelineScroller} ref={scrollRef}>
               <div
                 ref={timelineCanvasRef}
-                className={`${styles.timelineCanvas} ${styles.timelineCanvasSingle}`}
-                style={{
-                  width: `${timelineWidthPx}px`,
-                  '--playhead-left': `${msToPx(currentPlayheadMs, currentZoom)}px`,
-                } as React.CSSProperties}
+                className={styles.timelineCanvas}
+                style={timelineCanvasStyle}
               >
-                <button type="button" className={`${styles.rulerSurface} ${styles.rulerSurfaceSingle}`} onPointerDown={handleTimelineSeek}>
-                  {rulerTicks.map((tickMs) => (
-                    <div key={tickMs} className={styles.rulerTick} style={{ left: `${msToPx(tickMs, currentZoom)}px` }}>
-                      <span>{formatRulerLabel(tickMs)}</span>
-                    </div>
-                  ))}
-                  <div className={styles.playhead} />
-                </button>
-
-                <div
-                  className={`${styles.trackLane} ${styles.singleTrackLane}`}
-                  onPointerDown={handleTimelineSeek}
-                  style={{ '--grid-step': `${msToPx(rulerStepMs, currentZoom)}px` } as React.CSSProperties}
-                >
-                  <div className={styles.playhead} />
-                  {timelineClips.map(({ clip, leftPx, widthPx }) => (
-                    <div
-                      key={clip.id}
-                      className={`${styles.clip} ${activeFile?.selectedClipIds.includes(clip.id) ? styles.clipSelected : ''} ${clip.muted ? styles.clipMuted : ''}`}
-                      style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
-                      role="button"
-                      tabIndex={0}
-                      aria-pressed={activeFile?.selectedClipIds.includes(clip.id)}
-                      onPointerDown={(event) => handleClipPointerDown(event, clip)}
-                    >
-                      <button
-                        type="button"
-                        className={`${styles.trimHandle} ${styles.trimHandleStart}`}
-                        onPointerDown={(event) => handleTrimStartPointerDown(event, clip)}
-                      />
-                      <div className={styles.clipBody}>
-                        <span className={styles.clipIcon}><Film size={12} /></span>
-                        <span className={styles.clipText}>{activeFile?.asset.name ?? 'Clip'}</span>
-                        <span className={styles.clipDuration}>{formatTransportTime(clipDurationMs(clip))}</span>
+                <div className={styles.rulerRow}>
+                  <div className={styles.stickyCell}>
+                    <span className={styles.rulerLabel}>Timeline</span>
+                    <span className={styles.rulerMeta}>{formatRulerLabel(rulerStepMs)}</span>
+                  </div>
+                  <button type="button" className={styles.rulerSurface} onPointerDown={handleTimelineScrubStart}>
+                    {rulerTicks.map((tickMs) => (
+                      <div key={tickMs} className={styles.rulerTick} style={{ left: `${msToPx(tickMs, currentZoom)}px` }}>
+                        <span>{formatRulerLabel(tickMs)}</span>
                       </div>
-                      <button
-                        type="button"
-                        className={`${styles.trimHandle} ${styles.trimHandleEnd}`}
-                        onPointerDown={(event) => handleTrimEndPointerDown(event, clip)}
-                      />
+                    ))}
+                    <div className={styles.playhead} />
+                  </button>
+                </div>
+
+                <div className={styles.trackRow}>
+                  <div className={styles.stickyCell}>
+                    <div className={styles.trackLabelBlock}>
+                      <strong>{activeFile?.track.name ?? 'Track 1'}</strong>
+                      <span>{activeClips.length} clip(s)</span>
                     </div>
-                  ))}
+                    <span className={styles.trackHint}>{activeFile ? formatTransportTime(activeFile.asset.durationMs) : '--:--'}</span>
+                  </div>
+                  <div
+                    className={styles.trackLane}
+                    onPointerDown={handleTimelineScrubStart}
+                    style={{ '--grid-step': `${msToPx(rulerStepMs, currentZoom)}px` } as React.CSSProperties}
+                  >
+                    <div className={styles.playhead} />
+                    {timelineClips.map(({ clip, leftPx, widthPx }) => (
+                      <div
+                        key={clip.id}
+                        className={`${styles.clip} ${activeFile?.selectedClipIds.includes(clip.id) ? styles.clipSelected : ''} ${clip.muted ? styles.clipMuted : ''}`}
+                        style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
+                        role="button"
+                        tabIndex={0}
+                        aria-pressed={activeFile?.selectedClipIds.includes(clip.id)}
+                        onPointerDown={(event) => handleClipPointerDown(event, clip)}
+                      >
+                        <button
+                          type="button"
+                          className={`${styles.trimHandle} ${styles.trimHandleStart}`}
+                          onPointerDown={(event) => handleTrimStartPointerDown(event, clip)}
+                        />
+                        <div className={styles.clipBody}>
+                          <span className={styles.clipIcon}><Film size={12} /></span>
+                          <span className={styles.clipText}>{activeFile?.asset.name ?? 'Clip'}</span>
+                          <span className={styles.clipDuration}>{formatTransportTime(clipDurationMs(clip))}</span>
+                        </div>
+                        <button
+                          type="button"
+                          className={`${styles.trimHandle} ${styles.trimHandleEnd}`}
+                          onPointerDown={(event) => handleTrimEndPointerDown(event, clip)}
+                        />
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>

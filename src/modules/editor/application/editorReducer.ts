@@ -182,10 +182,19 @@ export function editorReducer(state: EditorWorkspaceState, action: EditorAction)
       );
 
     case 'set-selection':
-      return updateActiveFile(state, (fileState) => ({
-        ...fileState,
-        selectedClipIds: action.clipIds,
-      }));
+      return updateActiveFile(state, (fileState) => {
+        if (
+          fileState.selectedClipIds.length === action.clipIds.length
+          && fileState.selectedClipIds.every((clipId, index) => clipId === action.clipIds[index])
+        ) {
+          return fileState;
+        }
+
+        return {
+          ...fileState,
+          selectedClipIds: action.clipIds,
+        };
+      });
 
     case 'move-clip':
       return updateActiveFile(state, (fileState) => moveClip(fileState, action.clipId, action.startMs));
