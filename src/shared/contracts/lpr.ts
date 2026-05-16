@@ -28,6 +28,10 @@ export interface LprAnalysisOptions {
   trackerLowConfidence?: number;
   maxTrackingGap?: number;
   minAlignmentScore?: number;
+  enableReliabilityGates?: boolean;
+  minAcceptedConfidence?: number;
+  minCandidateMargin?: number;
+  minIntervalSupportFrames?: number;
 }
 
 export interface TimelineIntervalSelection {
@@ -160,6 +164,7 @@ export interface LprFrameAnalysisResponse {
   detections: LprTrackedRegion[];
   sample: LprFrameSample | null;
   candidates: LprPlateCandidate[];
+  acceptedCandidateId: string | null;
   runtime: LprRuntimeStatus;
   diagnostics?: LprDiagnostics | null;
 }

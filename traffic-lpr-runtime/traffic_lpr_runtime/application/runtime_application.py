@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Any
 
@@ -7,7 +8,7 @@ from traffic_lpr_runtime.domain.errors import RuntimeFailure
 from traffic_lpr_runtime.domain.interfaces import FrameReader, PlateRecognizer, TargetDetector
 from traffic_lpr_runtime.domain.models import FrameSample, PlateCandidate, TargetTrack, TrackedRegion
 from traffic_lpr_runtime.domain.text import character_error_rate, normalize_plate_text
-from traffic_lpr_runtime.domain.value_objects import NormalizedRect, crop_image
+from traffic_lpr_runtime.domain.value_objects import NormalizedRect, clamp, crop_image
 from traffic_lpr_runtime.application.pipeline_support import AnalysisOptions, PlateObservation, PlatePreprocessor, TargetCentricTracker
 from traffic_lpr_runtime.infrastructure.dependencies import DependencyRegistry
 from traffic_lpr_runtime.infrastructure.frame_reader import OpenCvFrameReader
@@ -92,15 +93,28 @@ class LprRuntimeApplication:
             options,
             artifact_root,
         )
+        candidates, accepted_candidate_id, selection_diagnostics = _apply_reliability_selection(
+            candidates,
+            [sample],
+            payload.get('countryHints') or [],
+            options,
+            interval_mode=False,
+        )
+        sample.diagnostics = {
+            **(sample.diagnostics or {}),
+            'selection': selection_diagnostics,
+        }
         return {
             'detections': [detection.to_payload() for detection in detections],
             'sample': sample.to_payload(),
             'candidates': [candidate.to_payload() for candidate in candidates[:8]],
+            'acceptedCandidateId': accepted_candidate_id,
             'runtime': self.status(),
             'diagnostics': {
                 'analysisOptions': options.to_payload(),
                 'artifactRoot': str(artifact_root) if artifact_root else None,
                 'observation': observation.diagnostics if observation else None,
+                'selection': selection_diagnostics,
             },
         }
 
@@ -122,20 +136,39 @@ class LprRuntimeApplication:
             payload.get('maxSamples'),
             options,
         )
+        calibrated_target_boxes = self._calibrate_interval_target_boxes(
+            tracked_frames,
+            int(payload['anchorTimeMs']),
+            selected_target_box,
+        )
 
         samples: list[FrameSample] = []
         observations: list[PlateObservation] = []
         for tracked_frame in tracked_frames:
+            analysis_target_box = tracked_frame.box
             frame = self._frame_reader.read_frame(payload['sourcePath'], tracked_frame.time_ms)
             _, sample, observation = self._analyze_plate_candidates(
                 frame,
                 tracked_frame.time_ms,
                 None,
-                tracked_frame.box,
+                analysis_target_box,
                 payload.get('countryHints') or [],
                 options,
                 artifact_root / f'sample-{tracked_frame.time_ms}' if artifact_root else None,
             )
+            calibrated_target_box = calibrated_target_boxes.get(tracked_frame.time_ms)
+            if calibrated_target_box is not None:
+                tracked_frame.diagnostics = {
+                    **(tracked_frame.diagnostics or {}),
+                    'analysisBox': analysis_target_box.to_payload(),
+                    'calibratedBox': calibrated_target_box.to_payload(),
+                }
+                tracked_frame.box = calibrated_target_box
+                sample.target_box = calibrated_target_box
+                sample.diagnostics = {
+                    **(sample.diagnostics or {}),
+                    'analysisTargetBox': analysis_target_box.to_payload(),
+                }
             samples.append(sample)
             if observation is not None:
                 observations.append(observation)
@@ -147,12 +180,23 @@ class LprRuntimeApplication:
             options,
             artifact_root,
         )
-        accepted_candidate_id = candidates[0].id if candidates else None
-        summary = (
-            f'{len(samples)} samples, {len(candidates)} fused candidate(s), best={candidates[0].text}, tracker={track_diagnostics.get("trackerMode", "legacy")}'
-            if candidates
-            else f'{len(samples)} samples, no confident plate candidate.'
+        candidates, accepted_candidate_id, selection_diagnostics = _apply_reliability_selection(
+            candidates,
+            samples,
+            payload.get('countryHints') or [],
+            options,
+            interval_mode=True,
         )
+        if candidates:
+            suggested_candidate = next((candidate for candidate in candidates if candidate.id == selection_diagnostics.get('suggestedCandidateId')), candidates[0])
+            summary = (
+                f'{len(samples)} samples, {len(candidates)} fused candidate(s), '
+                f'best={suggested_candidate.text}, tracker={track_diagnostics.get("trackerMode", "legacy")}'
+            )
+            if selection_diagnostics.get('reviewRequired'):
+                summary = f'{summary}, review needed.'
+        else:
+            summary = f'{len(samples)} samples, no confident plate candidate.'
 
         return {
             'targetTracks': [track.to_payload() for track in self._build_track_payload(tracked_frames, track_diagnostics)],
@@ -166,6 +210,7 @@ class LprRuntimeApplication:
                 'artifactRoot': str(artifact_root) if artifact_root else None,
                 'tracker': track_diagnostics,
                 'fusion': fusion_diagnostics,
+                'selection': selection_diagnostics,
             },
         }
 
@@ -198,11 +243,18 @@ class LprRuntimeApplication:
         total_character_error_rate = 0.0
         source_wins: dict[str, int] = {}
         tag_metrics: dict[str, dict[str, float]] = {}
+        dataset_metrics: dict[str, dict[str, float]] = {}
+        split_metrics: dict[str, dict[str, float]] = {}
+        latency_values_ms: list[float] = []
+        calibration_points: list[tuple[float, bool]] = []
+        failure_counts: dict[str, int] = {}
 
         for index, case_payload in enumerate(cases):
             mode = str(case_payload.get('mode') or 'interval')
             case_id = str(case_payload.get('id') or f'case-{index + 1}')
             expected_text = normalize_plate_text(case_payload.get('expectedText'))
+            case_metadata = dict(case_payload.get('metadata') or {})
+            timer_started = time.perf_counter()
 
             if mode == 'frame':
                 response = self.analyze_frame(case_payload)
@@ -211,26 +263,60 @@ class LprRuntimeApplication:
                 response = self.analyze_interval(case_payload)
                 candidates = response.get('candidates') or []
 
+            latency_ms = max(0.0, (time.perf_counter() - timer_started) * 1000.0)
+            latency_values_ms.append(latency_ms)
+
             ranked_texts = [normalize_plate_text(candidate.get('text')) for candidate in candidates if candidate.get('text')]
             ranked_sources = [str(candidate.get('source') or '') for candidate in candidates if candidate.get('text')]
             best_text = ranked_texts[0] if ranked_texts else ''
             best_source = ranked_sources[0] if ranked_sources else ''
+            best_confidence = _candidate_confidence(candidates[0]) if candidates else 0.0
+            second_confidence = _candidate_confidence(candidates[1]) if len(candidates) > 1 else 0.0
+            accepted_margin = max(0.0, best_confidence - second_confidence)
             exact_match = bool(expected_text and best_text == expected_text)
             top3_match = bool(expected_text and expected_text in ranked_texts[:3])
             case_character_error_rate = character_error_rate(best_text, expected_text)
+            localization = _evaluate_localization(case_payload, response)
+            track_metrics_case = _evaluate_track_consistency(response, expected_text) if mode != 'frame' else None
+            failure_reason = _classify_failure_reason(
+                exact_match,
+                accepted_margin,
+                localization,
+                track_metrics_case,
+                response,
+            )
 
             exact_matches += 1 if exact_match else 0
             top3_matches += 1 if top3_match else 0
             total_character_error_rate += case_character_error_rate
+            calibration_points.append((best_confidence, exact_match))
+            failure_counts[failure_reason] = failure_counts.get(failure_reason, 0) + 1
             if best_source:
                 source_wins[best_source] = source_wins.get(best_source, 0) + 1
 
+            case_metrics = {
+                'exactMatch': exact_match,
+                'top3Match': top3_match,
+                'characterErrorRate': case_character_error_rate,
+                'latencyMs': latency_ms,
+                'acceptedMargin': accepted_margin,
+                'plateIoU': localization.get('plateMeanIoU'),
+                'plateLocalizationRecall': localization.get('plateRecall'),
+                'targetIoU': localization.get('targetMeanIoU'),
+                'targetLocalizationRecall': localization.get('targetRecall'),
+                'trackMajorityExactMatch': (track_metrics_case or {}).get('majorityExactMatch'),
+                'predictionSwitchCount': (track_metrics_case or {}).get('predictionSwitchCount'),
+                'sampleExactMatchRate': (track_metrics_case or {}).get('sampleExactMatchRate'),
+                'timeToFirstCorrectMs': (track_metrics_case or {}).get('timeToFirstCorrectMs'),
+            }
+
             for tag in list(case_payload.get('tags') or []):
-                tag_entry = tag_metrics.setdefault(str(tag), {'total': 0.0, 'exact': 0.0, 'top3': 0.0, 'cer': 0.0})
-                tag_entry['total'] += 1.0
-                tag_entry['exact'] += 1.0 if exact_match else 0.0
-                tag_entry['top3'] += 1.0 if top3_match else 0.0
-                tag_entry['cer'] += case_character_error_rate
+                _update_metric_bucket(tag_metrics.setdefault(str(tag), _new_metric_bucket()), case_metrics)
+
+            dataset_name = str(case_metadata.get('dataset') or 'unknown')
+            split_name = str(case_metadata.get('split') or case_payload.get('split') or 'unknown')
+            _update_metric_bucket(dataset_metrics.setdefault(dataset_name, _new_metric_bucket()), case_metrics)
+            _update_metric_bucket(split_metrics.setdefault(split_name, _new_metric_bucket()), case_metrics)
 
             benchmark_results.append(
                 {
@@ -244,8 +330,15 @@ class LprRuntimeApplication:
                     'exactMatch': exact_match,
                     'top3Match': top3_match,
                     'characterErrorRate': case_character_error_rate,
+                    'acceptedConfidence': best_confidence,
+                    'acceptedMargin': accepted_margin,
+                    'latencyMs': latency_ms,
+                    'localization': localization,
+                    'trackMetrics': track_metrics_case,
+                    'failureReason': failure_reason,
                     'summary': response.get('summary') or '',
                     'tags': list(case_payload.get('tags') or []),
+                    'metadata': case_metadata,
                 }
             )
 
@@ -256,19 +349,32 @@ class LprRuntimeApplication:
             'top3MatchRate': top3_matches / total_cases,
             'meanCharacterErrorRate': total_character_error_rate / total_cases,
             'sourceWinCounts': source_wins,
+            'meanAcceptedMargin': sum(float(result.get('acceptedMargin') or 0.0) for result in benchmark_results) / total_cases,
+            'latencyMs': {
+                'mean': sum(latency_values_ms) / total_cases if latency_values_ms else 0.0,
+                'p50': _percentile(latency_values_ms, 0.50),
+                'p95': _percentile(latency_values_ms, 0.95),
+            },
+            'confidenceCalibration': _build_confidence_calibration(calibration_points),
+            'failureBreakdown': failure_counts,
             'tagBreakdown': {
-                tag: {
-                    'totalCases': int(values['total']),
-                    'exactMatchRate': values['exact'] / max(values['total'], 1.0),
-                    'top3MatchRate': values['top3'] / max(values['total'], 1.0),
-                    'meanCharacterErrorRate': values['cer'] / max(values['total'], 1.0),
-                }
+                tag: _finalize_metric_bucket(values)
                 for tag, values in sorted(tag_metrics.items())
+            },
+            'datasetBreakdown': {
+                dataset: _finalize_metric_bucket(values)
+                for dataset, values in sorted(dataset_metrics.items())
+            },
+            'splitBreakdown': {
+                split: _finalize_metric_bucket(values)
+                for split, values in sorted(split_metrics.items())
             },
         }
         summary = (
             f"{total_cases} cases, exact={metrics['exactMatchRate']:.1%}, "
-            f"top3={metrics['top3MatchRate']:.1%}, cer={metrics['meanCharacterErrorRate']:.3f}"
+            f"top3={metrics['top3MatchRate']:.1%}, cer={metrics['meanCharacterErrorRate']:.3f}, "
+            f"plateIoU={_safe_metric_average(benchmark_results, 'localization', 'plateMeanIoU'):.3f}, "
+            f"p95={metrics['latencyMs']['p95']:.1f}ms"
         )
         return {
             'summary': summary,
@@ -324,13 +430,34 @@ class LprRuntimeApplication:
                 artifact_root,
             )
             if observation is not None:
-                crop_candidates = self._primary_recognizer.recognize_plate_crop(
-                    observation.working_image,
+                crop_candidates = self._recognize_observation_crop(
+                    observation,
                     time_ms,
                     best_baseline.box,
                     country_hints,
-                    options.ocr_models(),
+                    options,
                 )
+                observation.ocr_candidates = crop_candidates
+        elif marker_rect is not None and target_box is None and _looks_like_plate_roi(marker_rect):
+            observation = self._plate_preprocessor.prepare(
+                frame,
+                time_ms,
+                None,
+                marker_rect,
+                options,
+                artifact_root,
+            )
+            if observation is not None:
+                crop_candidates = self._recognize_observation_crop(
+                    observation,
+                    time_ms,
+                    marker_rect,
+                    country_hints,
+                    options,
+                    extra_diagnostics={'directPlateRoi': True},
+                )
+                for candidate in crop_candidates:
+                    candidate.confidence = max(candidate.confidence, min(1.0, candidate.confidence * 1.06))
                 observation.ocr_candidates = crop_candidates
 
         candidates = self._rank_sample_candidates(baseline_candidates, crop_candidates, observation)
@@ -373,6 +500,57 @@ class LprRuntimeApplication:
             },
         )
         return candidates, sample, observation
+
+    def _recognize_observation_crop(
+        self,
+        observation: PlateObservation,
+        time_ms: int,
+        plate_box: NormalizedRect | None,
+        country_hints: list[str],
+        options: AnalysisOptions,
+        extra_diagnostics: dict[str, Any] | None = None,
+    ) -> list[PlateCandidate]:
+        diagnostics_extra = dict(extra_diagnostics or {})
+        crop_candidates = self._primary_recognizer.recognize_plate_crop(
+            observation.working_image,
+            time_ms,
+            plate_box,
+            country_hints,
+            options.ocr_models(),
+        )
+        for candidate in crop_candidates:
+            candidate.diagnostics = {
+                **(candidate.diagnostics or {}),
+                **diagnostics_extra,
+                'ocrVariant': 'working',
+            }
+
+        if crop_candidates:
+            return crop_candidates
+
+        for variant_name, variant_image in [
+            ('enhanced', observation.enhanced_image),
+            ('rectified', observation.rectified_image),
+            ('original', observation.original_image),
+        ]:
+            if variant_image is None or getattr(variant_image, 'size', 0) == 0 or variant_image is observation.working_image:
+                continue
+            variant_candidates = self._primary_recognizer.recognize_plate_crop(
+                variant_image,
+                time_ms,
+                plate_box,
+                country_hints,
+                options.ocr_models(),
+            )
+            for candidate in variant_candidates:
+                candidate.diagnostics = {
+                    **(candidate.diagnostics or {}),
+                    **diagnostics_extra,
+                    'ocrVariant': variant_name,
+                }
+            crop_candidates.extend(variant_candidates)
+
+        return crop_candidates
 
     def _aggregate_candidates(
         self,
@@ -647,6 +825,46 @@ class LprRuntimeApplication:
         }
         return tracked_frames, diagnostics
 
+    def _calibrate_interval_target_boxes(
+        self,
+        tracked_frames: list[TrackedRegion],
+        anchor_time_ms: int,
+        selected_target_box: NormalizedRect | None,
+    ) -> dict[int, NormalizedRect]:
+        if selected_target_box is None or not tracked_frames:
+            return {}
+
+        anchor_frame = next((frame for frame in tracked_frames if frame.time_ms == anchor_time_ms), None)
+        if anchor_frame is None:
+            anchor_frame = min(tracked_frames, key=lambda frame: abs(frame.time_ms - anchor_time_ms))
+
+        anchor_box = anchor_frame.box if anchor_frame is not None else None
+        if anchor_box is None or anchor_box.width <= 0.0 or anchor_box.height <= 0.0:
+            return {}
+
+        anchor_width = max(anchor_box.width, 1e-6)
+        anchor_height = max(anchor_box.height, 1e-6)
+        left_ratio = (anchor_box.x - selected_target_box.x) / anchor_width
+        top_ratio = (anchor_box.y - selected_target_box.y) / anchor_height
+        right_ratio = ((selected_target_box.x + selected_target_box.width) - (anchor_box.x + anchor_box.width)) / anchor_width
+        bottom_ratio = ((selected_target_box.y + selected_target_box.height) - (anchor_box.y + anchor_box.height)) / anchor_height
+
+        calibrated: dict[int, NormalizedRect] = {}
+        for tracked_frame in tracked_frames:
+            raw_box = tracked_frame.box
+            x1 = clamp(raw_box.x - (left_ratio * raw_box.width), 0.0, 1.0)
+            y1 = clamp(raw_box.y - (top_ratio * raw_box.height), 0.0, 1.0)
+            x2 = clamp(raw_box.x + raw_box.width + (right_ratio * raw_box.width), min(1.0, x1 + 0.01), 1.0)
+            y2 = clamp(raw_box.y + raw_box.height + (bottom_ratio * raw_box.height), min(1.0, y1 + 0.01), 1.0)
+            calibrated[tracked_frame.time_ms] = NormalizedRect(
+                x=x1,
+                y=y1,
+                width=x2 - x1,
+                height=y2 - y1,
+            )
+
+        return calibrated
+
     def _build_track_payload(self, tracked_frames: list[TrackedRegion], diagnostics: dict[str, Any]) -> list[TargetTrack]:
         if not tracked_frames:
             return []
@@ -871,6 +1089,541 @@ class LprRuntimeApplication:
                 return aligned, float(response)
             except Exception:
                 return None, 0.0
+
+
+def _candidate_confidence(candidate: dict[str, Any] | None) -> float:
+    if not isinstance(candidate, dict):
+        return 0.0
+    try:
+        return float(candidate.get('confidence') or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _new_metric_bucket() -> dict[str, float]:
+    return {
+        'totalCases': 0.0,
+        'exact': 0.0,
+        'top3': 0.0,
+        'cer': 0.0,
+        'latencyMs': 0.0,
+        'acceptedMargin': 0.0,
+        'plateIoUSum': 0.0,
+        'plateIoUCount': 0.0,
+        'plateRecallSum': 0.0,
+        'plateRecallCount': 0.0,
+        'targetIoUSum': 0.0,
+        'targetIoUCount': 0.0,
+        'targetRecallSum': 0.0,
+        'targetRecallCount': 0.0,
+        'trackCases': 0.0,
+        'majorityExact': 0.0,
+        'predictionSwitchCount': 0.0,
+        'sampleExactMatchRate': 0.0,
+        'sampleExactMatchRateCount': 0.0,
+        'timeToFirstCorrectMs': 0.0,
+        'timeToFirstCorrectCount': 0.0,
+    }
+
+
+def _update_metric_bucket(bucket: dict[str, float], case_metrics: dict[str, Any]) -> None:
+    bucket['totalCases'] += 1.0
+    bucket['exact'] += 1.0 if case_metrics.get('exactMatch') else 0.0
+    bucket['top3'] += 1.0 if case_metrics.get('top3Match') else 0.0
+    bucket['cer'] += float(case_metrics.get('characterErrorRate') or 0.0)
+    bucket['latencyMs'] += float(case_metrics.get('latencyMs') or 0.0)
+    bucket['acceptedMargin'] += float(case_metrics.get('acceptedMargin') or 0.0)
+
+    plate_iou = case_metrics.get('plateIoU')
+    if isinstance(plate_iou, (int, float)):
+        bucket['plateIoUSum'] += float(plate_iou)
+        bucket['plateIoUCount'] += 1.0
+    plate_recall = case_metrics.get('plateLocalizationRecall')
+    if isinstance(plate_recall, (int, float)):
+        bucket['plateRecallSum'] += float(plate_recall)
+        bucket['plateRecallCount'] += 1.0
+
+    target_iou = case_metrics.get('targetIoU')
+    if isinstance(target_iou, (int, float)):
+        bucket['targetIoUSum'] += float(target_iou)
+        bucket['targetIoUCount'] += 1.0
+    target_recall = case_metrics.get('targetLocalizationRecall')
+    if isinstance(target_recall, (int, float)):
+        bucket['targetRecallSum'] += float(target_recall)
+        bucket['targetRecallCount'] += 1.0
+
+    if case_metrics.get('trackMajorityExactMatch') is not None:
+        bucket['trackCases'] += 1.0
+        bucket['majorityExact'] += 1.0 if case_metrics.get('trackMajorityExactMatch') else 0.0
+    if isinstance(case_metrics.get('predictionSwitchCount'), (int, float)):
+        bucket['predictionSwitchCount'] += float(case_metrics['predictionSwitchCount'])
+    if isinstance(case_metrics.get('sampleExactMatchRate'), (int, float)):
+        bucket['sampleExactMatchRate'] += float(case_metrics['sampleExactMatchRate'])
+        bucket['sampleExactMatchRateCount'] += 1.0
+    if isinstance(case_metrics.get('timeToFirstCorrectMs'), (int, float)):
+        bucket['timeToFirstCorrectMs'] += float(case_metrics['timeToFirstCorrectMs'])
+        bucket['timeToFirstCorrectCount'] += 1.0
+
+
+def _finalize_metric_bucket(bucket: dict[str, float]) -> dict[str, float | None]:
+    total_cases = max(bucket['totalCases'], 1.0)
+    return {
+        'totalCases': int(bucket['totalCases']),
+        'exactMatchRate': bucket['exact'] / total_cases,
+        'top3MatchRate': bucket['top3'] / total_cases,
+        'meanCharacterErrorRate': bucket['cer'] / total_cases,
+        'meanLatencyMs': bucket['latencyMs'] / total_cases,
+        'meanAcceptedMargin': bucket['acceptedMargin'] / total_cases,
+        'meanPlateIoU': bucket['plateIoUSum'] / bucket['plateIoUCount'] if bucket['plateIoUCount'] else None,
+        'plateLocalizationRecall': bucket['plateRecallSum'] / bucket['plateRecallCount'] if bucket['plateRecallCount'] else None,
+        'meanTargetIoU': bucket['targetIoUSum'] / bucket['targetIoUCount'] if bucket['targetIoUCount'] else None,
+        'targetLocalizationRecall': bucket['targetRecallSum'] / bucket['targetRecallCount'] if bucket['targetRecallCount'] else None,
+        'trackMajorityExactMatchRate': bucket['majorityExact'] / bucket['trackCases'] if bucket['trackCases'] else None,
+        'meanPredictionSwitchCount': bucket['predictionSwitchCount'] / bucket['trackCases'] if bucket['trackCases'] else None,
+        'meanSampleExactMatchRate': bucket['sampleExactMatchRate'] / bucket['sampleExactMatchRateCount'] if bucket['sampleExactMatchRateCount'] else None,
+        'meanTimeToFirstCorrectMs': bucket['timeToFirstCorrectMs'] / bucket['timeToFirstCorrectCount'] if bucket['timeToFirstCorrectCount'] else None,
+    }
+
+
+def _evaluate_localization(case_payload: dict[str, Any], response: dict[str, Any]) -> dict[str, Any]:
+    ground_truth_frames = case_payload.get('groundTruthFrames')
+    if isinstance(ground_truth_frames, list) and ground_truth_frames:
+        return _evaluate_interval_localization(
+            response.get('samples') or [],
+            ground_truth_frames,
+            int(case_payload.get('sampleEveryMs') or 120),
+        )
+
+    sample_payload = response.get('sample') if isinstance(response.get('sample'), dict) else None
+    predicted_plate_box = _rect_from_payload(sample_payload.get('plateBox') if sample_payload else None)
+    predicted_target_box = _rect_from_payload(sample_payload.get('targetBox') if sample_payload else None)
+    ground_truth_plate_box = _rect_from_payload(case_payload.get('groundTruthPlateBox') or case_payload.get('markerRect'))
+    ground_truth_target_box = _rect_from_payload(case_payload.get('groundTruthTargetBox') or case_payload.get('selectedTargetBox'))
+
+    plate_iou = predicted_plate_box.intersection_over_union(ground_truth_plate_box) if predicted_plate_box and ground_truth_plate_box else None
+    target_iou = predicted_target_box.intersection_over_union(ground_truth_target_box) if predicted_target_box and ground_truth_target_box else None
+    return {
+        'groundTruthFrameCount': 1 if ground_truth_plate_box or ground_truth_target_box else 0,
+        'matchedFrameCount': 1 if sample_payload is not None else 0,
+        'plateMeanIoU': plate_iou,
+        'plateRecall': 1.0 if plate_iou is not None and plate_iou >= 0.5 else 0.0 if ground_truth_plate_box else None,
+        'targetMeanIoU': target_iou,
+        'targetRecall': 1.0 if target_iou is not None and target_iou >= 0.5 else 0.0 if ground_truth_target_box else None,
+    }
+
+
+def _evaluate_interval_localization(
+    sample_payloads: list[Any],
+    ground_truth_frames: list[Any],
+    tolerance_ms: int,
+) -> dict[str, Any]:
+    matched_frames = 0
+    plate_ious: list[float] = []
+    target_ious: list[float] = []
+    plate_hits = 0
+    target_hits = 0
+
+    for sample_payload in sample_payloads:
+        if not isinstance(sample_payload, dict):
+            continue
+        matched_ground_truth = _match_ground_truth_frame(int(sample_payload.get('timeMs') or 0), ground_truth_frames, tolerance_ms)
+        if matched_ground_truth is None:
+            continue
+        matched_frames += 1
+        predicted_plate_box = _rect_from_payload(sample_payload.get('plateBox'))
+        predicted_target_box = _rect_from_payload(sample_payload.get('targetBox'))
+        ground_truth_plate_box = _rect_from_payload(matched_ground_truth.get('plateBox'))
+        ground_truth_target_box = _rect_from_payload(matched_ground_truth.get('targetBox'))
+
+        if predicted_plate_box and ground_truth_plate_box:
+            plate_iou = predicted_plate_box.intersection_over_union(ground_truth_plate_box)
+            plate_ious.append(plate_iou)
+            if plate_iou >= 0.5:
+                plate_hits += 1
+        if predicted_target_box and ground_truth_target_box:
+            target_iou = predicted_target_box.intersection_over_union(ground_truth_target_box)
+            target_ious.append(target_iou)
+            if target_iou >= 0.5:
+                target_hits += 1
+
+    ground_truth_count = len(ground_truth_frames)
+    return {
+        'groundTruthFrameCount': ground_truth_count,
+        'matchedFrameCount': matched_frames,
+        'plateMeanIoU': (sum(plate_ious) / len(plate_ious)) if plate_ious else None,
+        'plateRecall': (plate_hits / ground_truth_count) if ground_truth_count else None,
+        'targetMeanIoU': (sum(target_ious) / len(target_ious)) if target_ious else None,
+        'targetRecall': (target_hits / ground_truth_count) if ground_truth_count else None,
+    }
+
+
+def _match_ground_truth_frame(time_ms: int, ground_truth_frames: list[Any], tolerance_ms: int) -> dict[str, Any] | None:
+    best_entry: dict[str, Any] | None = None
+    best_distance: int | None = None
+    for entry in ground_truth_frames:
+        if not isinstance(entry, dict):
+            continue
+        distance = abs(int(entry.get('timeMs') or 0) - time_ms)
+        if best_distance is None or distance < best_distance:
+            best_distance = distance
+            best_entry = entry
+    if best_distance is None or best_distance > max(tolerance_ms, 1):
+        return None
+    return best_entry
+
+
+def _evaluate_track_consistency(response: dict[str, Any], expected_text: str) -> dict[str, Any] | None:
+    sample_payloads = [sample for sample in (response.get('samples') or []) if isinstance(sample, dict)]
+    if not sample_payloads:
+        return None
+
+    ranked_texts: list[tuple[int, str]] = []
+    text_counts: dict[str, int] = {}
+    exact_matches = 0
+    for sample in sample_payloads:
+        top_candidate = (sample.get('candidates') or [None])[0]
+        if not isinstance(top_candidate, dict):
+            continue
+        normalized_text = normalize_plate_text(top_candidate.get('text'))
+        if not normalized_text:
+            continue
+        sample_time_ms = int(sample.get('timeMs') or 0)
+        ranked_texts.append((sample_time_ms, normalized_text))
+        text_counts[normalized_text] = text_counts.get(normalized_text, 0) + 1
+        if expected_text and normalized_text == expected_text:
+            exact_matches += 1
+
+    if not ranked_texts:
+        return {
+            'sampleCount': len(sample_payloads),
+            'predictionSwitchCount': 0,
+            'majorityText': '',
+            'majorityExactMatch': False,
+            'sampleExactMatchRate': 0.0,
+            'timeToFirstCorrectMs': None,
+        }
+
+    ranked_texts.sort(key=lambda entry: entry[0])
+    prediction_switch_count = 0
+    for previous, current in zip(ranked_texts, ranked_texts[1:]):
+        if previous[1] != current[1]:
+            prediction_switch_count += 1
+
+    majority_text = max(text_counts.items(), key=lambda entry: (entry[1], len(entry[0])))[0]
+    time_to_first_correct_ms = next((time_ms for time_ms, text in ranked_texts if expected_text and text == expected_text), None)
+    return {
+        'sampleCount': len(sample_payloads),
+        'predictionSwitchCount': prediction_switch_count,
+        'majorityText': majority_text,
+        'majorityExactMatch': bool(expected_text and majority_text == expected_text),
+        'sampleExactMatchRate': exact_matches / max(len(ranked_texts), 1),
+        'timeToFirstCorrectMs': time_to_first_correct_ms,
+    }
+
+
+def _classify_failure_reason(
+    exact_match: bool,
+    accepted_margin: float,
+    localization: dict[str, Any],
+    track_metrics_case: dict[str, Any] | None,
+    response: dict[str, Any],
+) -> str:
+    if exact_match:
+        return 'correct'
+    if isinstance(localization.get('targetRecall'), (int, float)) and float(localization['targetRecall']) <= 0.25:
+        return 'target-missed'
+    if isinstance(localization.get('plateRecall'), (int, float)) and float(localization['plateRecall']) <= 0.25:
+        return 'plate-localization-missed'
+
+    quality_scores = _sample_quality_scores(response)
+    if quality_scores and max(quality_scores) < 0.45:
+        return 'plate-quality-poor'
+    if track_metrics_case and int(track_metrics_case.get('predictionSwitchCount') or 0) >= 2:
+        return 'fusion-unstable'
+    if _has_candidate_disagreement(response, accepted_margin):
+        return 'ocr-disagreement'
+    return 'wrong-text'
+
+
+def _sample_quality_scores(response: dict[str, Any]) -> list[float]:
+    values: list[float] = []
+    sample_payload = response.get('sample')
+    if isinstance(sample_payload, dict):
+        quality_payload = sample_payload.get('quality')
+        if isinstance(quality_payload, dict) and isinstance(quality_payload.get('overallScore'), (int, float)):
+            values.append(float(quality_payload['overallScore']))
+
+    for sample in response.get('samples') or []:
+        if not isinstance(sample, dict):
+            continue
+        quality_payload = sample.get('quality')
+        if isinstance(quality_payload, dict) and isinstance(quality_payload.get('overallScore'), (int, float)):
+            values.append(float(quality_payload['overallScore']))
+    return values
+
+
+def _has_candidate_disagreement(response: dict[str, Any], accepted_margin: float) -> bool:
+    if accepted_margin < 0.08:
+        return True
+
+    observed_texts: set[str] = set()
+    for sample in response.get('samples') or []:
+        if not isinstance(sample, dict):
+            continue
+        top_candidate = (sample.get('candidates') or [None])[0]
+        if not isinstance(top_candidate, dict):
+            continue
+        normalized_text = normalize_plate_text(top_candidate.get('text'))
+        if normalized_text:
+            observed_texts.add(normalized_text)
+    return len(observed_texts) >= 3
+
+
+def _rect_from_payload(payload: Any) -> NormalizedRect | None:
+    if not isinstance(payload, dict):
+        return None
+    return NormalizedRect.from_payload(payload)
+
+
+def _percentile(values: list[float], probability: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    index = min(len(ordered) - 1, max(0, int(round((len(ordered) - 1) * probability))))
+    return float(ordered[index])
+
+
+def _build_confidence_calibration(points: list[tuple[float, bool]], bins: int = 5) -> dict[str, Any]:
+    if not points:
+        return {'expectedCalibrationError': 0.0, 'bins': []}
+
+    buckets = [
+        {
+            'count': 0,
+            'confidenceSum': 0.0,
+            'accuracySum': 0.0,
+            'lowerBound': index / bins,
+            'upperBound': (index + 1) / bins,
+        }
+        for index in range(bins)
+    ]
+
+    for confidence, exact_match in points:
+        bucket_index = min(bins - 1, max(0, int(confidence * bins)))
+        bucket = buckets[bucket_index]
+        bucket['count'] += 1
+        bucket['confidenceSum'] += confidence
+        bucket['accuracySum'] += 1.0 if exact_match else 0.0
+
+    expected_calibration_error = 0.0
+    serialized_bins: list[dict[str, Any]] = []
+    total = len(points)
+    for bucket in buckets:
+        if bucket['count'] == 0:
+            serialized_bins.append({
+                'lowerBound': bucket['lowerBound'],
+                'upperBound': bucket['upperBound'],
+                'count': 0,
+                'meanConfidence': 0.0,
+                'accuracy': 0.0,
+            })
+            continue
+
+        mean_confidence = bucket['confidenceSum'] / bucket['count']
+        accuracy = bucket['accuracySum'] / bucket['count']
+        expected_calibration_error += abs(accuracy - mean_confidence) * (bucket['count'] / total)
+        serialized_bins.append({
+            'lowerBound': bucket['lowerBound'],
+            'upperBound': bucket['upperBound'],
+            'count': bucket['count'],
+            'meanConfidence': mean_confidence,
+            'accuracy': accuracy,
+        })
+
+    return {
+        'expectedCalibrationError': expected_calibration_error,
+        'bins': serialized_bins,
+    }
+
+
+def _safe_metric_average(results: list[dict[str, Any]], parent_key: str, value_key: str) -> float:
+    values: list[float] = []
+    for result in results:
+        parent = result.get(parent_key)
+        if not isinstance(parent, dict):
+            continue
+        value = parent.get(value_key)
+        if isinstance(value, (int, float)):
+            values.append(float(value))
+    return sum(values) / len(values) if values else 0.0
+
+
+def _apply_reliability_selection(
+    candidates: list[PlateCandidate],
+    samples: list[FrameSample],
+    country_hints: list[str],
+    options: AnalysisOptions,
+    interval_mode: bool,
+) -> tuple[list[PlateCandidate], str | None, dict[str, Any]]:
+    if not candidates:
+        return [], None, {
+            'acceptedCandidateId': None,
+            'suggestedCandidateId': None,
+            'fallbackCandidateId': None,
+            'reviewRequired': True,
+            'usedFallback': False,
+            'reasons': ['no-candidate'],
+        }
+
+    ordered_candidates = list(candidates)
+    top_candidate = ordered_candidates[0]
+    fallback_candidate = _best_sample_candidate(samples, country_hints)
+    accepted_margin = max(0.0, top_candidate.confidence - (ordered_candidates[1].confidence if len(ordered_candidates) > 1 else 0.0))
+
+    review_reasons = [] if not options.enable_reliability_gates else _review_reasons(
+        top_candidate,
+        accepted_margin,
+        country_hints,
+        options,
+        interval_mode,
+    )
+    suggested_candidate = top_candidate
+    used_fallback = False
+    if review_reasons and fallback_candidate is not None and fallback_candidate.id != top_candidate.id:
+        top_score = _candidate_reliability_score(top_candidate, country_hints)
+        fallback_score = _candidate_reliability_score(fallback_candidate, country_hints)
+        format_advantage = _plate_format_score(fallback_candidate.text, country_hints) - _plate_format_score(top_candidate.text, country_hints)
+        if fallback_score >= top_score + 0.05 or format_advantage >= 0.2:
+            suggested_candidate = fallback_candidate
+            used_fallback = True
+            review_reasons = [] if not options.enable_reliability_gates else _review_reasons(
+                suggested_candidate,
+                max(0.0, suggested_candidate.confidence - top_candidate.confidence),
+                country_hints,
+                options,
+                interval_mode,
+            )
+
+    if all(candidate.id != suggested_candidate.id for candidate in ordered_candidates):
+        ordered_candidates.insert(0, suggested_candidate)
+    else:
+        ordered_candidates.sort(key=lambda candidate: 0 if candidate.id == suggested_candidate.id else 1)
+
+    review_required = bool(review_reasons)
+    accepted_candidate_id = None if review_required else suggested_candidate.id
+    selection_diagnostics = {
+        'acceptedCandidateId': accepted_candidate_id,
+        'suggestedCandidateId': suggested_candidate.id,
+        'fallbackCandidateId': fallback_candidate.id if fallback_candidate is not None else None,
+        'topCandidateId': top_candidate.id,
+        'reviewRequired': review_required,
+        'usedFallback': used_fallback,
+        'reasons': review_reasons,
+        'acceptedMargin': accepted_margin,
+        'suggestedConfidence': suggested_candidate.confidence,
+        'supportFrameCount': _candidate_support_frame_count(suggested_candidate),
+        'formatScore': _plate_format_score(suggested_candidate.text, country_hints),
+    }
+
+    for candidate in ordered_candidates:
+        candidate.diagnostics = {
+            **(candidate.diagnostics or {}),
+            'selection': {
+                'isAccepted': candidate.id == accepted_candidate_id,
+                'isSuggested': candidate.id == suggested_candidate.id,
+                'reviewRequired': review_required,
+                'usedFallback': used_fallback and candidate.id == suggested_candidate.id,
+                'reasons': review_reasons if candidate.id == suggested_candidate.id else [],
+            },
+        }
+    return ordered_candidates[:8], accepted_candidate_id, selection_diagnostics
+
+
+def _review_reasons(
+    candidate: PlateCandidate,
+    accepted_margin: float,
+    country_hints: list[str],
+    options: AnalysisOptions,
+    interval_mode: bool,
+) -> list[str]:
+    reasons: list[str] = []
+    if candidate.confidence < options.min_accepted_confidence:
+        reasons.append('low-confidence')
+    if accepted_margin < options.min_candidate_margin:
+        reasons.append('low-margin')
+    if interval_mode and _candidate_support_frame_count(candidate) < options.min_interval_support_frames:
+        reasons.append('insufficient-support')
+    if _uses_taiwan_hint(country_hints) and _plate_format_score(candidate.text, country_hints) < 0.65:
+        reasons.append('format-mismatch')
+    return reasons
+
+
+def _best_sample_candidate(samples: list[FrameSample], country_hints: list[str]) -> PlateCandidate | None:
+    best_candidate: PlateCandidate | None = None
+    best_score = 0.0
+    for sample in samples:
+        for candidate in sample.candidates:
+            score = _candidate_reliability_score(candidate, country_hints)
+            if best_candidate is None or score > best_score:
+                best_candidate = candidate
+                best_score = score
+    return best_candidate
+
+
+def _candidate_reliability_score(candidate: PlateCandidate, country_hints: list[str]) -> float:
+    quality_score = candidate.quality.overall_score if candidate.quality is not None else 0.0
+    support_score = min(_candidate_support_frame_count(candidate), 4) / 4.0
+    format_score = _plate_format_score(candidate.text, country_hints)
+    return (
+        (candidate.confidence * 0.58)
+        + (quality_score * 0.20)
+        + (support_score * 0.12)
+        + (format_score * 0.10)
+    )
+
+
+def _candidate_support_frame_count(candidate: PlateCandidate) -> int:
+    diagnostics = candidate.diagnostics or {}
+    support_frames = diagnostics.get('supportFrames')
+    if isinstance(support_frames, list):
+        return len({int(frame) for frame in support_frames if isinstance(frame, (int, float))})
+    if isinstance(support_frames, (int, float)):
+        return max(1, int(support_frames))
+    return 1 if candidate.frame_time_ms is not None else 0
+
+
+def _plate_format_score(text: str | None, country_hints: list[str]) -> float:
+    normalized = normalize_plate_text(text)
+    if not normalized:
+        return 0.0
+    if _uses_taiwan_hint(country_hints):
+        if len(normalized) < 5 or len(normalized) > 7:
+            return 0.2
+        if any(character in {'I', 'O', 'Q'} for character in normalized):
+            return 0.55
+        if normalized[:2].isalpha() and normalized[-4:].isdigit():
+            return 1.0
+        if normalized[:3].isalpha() and normalized[-4:].isdigit() and len(normalized) == 7:
+            return 0.94
+        if normalized[:4].isalpha() and normalized[-3:].isdigit() and len(normalized) == 7:
+            return 0.9
+        if normalized[:3].isdigit() and normalized[-4:].isalpha() and len(normalized) == 7:
+            return 0.82
+        if any(character.isalpha() for character in normalized) and any(character.isdigit() for character in normalized):
+            return 0.68
+        return 0.35
+    return 1.0 if 5 <= len(normalized) <= 8 else 0.5
+
+
+def _uses_taiwan_hint(country_hints: list[str]) -> bool:
+    return any(str(hint).upper() in {'TW', 'TWN', 'TAIWAN'} for hint in country_hints)
+
+
+def _looks_like_plate_roi(rect: NormalizedRect) -> bool:
+    if rect.height <= 0 or rect.width <= 0:
+        return False
+    aspect_ratio = rect.width / max(rect.height, 1e-6)
+    return rect.area() <= 0.12 and 1.1 <= aspect_ratio <= 12.0
 
 
 def build_default_application(runtime_script: Path) -> LprRuntimeApplication:

@@ -18,11 +18,13 @@ from common import (
     BenchmarkSourceSample,
     CCPD_ARCHIVE_NAME,
     CCPD_REPO_ID,
+    DirectoryArchive,
     HARD_CASE_CATEGORIES,
     PLATE_TEXT_PATTERN,
     UC3M_ARCHIVE_CONTENT_URL,
     build_marker_rect,
     default_frame_analysis_options,
+    default_interval_analysis_options,
     parse_ccpd_name,
     quantile,
     quantile_float,
@@ -32,8 +34,8 @@ from common import (
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description='Prepare multi-source public hard-case benchmark manifests from CCPD and UC3M-LP.')
-    parser.add_argument('--datasets', nargs='+', default=['ccpd', 'uc3m-lp'], choices=['ccpd', 'uc3m-lp'], help='Datasets to include in the generated public benchmark.')
+    parser = argparse.ArgumentParser(description='Prepare multi-source hard-case benchmark manifests from public and local datasets.')
+    parser.add_argument('--datasets', nargs='+', default=['ccpd', 'uc3m-lp'], choices=['ccpd', 'uc3m-lp', 'aolp', 'ufpr-alpr'], help='Datasets to include in the generated benchmark.')
     parser.add_argument('--per-category', type=int, default=20, help='How many unique cases to keep per hard-case category across sources.')
     parser.add_argument('--seed', type=int, default=7, help='Deterministic sampling seed.')
     parser.add_argument('--runtime-root', type=Path, default=Path(__file__).resolve().parents[2], help='traffic-lpr-runtime project root.')
@@ -42,14 +44,23 @@ def main() -> int:
     parser.add_argument('--cache-dir', type=Path, default=None, help='Directory for downloaded dataset archives.')
     parser.add_argument('--split-output-dir', type=Path, default=None, help='Directory for development/holdout/challenge split manifests.')
     parser.add_argument('--uc3m-split', choices=['test', 'train', 'all'], default='test', help='Which UC3M split to sample from.')
+    parser.add_argument('--aolp-root', type=Path, default=None, help='Path to the local AOLP dataset root.')
+    parser.add_argument('--aolp-subsets', nargs='+', default=['ac', 'le', 'rp'], choices=['ac', 'le', 'rp'], help='Which AOLP subsets to include.')
+    parser.add_argument('--ufpr-root', type=Path, default=None, help='Path to the local UFPR-ALPR dataset root.')
+    parser.add_argument('--ufpr-split', choices=['training', 'testing', 'validation', 'all'], default='testing', help='Which UFPR split to sample from.')
+    parser.add_argument('--ufpr-video-fps', type=int, default=10, help='Frame rate to use when materializing UFPR track videos for interval benchmarks.')
     args = parser.parse_args()
 
     runtime_root = args.runtime_root.resolve()
     paths = resolve_benchmark_paths(runtime_root)
     cache_dir = (args.cache_dir or paths.cache_root).resolve()
-    output_manifest = (args.output_manifest or (paths.public_multisource_manifest_root / 'all.json')).resolve()
-    output_images = (args.output_images or (paths.dataset_root / 'multisource-hardcases')).resolve()
-    split_output_dir = (args.split_output_dir or paths.public_multisource_manifest_root).resolve()
+    contains_local_datasets = any(dataset in {'aolp', 'ufpr-alpr'} for dataset in args.datasets)
+    default_manifest_root = (paths.local_manifest_root / 'multisource') if contains_local_datasets else paths.public_multisource_manifest_root
+    output_manifest = (args.output_manifest or (default_manifest_root / 'all.json')).resolve()
+    output_images = (args.output_images or (paths.dataset_root / ('local-multisource' if contains_local_datasets else 'multisource-hardcases'))).resolve()
+    split_output_dir = (args.split_output_dir or default_manifest_root).resolve()
+    aolp_root = (args.aolp_root or (runtime_root.parent / 'AOLP')).resolve()
+    ufpr_root = (args.ufpr_root or (runtime_root.parent / 'UFPR-ALPR dataset')).resolve()
 
     archive_sources: dict[str, ArchiveSource] = {}
     all_samples: list[BenchmarkSourceSample] = []
@@ -66,6 +77,18 @@ def main() -> int:
         archive_sources['uc3m-lp'] = archive_source
         all_samples.extend(samples)
         summaries['uc3m-lp'] = summary
+
+    if 'aolp' in args.datasets:
+        archive_source, samples, summary = _load_aolp(aolp_root, [subset.lower() for subset in args.aolp_subsets])
+        archive_sources['aolp'] = archive_source
+        all_samples.extend(samples)
+        summaries['aolp'] = summary
+
+    if 'ufpr-alpr' in args.datasets:
+        archive_source, samples, summary = _load_ufpr(ufpr_root, args.ufpr_split, args.ufpr_video_fps)
+        archive_sources['ufpr-alpr'] = archive_source
+        all_samples.extend(samples)
+        summaries['ufpr-alpr'] = summary
 
     selected = _select_balanced_samples(all_samples, per_category=args.per_category, seed=args.seed)
     manifest = _materialize_manifest(archive_sources, selected, output_images)
@@ -148,6 +171,274 @@ def _load_ccpd(cache_dir: Path) -> tuple[ArchiveSource, list[BenchmarkSourceSamp
     return ArchiveSource(kind='local', location=str(archive_path)), prepared, summary
 
 
+def _load_aolp(root: Path, subsets: list[str]) -> tuple[ArchiveSource, list[BenchmarkSourceSample], dict[str, Any]]:
+    if not root.exists():
+        raise FileNotFoundError(f'AOLP dataset root was not found: {root}')
+
+    raw_samples: list[BenchmarkSourceSample] = []
+    subset_counts: Counter[str] = Counter()
+    skipped = 0
+
+    for subset in subsets:
+        subset_code = subset.upper()
+        subset_dir = root / f'Subset_{subset_code}'
+        image_dir = subset_dir / 'Image'
+        localization_dir = subset_dir / 'groundtruth_localization'
+        recognition_dir = subset_dir / 'groundtruth_recognition'
+        if not image_dir.exists() or not localization_dir.exists() or not recognition_dir.exists():
+            raise FileNotFoundError(f'AOLP subset is incomplete: {subset_dir}')
+
+        image_paths = sorted(
+            image_dir.glob('*.jpg'),
+            key=lambda path: (0, int(path.stem)) if path.stem.isdigit() else (1, path.stem),
+        )
+        for image_path in image_paths:
+            image = cv2.imread(str(image_path))
+            if image is None:
+                skipped += 1
+                continue
+
+            localization_path = localization_dir / f'{image_path.stem}.txt'
+            recognition_path = recognition_dir / f'{image_path.stem}.txt'
+            if not localization_path.exists() or not recognition_path.exists():
+                skipped += 1
+                continue
+
+            bbox = _parse_aolp_bbox(localization_path.read_text(encoding='utf-8', errors='ignore'), image.shape[1], image.shape[0])
+            expected_text = normalize_expected_text(recognition_path.read_text(encoding='utf-8', errors='ignore'))
+            if bbox is None or not expected_text or not PLATE_TEXT_PATTERN.match(expected_text):
+                skipped += 1
+                continue
+
+            brightness = _compute_brightness(image)
+            blur_score = _compute_blur_score(image, bbox)
+            plate_area_ratio = _compute_plate_area_ratio(bbox, image.shape[1], image.shape[0])
+            relative_image_path = image_path.relative_to(root).as_posix()
+            subset_tag = f'subset-{subset.lower()}'
+            subset_counts[subset_tag] += 1
+            raw_samples.append(BenchmarkSourceSample(
+                dataset_key='aolp',
+                dataset_name='AOLP',
+                archive_member=relative_image_path,
+                expected_text=expected_text,
+                bbox=bbox,
+                split=subset_tag,
+                brightness=brightness,
+                blur_score=blur_score,
+                plate_area_ratio=plate_area_ratio,
+                angle_degrees=None,
+                tags=['local-dataset', 'aolp', 'taiwan', subset_tag],
+                country_hints=['TW'],
+                metadata={
+                    'dataset': 'AOLP',
+                    'subset': subset_tag,
+                    'bbox': {'x1': bbox[0], 'y1': bbox[1], 'x2': bbox[2], 'y2': bbox[3]},
+                    'relativeImagePath': relative_image_path,
+                },
+            ))
+
+    thresholds = _build_image_thresholds(raw_samples)
+    for sample in raw_samples:
+        _add_image_hard_case_tags(sample, thresholds)
+
+    summary = {
+        'dataset': 'AOLP',
+        'sampleCount': len(raw_samples),
+        'subsetCounts': dict(subset_counts),
+        'skippedSamples': skipped,
+        'thresholds': thresholds,
+        'sourceRoot': str(root),
+    }
+    return ArchiveSource(kind='filesystem', location=str(root)), raw_samples, summary
+
+
+def _load_ufpr(root: Path, split: str, video_fps: int) -> tuple[ArchiveSource, list[BenchmarkSourceSample], dict[str, Any]]:
+    if not root.exists():
+        raise FileNotFoundError(f'UFPR-ALPR dataset root was not found: {root}')
+
+    split_names = ['training', 'testing', 'validation'] if split == 'all' else [split]
+    raw_samples: list[BenchmarkSourceSample] = []
+    split_counts: Counter[str] = Counter()
+    camera_counts: Counter[str] = Counter()
+    skipped_tracks = 0
+    total_frames = 0
+
+    for split_name in split_names:
+        split_dir = root / split_name
+        if not split_dir.exists():
+            raise FileNotFoundError(f'UFPR split was not found: {split_dir}')
+        track_dirs = sorted((path for path in split_dir.iterdir() if path.is_dir()), key=lambda path: path.name)
+        for track_dir in track_dirs:
+            sample = _build_ufpr_track_sample(root, split_name, track_dir, video_fps)
+            if sample is None:
+                skipped_tracks += 1
+                continue
+            raw_samples.append(sample)
+            split_counts[split_name] += 1
+            total_frames += int(sample.metadata.get('frameCount') or 0)
+            camera_label = str(sample.metadata.get('camera') or 'unknown')
+            camera_counts[camera_label] += 1
+
+    thresholds = _build_image_thresholds(raw_samples)
+    for sample in raw_samples:
+        _add_image_hard_case_tags(sample, thresholds)
+
+    summary = {
+        'dataset': 'UFPR-ALPR',
+        'trackCount': len(raw_samples),
+        'frameCount': total_frames,
+        'split': split,
+        'splitCounts': dict(split_counts),
+        'cameraCounts': dict(camera_counts),
+        'skippedTracks': skipped_tracks,
+        'thresholds': thresholds,
+        'sourceRoot': str(root),
+        'materializedVideoFps': video_fps,
+    }
+    return ArchiveSource(kind='filesystem', location=str(root)), raw_samples, summary
+
+
+def _build_ufpr_track_sample(
+    dataset_root: Path,
+    split_name: str,
+    track_dir: Path,
+    video_fps: int,
+) -> BenchmarkSourceSample | None:
+    frame_paths = sorted(track_dir.glob('*.png'), key=lambda path: path.name)
+    if not frame_paths:
+        return None
+
+    frame_step_ms = max(1, int(round(1000.0 / max(video_fps, 1))))
+    frame_entries: list[dict[str, Any]] = []
+    plate_votes: Counter[str] = Counter()
+
+    for index, image_path in enumerate(frame_paths):
+        image = cv2.imread(str(image_path))
+        if image is None:
+            continue
+
+        annotation_path = image_path.with_suffix('.txt')
+        if not annotation_path.exists():
+            continue
+        parsed = _parse_ufpr_annotation(annotation_path.read_text(encoding='utf-8', errors='ignore'), image.shape[1], image.shape[0])
+        if parsed is None:
+            continue
+
+        brightness = _compute_brightness(image)
+        blur_score = _compute_blur_score(image, parsed['plate_bbox'])
+        plate_area_ratio = _compute_plate_area_ratio(parsed['plate_bbox'], image.shape[1], image.shape[0])
+        angle_degrees = parsed['angle_degrees']
+        time_ms = index * frame_step_ms
+        anchor_score = (
+            blur_score
+            + (plate_area_ratio * 3200.0)
+            - (abs(brightness - 128.0) * 0.15)
+            - ((angle_degrees or 0.0) * 1.2)
+        )
+        frame_member = image_path.relative_to(dataset_root).as_posix()
+        plate_votes[parsed['expected_text']] += 1
+        frame_entries.append({
+            'timeMs': time_ms,
+            'frameMember': frame_member,
+            'plateBBox': parsed['plate_bbox'],
+            'vehicleBBox': parsed['vehicle_bbox'],
+            'brightness': brightness,
+            'blurScore': blur_score,
+            'plateAreaRatio': plate_area_ratio,
+            'angleDegrees': angle_degrees,
+            'expectedText': parsed['expected_text'],
+            'camera': parsed['camera'],
+            'vehicleType': parsed['vehicle_type'],
+            'make': parsed['make'],
+            'model': parsed['model'],
+            'year': parsed['year'],
+            'charBoxes': parsed['char_boxes'],
+            'anchorScore': anchor_score,
+        })
+
+    if not frame_entries:
+        return None
+
+    expected_text = plate_votes.most_common(1)[0][0]
+    anchor_frame = max(frame_entries, key=lambda entry: float(entry['anchorScore']))
+    brightness_values = sorted(float(entry['brightness']) for entry in frame_entries)
+    blur_values = sorted(float(entry['blurScore']) for entry in frame_entries)
+    plate_area_values = sorted(float(entry['plateAreaRatio']) for entry in frame_entries)
+    angle_values = sorted(float(entry['angleDegrees']) for entry in frame_entries if entry['angleDegrees'] is not None)
+    camera_label = str(anchor_frame['camera'] or 'unknown')
+    vehicle_type = str(anchor_frame['vehicleType'] or 'vehicle').lower()
+    track_id = track_dir.name
+
+    return BenchmarkSourceSample(
+        dataset_key='ufpr-alpr',
+        dataset_name='UFPR-ALPR',
+        archive_member=track_dir.relative_to(dataset_root).as_posix(),
+        expected_text=expected_text,
+        bbox=anchor_frame['plateBBox'],
+        split=split_name,
+        brightness=quantile_float(brightness_values, 0.50),
+        blur_score=quantile_float(blur_values, 0.20),
+        plate_area_ratio=quantile_float(plate_area_values, 0.20),
+        angle_degrees=quantile_float(angle_values, 0.80) if angle_values else None,
+        tags=[
+            'local-dataset',
+            'ufpr-alpr',
+            'brazil',
+            'moving-camera',
+            split_name,
+            f'camera-{_slug_token(camera_label)}',
+            vehicle_type if vehicle_type in {'car', 'motorcycle', 'truck', 'bus'} else 'vehicle',
+        ],
+        case_mode='interval',
+        target_bbox=anchor_frame['vehicleBBox'],
+        anchor_time_ms=int(anchor_frame['timeMs']),
+        interval_ms=(int(frame_entries[0]['timeMs']), int(frame_entries[-1]['timeMs'])),
+        sample_every_ms=frame_step_ms,
+        max_samples=len(frame_entries),
+        source_fps=float(video_fps),
+        country_hints=['BR'],
+        metadata={
+            'dataset': 'UFPR-ALPR',
+            'trackId': track_id,
+            'split': split_name,
+            'camera': camera_label,
+            'vehicleType': vehicle_type,
+            'vehicleMake': anchor_frame['make'],
+            'vehicleModel': anchor_frame['model'],
+            'vehicleYear': anchor_frame['year'],
+            'frameRate': video_fps,
+            'frameStepMs': frame_step_ms,
+            'frameCount': len(frame_entries),
+            'trackFrameMembers': [str(entry['frameMember']) for entry in frame_entries],
+            'groundTruthFrames': [
+                {
+                    'timeMs': int(entry['timeMs']),
+                    'frameMember': str(entry['frameMember']),
+                    'expectedText': str(entry['expectedText']),
+                    'plateBox': {
+                        'x1': int(entry['plateBBox'][0]),
+                        'y1': int(entry['plateBBox'][1]),
+                        'x2': int(entry['plateBBox'][2]),
+                        'y2': int(entry['plateBBox'][3]),
+                    },
+                    'targetBox': {
+                        'x1': int(entry['vehicleBBox'][0]),
+                        'y1': int(entry['vehicleBBox'][1]),
+                        'x2': int(entry['vehicleBBox'][2]),
+                        'y2': int(entry['vehicleBBox'][3]),
+                    },
+                    'charBoxes': entry['charBoxes'],
+                }
+                for entry in frame_entries
+            ],
+            'anchorFrame': {
+                'timeMs': int(anchor_frame['timeMs']),
+                'frameMember': str(anchor_frame['frameMember']),
+            },
+        },
+    )
+
+
 def _load_uc3m(split: str) -> tuple[ArchiveSource, list[BenchmarkSourceSample], dict[str, Any]]:
     with RemoteZip(UC3M_ARCHIVE_CONTENT_URL) as archive:
         split_members = _read_uc3m_split_members(archive, split)
@@ -200,21 +491,9 @@ def _load_uc3m(split: str) -> tuple[ArchiveSource, list[BenchmarkSourceSample], 
                 },
             ))
 
-    thresholds = _build_uc3m_thresholds(raw_samples)
+    thresholds = _build_image_thresholds(raw_samples)
     for sample in raw_samples:
-        if sample.blur_score <= thresholds['lowBlurScore']:
-            sample.tags.append('blur')
-        if sample.plate_area_ratio is not None and sample.plate_area_ratio <= thresholds['smallPlateRatio']:
-            sample.tags.append('small-plate')
-        if sample.brightness <= thresholds['lowBrightness']:
-            sample.tags.append('low-light')
-        if sample.brightness >= thresholds['highBrightness']:
-            sample.tags.append('high-exposure')
-        if sample.angle_degrees is not None and sample.angle_degrees >= thresholds['angleDegrees']:
-            sample.tags.append('angle')
-        if sum(1 for category in ['blur', 'angle', 'small-plate', 'low-light', 'high-exposure'] if category in sample.tags) >= 2:
-            sample.tags.append('challenge')
-        sample.tags = sorted(set(sample.tags))
+        _add_image_hard_case_tags(sample, thresholds)
 
     summary = {
         'dataset': 'UC3M-LP',
@@ -225,6 +504,125 @@ def _load_uc3m(split: str) -> tuple[ArchiveSource, list[BenchmarkSourceSample], 
         'archiveAccess': 'remote-range',
     }
     return ArchiveSource(kind='remote', location=UC3M_ARCHIVE_CONTENT_URL), raw_samples, summary
+
+
+def _parse_aolp_bbox(raw_text: str, image_width: int, image_height: int) -> tuple[int, int, int, int] | None:
+    values = [int(round(float(part))) for part in raw_text.replace(',', ' ').split() if part.strip()]
+    if len(values) < 4:
+        return None
+    x1, x2 = sorted((values[0], values[2]))
+    y1, y2 = sorted((values[1], values[3]))
+    return _clamp_bbox((x1, y1, x2, y2), image_width, image_height)
+
+
+def _parse_ufpr_annotation(raw_text: str, image_width: int, image_height: int) -> dict[str, Any] | None:
+    camera = ''
+    vehicle_bbox: tuple[int, int, int, int] | None = None
+    vehicle_type = 'vehicle'
+    make = ''
+    model = ''
+    year = ''
+    expected_text = ''
+    corner_points: list[tuple[float, float]] = []
+    char_boxes: list[dict[str, int]] = []
+
+    for raw_line in raw_text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith('camera:'):
+            camera = line.split(':', 1)[1].strip()
+            continue
+        if line.startswith('position_vehicle:'):
+            values = [int(part) for part in line.split(':', 1)[1].replace(',', ' ').split() if part.strip()]
+            if len(values) >= 4:
+                x, y, width, height = values[:4]
+                vehicle_bbox = _clamp_bbox((x, y, x + width, y + height), image_width, image_height)
+            continue
+        if line.startswith('type:'):
+            vehicle_type = line.split(':', 1)[1].strip().lower() or 'vehicle'
+            continue
+        if line.startswith('make:'):
+            make = line.split(':', 1)[1].strip()
+            continue
+        if line.startswith('model:'):
+            model = line.split(':', 1)[1].strip()
+            continue
+        if line.startswith('year:'):
+            year = line.split(':', 1)[1].strip()
+            continue
+        if line.startswith('plate:'):
+            expected_text = normalize_expected_text(line.split(':', 1)[1].strip())
+            continue
+        if line.startswith('corners:'):
+            for token in line.split(':', 1)[1].split():
+                if ',' not in token:
+                    continue
+                x_value, y_value = token.split(',', 1)
+                try:
+                    corner_points.append((float(x_value), float(y_value)))
+                except ValueError:
+                    continue
+            continue
+        if line.lower().startswith('char '):
+            values = [int(part) for part in line.split(':', 1)[1].replace(',', ' ').split() if part.strip()]
+            if len(values) >= 4:
+                x, y, width, height = values[:4]
+                char_boxes.append({'x': x, 'y': y, 'width': width, 'height': height})
+
+    if vehicle_bbox is None or not expected_text or not corner_points:
+        return None
+
+    xs = [point[0] for point in corner_points]
+    ys = [point[1] for point in corner_points]
+    plate_bbox = _clamp_bbox((int(min(xs)), int(min(ys)), int(max(xs)), int(max(ys))), image_width, image_height)
+    return {
+        'camera': camera,
+        'vehicle_bbox': vehicle_bbox,
+        'vehicle_type': vehicle_type,
+        'make': make,
+        'model': model,
+        'year': year,
+        'expected_text': expected_text,
+        'plate_bbox': plate_bbox,
+        'angle_degrees': _polygon_tilt_degrees(corner_points),
+        'char_boxes': char_boxes,
+    }
+
+
+def _build_image_thresholds(samples: list[BenchmarkSourceSample]) -> dict[str, float]:
+    brightness = sorted(sample.brightness for sample in samples)
+    blur_score = sorted(sample.blur_score for sample in samples)
+    plate_area_ratio = sorted(sample.plate_area_ratio for sample in samples if sample.plate_area_ratio is not None)
+    angles = sorted(sample.angle_degrees for sample in samples if sample.angle_degrees is not None)
+    return {
+        'lowBrightness': quantile_float(brightness, 0.15),
+        'highBrightness': quantile_float(brightness, 0.85),
+        'lowBlurScore': quantile_float(blur_score, 0.15),
+        'smallPlateRatio': quantile_float(plate_area_ratio, 0.15) if plate_area_ratio else 0.0,
+        'angleDegrees': quantile_float(angles, 0.75) if angles else 12.0,
+    }
+
+
+def _add_image_hard_case_tags(sample: BenchmarkSourceSample, thresholds: dict[str, float]) -> None:
+    if sample.blur_score <= thresholds['lowBlurScore']:
+        sample.tags.append('blur')
+    if sample.plate_area_ratio is not None and sample.plate_area_ratio <= thresholds['smallPlateRatio']:
+        sample.tags.append('small-plate')
+    if sample.brightness <= thresholds['lowBrightness']:
+        sample.tags.append('low-light')
+    if sample.brightness >= thresholds['highBrightness']:
+        sample.tags.append('high-exposure')
+    if sample.angle_degrees is not None and sample.angle_degrees >= thresholds['angleDegrees']:
+        sample.tags.append('angle')
+    if sum(1 for category in ['blur', 'angle', 'small-plate', 'low-light', 'high-exposure', 'weather'] if category in sample.tags) >= 2:
+        sample.tags.append('challenge')
+    sample.tags = sorted(set(sample.tags))
+
+
+def _slug_token(value: str) -> str:
+    normalized = ''.join(character.lower() if character.isalnum() else '-' for character in value).strip('-')
+    return normalized or 'unknown'
 
 
 def _resolve_uc3m_image_stem(annotation: dict[str, Any], json_member: str) -> str | None:
@@ -542,36 +940,58 @@ def _materialize_manifest(
         for category, samples in selected.items():
             category_counts[category] = len(samples)
             for index, sample in enumerate(samples, start=1):
-                destination = output_images / sample.dataset_key / Path(sample.archive_member).name
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                if not destination.exists():
-                    destination.write_bytes(archives[sample.dataset_key].read(sample.archive_member))
-
-                image = cv2.imread(str(destination))
-                if image is None:
+                materialized = _materialize_source_asset(sample, archives[sample.dataset_key], output_images)
+                if materialized is None:
                     continue
-                height, width = image.shape[:2]
+                destination, width, height = materialized
                 dataset_counts[sample.dataset_key] += 1
                 split_counts[sample.split] += 1
                 case_tags = sorted(set(sample.tags + [category]))
                 hardness = sample.hardness_score()
                 metadata = dict(sample.metadata)
-                metadata.update({'dominantCategory': category, 'hardnessScore': hardness})
-
-                cases.append({
+                metadata.setdefault('split', sample.split)
+                metadata.update({'dominantCategory': category, 'hardnessScore': hardness, 'sourceMode': sample.case_mode})
+                case_payload: dict[str, Any] = {
                     'id': f'{sample.dataset_key}-{category}-{index:03d}',
-                    'mode': 'frame',
                     'sourcePath': destination.resolve().as_posix(),
-                    'timeMs': 0,
+                    'mode': sample.case_mode,
+                    'timeMs': sample.anchor_time_ms or 0,
                     'markerRect': build_marker_rect(sample.bbox, width, height),
-                    'targetVehicleKind': 'vehicle',
-                    'selectedTargetBox': None,
-                    'countryHints': ['tw', 'es', 'eu'] if sample.dataset_key == 'uc3m-lp' else [],
+                    'targetVehicleKind': str(metadata.get('vehicleType') or 'vehicle'),
+                    'selectedTargetBox': build_marker_rect(sample.target_bbox, width, height),
+                    'countryHints': sample.country_hints or _default_country_hints(sample.dataset_key),
                     'expectedText': sample.expected_text,
                     'tags': case_tags,
-                    'analysisOptions': default_frame_analysis_options(),
                     'metadata': metadata,
-                })
+                }
+                ground_truth_plate_box = build_marker_rect(sample.bbox, width, height)
+                if ground_truth_plate_box is not None:
+                    case_payload['groundTruthPlateBox'] = ground_truth_plate_box
+                ground_truth_target_box = build_marker_rect(sample.target_bbox, width, height)
+                if ground_truth_target_box is not None:
+                    case_payload['groundTruthTargetBox'] = ground_truth_target_box
+
+                if sample.case_mode == 'interval':
+                    interval_start, interval_end = sample.interval_ms or (0, 0)
+                    case_payload.update({
+                        'interval': {'startMs': interval_start, 'endMs': interval_end},
+                        'anchorTimeMs': sample.anchor_time_ms or interval_start,
+                        'sampleEveryMs': sample.sample_every_ms,
+                        'maxSamples': sample.max_samples,
+                        'analysisOptions': default_interval_analysis_options(),
+                    })
+                    ground_truth_frames = _build_ground_truth_frames(metadata.get('groundTruthFrames'), width, height)
+                    if ground_truth_frames:
+                        case_payload['groundTruthFrames'] = ground_truth_frames
+                else:
+                    case_payload.update({
+                        'timeMs': 0,
+                        'targetVehicleKind': 'vehicle',
+                        'selectedTargetBox': None,
+                        'analysisOptions': default_frame_analysis_options(),
+                    })
+
+                cases.append(case_payload)
     finally:
         for archive in archives.values():
             archive.close()
@@ -588,11 +1008,170 @@ def _materialize_manifest(
     }
 
 
+def _materialize_source_asset(
+    sample: BenchmarkSourceSample,
+    archive: Any,
+    output_images: Path,
+) -> tuple[Path, int, int] | None:
+    if sample.case_mode == 'interval':
+        return _materialize_interval_source(sample, archive, output_images)
+    return _materialize_frame_source(sample, archive, output_images)
+
+
+def _materialize_frame_source(
+    sample: BenchmarkSourceSample,
+    archive: Any,
+    output_images: Path,
+) -> tuple[Path, int, int] | None:
+    relative_member = Path(sample.archive_member)
+    destination = output_images / sample.dataset_key / relative_member
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if not destination.exists():
+        destination.write_bytes(archive.read(sample.archive_member))
+
+    image = cv2.imread(str(destination))
+    if image is None:
+        return None
+    height, width = image.shape[:2]
+    return destination, width, height
+
+
+def _materialize_interval_source(
+    sample: BenchmarkSourceSample,
+    archive: Any,
+    output_images: Path,
+) -> tuple[Path, int, int] | None:
+    frame_members = [str(member) for member in (sample.metadata.get('trackFrameMembers') or []) if member]
+    if not frame_members:
+        return None
+
+    first_frame = _decode_archive_image(archive, frame_members[0])
+    if first_frame is None:
+        return None
+    height, width = first_frame.shape[:2]
+
+    track_id = str(sample.metadata.get('trackId') or Path(sample.archive_member).name)
+    output_root = output_images / sample.dataset_key / 'tracks'
+    output_root.mkdir(parents=True, exist_ok=True)
+    mp4_path = output_root / f'{_slug_token(track_id)}.mp4'
+    avi_path = output_root / f'{_slug_token(track_id)}.avi'
+    destination = mp4_path if mp4_path.exists() or not avi_path.exists() else avi_path
+    if not destination.exists():
+        materialized_path = _write_interval_video(archive, frame_members, output_root, track_id, sample.source_fps or 10.0)
+        if materialized_path is None:
+            return None
+        destination = materialized_path
+
+    return destination, width, height
+
+
+def _write_interval_video(
+    archive: Any,
+    frame_members: list[str],
+    output_root: Path,
+    track_id: str,
+    fps: float,
+) -> Path | None:
+    if not frame_members:
+        return None
+
+    first_frame = _decode_archive_image(archive, frame_members[0])
+    if first_frame is None:
+        return None
+
+    frame_height, frame_width = first_frame.shape[:2]
+    stem = _slug_token(track_id)
+    for extension, codec in (('mp4', 'mp4v'), ('avi', 'MJPG')):
+        destination = output_root / f'{stem}.{extension}'
+        writer = cv2.VideoWriter(
+            str(destination),
+            cv2.VideoWriter_fourcc(*codec),
+            float(max(fps, 1.0)),
+            (frame_width, frame_height),
+        )
+        if not writer.isOpened():
+            writer.release()
+            continue
+
+        try:
+            writer.write(first_frame)
+            for frame_member in frame_members[1:]:
+                frame = _decode_archive_image(archive, frame_member)
+                if frame is None:
+                    continue
+                if frame.shape[1] != frame_width or frame.shape[0] != frame_height:
+                    frame = cv2.resize(frame, (frame_width, frame_height), interpolation=cv2.INTER_LANCZOS4)
+                writer.write(frame)
+        finally:
+            writer.release()
+
+        if destination.exists() and destination.stat().st_size > 0:
+            return destination
+
+    return None
+
+
+def _decode_archive_image(archive: Any, member_name: str) -> Any | None:
+    buffer = np.frombuffer(archive.read(member_name), dtype=np.uint8)
+    return cv2.imdecode(buffer, cv2.IMREAD_COLOR)
+
+
+def _default_country_hints(dataset_key: str) -> list[str]:
+    if dataset_key == 'aolp':
+        return ['TW']
+    if dataset_key == 'uc3m-lp':
+        return ['ES', 'EU']
+    if dataset_key == 'ufpr-alpr':
+        return ['BR']
+    return []
+
+
+def _build_ground_truth_frames(entries: Any, width: int, height: int) -> list[dict[str, Any]]:
+    frames: list[dict[str, Any]] = []
+    if not isinstance(entries, list):
+        return frames
+
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        frame_payload: dict[str, Any] = {
+            'timeMs': int(entry.get('timeMs') or 0),
+            'expectedText': str(entry.get('expectedText') or ''),
+        }
+        if entry.get('frameMember'):
+            frame_payload['frameMember'] = str(entry['frameMember'])
+
+        plate_bbox = _bbox_from_mapping(entry.get('plateBox'))
+        target_bbox = _bbox_from_mapping(entry.get('targetBox'))
+        if plate_bbox is not None:
+            frame_payload['plateBox'] = build_marker_rect(plate_bbox, width, height)
+        if target_bbox is not None:
+            frame_payload['targetBox'] = build_marker_rect(target_bbox, width, height)
+        if isinstance(entry.get('charBoxes'), list):
+            frame_payload['charBoxes'] = entry['charBoxes']
+        frames.append(frame_payload)
+    return frames
+
+
+def _bbox_from_mapping(value: Any) -> tuple[int, int, int, int] | None:
+    if not isinstance(value, dict):
+        return None
+    required_keys = ('x1', 'y1', 'x2', 'y2')
+    if not all(key in value for key in required_keys):
+        return None
+    try:
+        return tuple(int(value[key]) for key in required_keys)
+    except (TypeError, ValueError):
+        return None
+
+
 def _open_archive(source: ArchiveSource) -> Any:
     if source.kind == 'local':
         return ZipFile(source.location)
     if source.kind == 'remote':
         return RemoteZip(source.location)
+    if source.kind == 'filesystem':
+        return DirectoryArchive(source.location)
     raise ValueError(f'Unsupported archive source kind: {source.kind}')
 
 

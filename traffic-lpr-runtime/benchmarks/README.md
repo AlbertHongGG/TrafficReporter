@@ -33,6 +33,14 @@ Suggested benchmark splits:
 
 The runtime returns per-case exact match, top-3 match, and character error rate. Use those three together; exact match alone hides whether you are close or far from the right answer.
 
+The benchmark runner now also reports:
+
+- plate / target localization recall and mean IoU when a manifest includes ground-truth boxes
+- confidence calibration bins plus expected calibration error
+- accepted-candidate margin and p50 / p95 latency
+- interval-track stability signals such as prediction switch count, majority-vote exact match, and time-to-first-correct
+- failure taxonomy buckets such as `target-missed`, `plate-localization-missed`, `ocr-disagreement`, and `fusion-unstable`
+
 ## Public Dataset Workflow
 
 For a repeatable public hard-case benchmark that does not depend on your own footage, prepare a CCPD-based frame benchmark with:
@@ -95,3 +103,33 @@ Use the split manifests when you want to separate daily iteration from the harde
 cd traffic-lpr-runtime
 .\.venv\Scripts\python.exe -m traffic_lpr_runtime benchmark-run < benchmarks\manifests\public\multisource\development.json
 ```
+
+## Local AOLP + UFPR Workflow
+
+When the full local datasets already exist in the workspace root under `AOLP/` and `UFPR-ALPR dataset/`, generate a mixed local benchmark with:
+
+```powershell
+cd traffic-lpr-runtime
+.\.venv\Scripts\python.exe benchmarks\scripts\prepare_multisource_benchmark.py --datasets aolp ufpr-alpr --per-category 12 --ufpr-split testing
+```
+
+This local workflow:
+
+- parses AOLP `Subset_AC|LE|RP` images plus localization / recognition text files directly from disk
+- preserves AOLP subset identity as `subset-ac`, `subset-le`, and `subset-rp` instead of flattening them into one score
+- materializes UFPR tracks into short local interval videos under `.runtime/benchmarks/datasets/local-multisource/ufpr-alpr/tracks/`
+- emits machine-local manifests under `.runtime/benchmarks/manifests/local/multisource/`
+- writes `groundTruthPlateBox`, `groundTruthTargetBox`, and `groundTruthFrames` into the manifest so `benchmark-run` can score localization and interval stability
+
+Run the resulting suite with:
+
+```powershell
+cd traffic-lpr-runtime
+.\.venv\Scripts\python.exe -m traffic_lpr_runtime benchmark-run < .runtime\benchmarks\manifests\local\multisource\all.json
+```
+
+Recommended usage:
+
+- treat AOLP as the Taiwan-primary OCR / localization gate
+- treat UFPR-ALPR as the moving-camera tracking / fusion reliability gate
+- compare `development`, `holdout`, and `challenge` manifests separately instead of only watching the merged average

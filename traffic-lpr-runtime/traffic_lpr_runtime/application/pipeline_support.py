@@ -37,6 +37,10 @@ class AnalysisOptions:
     tracker_low_confidence: float = 0.15
     max_tracking_gap: int = 3
     min_alignment_score: float = 0.05
+    enable_reliability_gates: bool = True
+    min_accepted_confidence: float = 0.62
+    min_candidate_margin: float = 0.08
+    min_interval_support_frames: int = 2
 
     @classmethod
     def from_payload(cls, payload: dict[str, Any] | None) -> 'AnalysisOptions':
@@ -57,6 +61,10 @@ class AnalysisOptions:
             tracker_low_confidence=float(raw.get('trackerLowConfidence') or 0.15),
             max_tracking_gap=max(1, min(int(raw.get('maxTrackingGap') or 3), 8)),
             min_alignment_score=float(raw.get('minAlignmentScore') or 0.05),
+            enable_reliability_gates=raw.get('enableReliabilityGates', True) is not False,
+            min_accepted_confidence=float(raw.get('minAcceptedConfidence') or 0.62),
+            min_candidate_margin=float(raw.get('minCandidateMargin') or 0.08),
+            min_interval_support_frames=max(1, min(int(raw.get('minIntervalSupportFrames') or 2), 8)),
         )
 
     def resolve_artifact_root(self, runtime_root: Path, suffix: str | None = None) -> Path | None:
@@ -93,6 +101,10 @@ class AnalysisOptions:
             'trackerLowConfidence': self.tracker_low_confidence,
             'maxTrackingGap': self.max_tracking_gap,
             'minAlignmentScore': self.min_alignment_score,
+            'enableReliabilityGates': self.enable_reliability_gates,
+            'minAcceptedConfidence': self.min_accepted_confidence,
+            'minCandidateMargin': self.min_candidate_margin,
+            'minIntervalSupportFrames': self.min_interval_support_frames,
         }
 
 
@@ -175,7 +187,8 @@ class PlatePreprocessor:
         if frame is None or plate_box is None:
             return None
 
-        original_image = crop_image(frame, plate_box)
+        ocr_crop_box = self._expand_plate_crop_box(frame, plate_box)
+        original_image = crop_image(frame, ocr_crop_box)
         if original_image is None or getattr(original_image, 'size', 0) == 0:
             return None
 
@@ -208,6 +221,8 @@ class PlatePreprocessor:
             'rectification': rectification,
             'restoreApplied': restored_image is not None,
             'restoration': restoration,
+            'ocrCropBox': ocr_crop_box.to_payload(),
+            'sourcePlateBox': plate_box.to_payload(),
             'originalShape': list(original_image.shape[:2]),
             'workingShape': list(working_image.shape[:2]),
             'artifacts': artifact_paths,
@@ -225,6 +240,36 @@ class PlatePreprocessor:
             artifact_paths=artifact_paths,
             diagnostics=diagnostics,
         )
+
+    def _expand_plate_crop_box(self, frame: Any, plate_box: NormalizedRect) -> NormalizedRect:
+        if frame is None or getattr(frame, 'shape', None) is None:
+            return plate_box
+
+        frame_height, frame_width = frame.shape[:2]
+        if frame_height <= 0 or frame_width <= 0:
+            return plate_box
+
+        pixel_width = plate_box.width * frame_width
+        pixel_height = plate_box.height * frame_height
+
+        width_pad = max(plate_box.width * 0.18, 10.0 / frame_width)
+        height_pad = max(plate_box.height * 0.6, 6.0 / frame_height)
+
+        if pixel_height < 14:
+            width_pad = max(width_pad, plate_box.width * 0.4, 22.0 / frame_width)
+            height_pad = max(height_pad, plate_box.height * 2.6, 18.0 / frame_height)
+        elif pixel_height < 24:
+            width_pad = max(width_pad, plate_box.width * 0.26, 14.0 / frame_width)
+            height_pad = max(height_pad, plate_box.height * 1.25, 10.0 / frame_height)
+
+        if pixel_width < 72:
+            width_pad = max(width_pad, 18.0 / frame_width)
+
+        x1 = clamp(plate_box.x - width_pad, 0.0, 1.0)
+        y1 = clamp(plate_box.y - height_pad, 0.0, 1.0)
+        x2 = clamp(plate_box.x + plate_box.width + width_pad, min(1.0, x1 + (1.0 / frame_width)), 1.0)
+        y2 = clamp(plate_box.y + plate_box.height + height_pad, min(1.0, y1 + (1.0 / frame_height)), 1.0)
+        return NormalizedRect(x=x1, y=y1, width=x2 - x1, height=y2 - y1)
 
     def _persist_artifacts(
         self,

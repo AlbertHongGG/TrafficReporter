@@ -280,18 +280,18 @@ class FastAlprPlateRecognizer:
                     _nested_get(payload, 'detection', 'confidence'),
                 )
             )
-            candidate_box = _normalize_candidate_box(
+            local_candidate_box = _normalize_candidate_box(
                 _first_present(
                     payload.get('box'),
                     payload.get('bbox'),
                     payload.get('xyxy'),
                     _nested_get(payload, 'detection', 'bounding_box'),
                 ),
-                crop_box,
                 frame_width,
                 frame_height,
             )
-            quality = self._quality_scorer.score(image, candidate_box)
+            candidate_box = _translate_rect_from_crop(local_candidate_box, crop_box) if local_candidate_box and crop_box else local_candidate_box
+            quality = self._quality_scorer.score(image, local_candidate_box)
             raw_confidence = _first_present(
                 payload.get('ocr_confidence'),
                 _nested_get(payload, 'ocr', 'confidence'),
@@ -514,7 +514,6 @@ def _taiwan_plate_prior(text: str) -> float:
 
 def _normalize_candidate_box(
     raw_box: Any,
-    crop_box: NormalizedRect | None,
     frame_width: int,
     frame_height: int,
 ) -> NormalizedRect | None:
@@ -543,19 +542,5 @@ def _normalize_candidate_box(
     y1 = float(y1)
     x2 = float(x2)
     y2 = float(y2)
-
-    if crop_box:
-        crop_x = crop_box.x * frame_width
-        crop_y = crop_box.y * frame_height
-        crop_width = crop_box.width * frame_width
-        crop_height = crop_box.height * frame_height
-        return NormalizedRect.from_xyxy(
-            crop_x + x1,
-            crop_y + y1,
-            crop_x + min(crop_width, x2),
-            crop_y + min(crop_height, y2),
-            frame_width,
-            frame_height,
-        )
 
     return NormalizedRect.from_xyxy(x1, y1, x2, y2, frame_width, frame_height)

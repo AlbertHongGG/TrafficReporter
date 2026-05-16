@@ -69,6 +69,7 @@ import {
 } from '../application/plateWindow';
 import { emitPlateWindowSession, openPlateWindow } from '../infrastructure/plateWindowApi';
 import type {
+  LprPlateCandidate,
   LprRuntimeStatus,
   LprTargetTrack,
   LprTrackedRegion,
@@ -181,6 +182,67 @@ function defaultLprEvidenceFileName(fileState: EditorFileState, playheadMs: numb
   const timeLabel = formatTransportTime(playheadMs).replace(/[:.]/g, '-');
   const candidateLabel = candidateText ? `_${candidateText}` : '';
   return replaceExtension(baseName, `${timeLabel}${candidateLabel}.json`);
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+function readLprSelectionDiagnostics(diagnostics: unknown) {
+  const root = asRecord(diagnostics);
+  const selection = asRecord(root?.selection);
+  const reasons = Array.isArray(selection?.reasons)
+    ? selection.reasons.filter((reason): reason is string => typeof reason === 'string')
+    : [];
+  return {
+    reviewRequired: selection?.reviewRequired === true,
+    acceptedCandidateId: typeof selection?.acceptedCandidateId === 'string' ? selection.acceptedCandidateId : null,
+    suggestedCandidateId: typeof selection?.suggestedCandidateId === 'string' ? selection.suggestedCandidateId : null,
+    reasons,
+  };
+}
+
+function formatLprReviewReason(reason: string) {
+  switch (reason) {
+    case 'low-confidence':
+      return 'low confidence';
+    case 'low-margin':
+      return 'small margin';
+    case 'insufficient-support':
+      return 'weak multi-frame support';
+    case 'format-mismatch':
+      return 'format mismatch';
+    case 'no-candidate':
+      return 'no candidate';
+    default:
+      return reason.replace(/-/g, ' ');
+  }
+}
+
+function buildLprCompletionDetail(
+  candidates: LprPlateCandidate[],
+  acceptedCandidateId: string | null | undefined,
+  diagnostics: unknown,
+) {
+  const selection = readLprSelectionDiagnostics(diagnostics);
+  const suggestedCandidate = candidates.find((candidate) => candidate.id === selection.suggestedCandidateId)
+    ?? candidates[0]
+    ?? null;
+  if (!suggestedCandidate) {
+    return 'No confident plate candidate.';
+  }
+
+  if (selection.reviewRequired) {
+    const reasonLabel = selection.reasons.map(formatLprReviewReason).join(', ') || 'manual review required';
+    return `Suggested ${suggestedCandidate.text}, ${reasonLabel}.`;
+  }
+
+  const acceptedCandidate = candidates.find((candidate) => candidate.id === (acceptedCandidateId ?? selection.acceptedCandidateId))
+    ?? suggestedCandidate;
+  return `Accepted ${acceptedCandidate.text}`;
 }
 
 function buildTargetTracksFromDetections(detections: LprTrackedRegion[]): LprTargetTrack[] {
@@ -325,9 +387,11 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       .filter((entry): entry is { track: LprTargetTrack; frame: LprTrackedRegion } => Boolean(entry.frame)),
     [deferredOverlayPlayheadMs, lprState.targetTracks],
   );
-  const lprTopCandidate = lprState.candidates.find((candidate) => candidate.id === lprState.acceptedCandidateId)
-    ?? lprState.candidates[0]
-    ?? null;
+  const lprAcceptedCandidate = useMemo(
+    () => lprState.candidates.find((candidate) => candidate.id === lprState.acceptedCandidateId) ?? null,
+    [lprState.acceptedCandidateId, lprState.candidates],
+  );
+  const lprTopCandidate = lprAcceptedCandidate ?? lprState.candidates[0] ?? null;
   const canAnalyzeRange = Boolean(activeFile && !lprBusy && lprSelectedTrack && lprState.interval);
 
   useEffect(() => {
@@ -1200,8 +1264,9 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       dispatch({ type: 'set-lpr-target-tracks', targetTracks: buildTargetTracksFromDetections(response.detections) });
       dispatch({ type: 'set-lpr-samples', samples: response.sample ? [response.sample] : [] });
       dispatch({ type: 'set-lpr-candidates', candidates: response.candidates });
-      dispatch({ type: 'accept-lpr-candidate', candidateId: response.candidates[0]?.id ?? null });
+      dispatch({ type: 'accept-lpr-candidate', candidateId: response.acceptedCandidateId ?? null });
       if (response.candidates.length > 0) {
+        const completionDetail = buildLprCompletionDetail(response.candidates, response.acceptedCandidateId, response.diagnostics);
         dispatch({
           type: 'append-lpr-history',
           entry: {
@@ -1209,9 +1274,9 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
             createdAt: new Date().toISOString(),
             interval: null,
             targetTrackId: response.detections[0]?.id ?? null,
-            acceptedCandidateId: response.candidates[0]?.id ?? null,
+            acceptedCandidateId: response.acceptedCandidateId ?? null,
             candidates: response.candidates,
-            summary: response.candidates[0]?.text ?? 'Frame analysis',
+            summary: completionDetail,
           },
         });
       }
@@ -1219,9 +1284,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         status: 'completed',
         progress: 1,
         stage: 'Frame',
-        detail: response.candidates[0]
-          ? `Best candidate ${response.candidates[0].text}`
-          : 'No confident plate candidate.',
+        detail: buildLprCompletionDetail(response.candidates, response.acceptedCandidateId, response.diagnostics),
       });
     } catch (error) {
       log.error('Frame analysis failed.', serializeError(error));
@@ -1300,7 +1363,8 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       dispatch({ type: 'set-lpr-target-tracks', targetTracks: response.targetTracks });
       dispatch({ type: 'set-lpr-samples', samples: response.samples });
       dispatch({ type: 'set-lpr-candidates', candidates: response.candidates });
-      dispatch({ type: 'accept-lpr-candidate', candidateId: response.acceptedCandidateId ?? response.candidates[0]?.id ?? null });
+      dispatch({ type: 'accept-lpr-candidate', candidateId: response.acceptedCandidateId ?? null });
+      const intervalDetail = buildLprCompletionDetail(response.candidates, response.acceptedCandidateId, response.diagnostics) ?? response.summary;
       dispatch({
         type: 'append-lpr-history',
         entry: {
@@ -1308,9 +1372,9 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
           createdAt: new Date().toISOString(),
           interval,
           targetTrackId: response.targetTracks[0]?.id ?? null,
-          acceptedCandidateId: response.acceptedCandidateId ?? response.candidates[0]?.id ?? null,
+          acceptedCandidateId: response.acceptedCandidateId ?? null,
           candidates: response.candidates,
-          summary: response.summary,
+          summary: intervalDetail,
         },
       });
       dispatch({ type: 'set-lpr-mode', workflowMode: response.candidates.length > 0 ? 'review' : 'target' });
@@ -1318,7 +1382,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         status: 'completed',
         progress: 1,
         stage: 'Interval',
-        detail: response.summary,
+        detail: intervalDetail,
       });
     } catch (error) {
       log.error('Range analysis failed.', serializeError(error));
@@ -1362,7 +1426,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         markerRect: activeFile.markerRect,
         interval: lprState.interval,
         targetTrack: lprSelectedTrack,
-        acceptedCandidate: lprTopCandidate,
+        acceptedCandidate: lprAcceptedCandidate,
         candidates: lprState.candidates,
         samples: lprState.samples,
       });

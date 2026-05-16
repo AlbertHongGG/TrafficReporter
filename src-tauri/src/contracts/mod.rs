@@ -152,6 +152,10 @@ pub struct LprAnalysisOptionsPayload {
     pub tracker_low_confidence: Option<f64>,
     pub max_tracking_gap: Option<u32>,
     pub min_alignment_score: Option<f64>,
+    pub enable_reliability_gates: Option<bool>,
+    pub min_accepted_confidence: Option<f64>,
+    pub min_candidate_margin: Option<f64>,
+    pub min_interval_support_frames: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -200,6 +204,7 @@ pub struct LprFrameAnalysisResponsePayload {
     pub detections: Vec<LprTrackedRegionPayload>,
     pub sample: Option<LprFrameSamplePayload>,
     pub candidates: Vec<LprPlateCandidatePayload>,
+    pub accepted_candidate_id: Option<String>,
     pub runtime: LprRuntimeStatusPayload,
     pub diagnostics: Option<Value>,
 }

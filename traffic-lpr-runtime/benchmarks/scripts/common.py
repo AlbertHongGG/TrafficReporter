@@ -27,6 +27,7 @@ class BenchmarkPaths:
     template_root: Path
     public_manifest_root: Path
     public_multisource_manifest_root: Path
+    local_manifest_root: Path
     runtime_benchmark_root: Path
     cache_root: Path
     dataset_root: Path
@@ -65,6 +66,14 @@ class BenchmarkSourceSample:
     plate_area_ratio: float | None
     angle_degrees: float | None
     tags: list[str]
+    case_mode: str = 'frame'
+    target_bbox: tuple[int, int, int, int] | None = None
+    anchor_time_ms: int | None = None
+    interval_ms: tuple[int, int] | None = None
+    sample_every_ms: int | None = None
+    max_samples: int | None = None
+    source_fps: float | None = None
+    country_hints: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -106,6 +115,7 @@ def resolve_benchmark_paths(runtime_root: Path) -> BenchmarkPaths:
         template_root=manifest_root / 'templates',
         public_manifest_root=manifest_root / 'public',
         public_multisource_manifest_root=manifest_root / 'public' / 'multisource',
+        local_manifest_root=runtime_benchmark_root / 'manifests' / 'local',
         runtime_benchmark_root=runtime_benchmark_root,
         cache_root=runtime_benchmark_root / 'cache',
         dataset_root=runtime_benchmark_root / 'datasets',
@@ -124,6 +134,18 @@ def default_frame_analysis_options() -> dict[str, Any]:
     }
 
 
+def default_interval_analysis_options() -> dict[str, Any]:
+    return {
+        'persistArtifacts': False,
+        'trackerMode': 'botsort',
+        'fusionMode': 'aligned-char',
+        'restorationMode': 'mambairv2',
+        'enableRectification': True,
+        'enableEnhancement': True,
+        'enableRecognizerComparison': True,
+    }
+
+
 def build_marker_rect(bbox: tuple[int, int, int, int] | None, width: int, height: int) -> dict[str, float] | None:
     if bbox is None:
         return None
@@ -134,6 +156,17 @@ def build_marker_rect(bbox: tuple[int, int, int, int] | None, width: int, height
         'width': max(0.0, min((x2 - x1) / max(width, 1), 1.0)),
         'height': max(0.0, min((y2 - y1) / max(height, 1), 1.0)),
     }
+
+
+class DirectoryArchive:
+    def __init__(self, root: str | Path) -> None:
+        self._root = Path(root)
+
+    def read(self, member_name: str) -> bytes:
+        return (self._root / member_name).read_bytes()
+
+    def close(self) -> None:
+        return None
 
 
 def parse_ccpd_name(file_name: str) -> CcpdSample | None:

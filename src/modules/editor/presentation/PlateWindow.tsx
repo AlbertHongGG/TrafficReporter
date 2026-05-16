@@ -175,6 +175,52 @@ function evidenceCandidates(sample: LprFrameSample) {
   return sample.candidates.slice(0, 3);
 }
 
+function candidateSelection(candidate: LprPlateCandidate | null | undefined) {
+  const diagnostics = asRecord(candidate?.diagnostics);
+  const selection = asRecord(diagnostics?.selection);
+  const reasons = Array.isArray(selection?.reasons)
+    ? selection.reasons.filter((reason): reason is string => typeof reason === 'string')
+    : [];
+  return {
+    isAccepted: selection?.isAccepted === true,
+    isSuggested: selection?.isSuggested === true,
+    reviewRequired: selection?.reviewRequired === true,
+    reasons,
+  };
+}
+
+function formatReviewReason(reason: string) {
+  switch (reason) {
+    case 'low-confidence':
+      return 'low confidence';
+    case 'low-margin':
+      return 'small margin';
+    case 'insufficient-support':
+      return 'weak support';
+    case 'format-mismatch':
+      return 'format mismatch';
+    case 'no-candidate':
+      return 'no candidate';
+    default:
+      return reason.replace(/-/g, ' ');
+  }
+}
+
+function candidateBadgeLabel(candidate: LprPlateCandidate, acceptedCandidateId: string | null) {
+  const selection = candidateSelection(candidate);
+  const confidenceLabel = formatConfidence(candidate.confidence);
+  if (selection.reviewRequired && selection.isSuggested && acceptedCandidateId === null) {
+    return `${confidenceLabel} Review`;
+  }
+  if (selection.isAccepted || candidate.id === acceptedCandidateId) {
+    return `${confidenceLabel} Accepted`;
+  }
+  if (selection.isSuggested) {
+    return `${confidenceLabel} Suggested`;
+  }
+  return confidenceLabel;
+}
+
 export const PlateWindow: React.FC = () => {
   const [snapshot, setSnapshot] = React.useState<PlateWindowSessionSnapshot | null>(null);
   const [countryHintsDraft, setCountryHintsDraft] = React.useState('');
@@ -423,21 +469,28 @@ export const PlateWindow: React.FC = () => {
                   {activeTab === 'candidates' && (
                     <motion.div key="candidates" variants={tabContentVariants} initial="hidden" animate="show" exit="exit" className={styles.listContainer}>
                       {lprState.candidates.length === 0 && <div className={styles.emptyInline}>No candidates discovered.</div>}
-                      {lprState.candidates.map((candidate) => (
-                        <motion.button
-                          layout
-                          variants={listItemVariants}
-                          whileTap={{ scale: 0.98 }}
-                          key={candidate.id}
-                          type="button"
-                          className={`${styles.listItemBtn} ${candidate.id === lprState.acceptedCandidateId ? styles.listItemBtnActive : ''}`}
-                          onClick={() => void sendAction({ type: 'accept-candidate', candidateId: candidate.id })}
-                        >
-                          <span className={styles.listItemMainText}>{candidate.text}</span>
-                          <span className={styles.listItemBadge}>{formatConfidence(candidate.confidence)}</span>
-                          {candidate.id === lprState.acceptedCandidateId && <motion.div layoutId="activeCandidate" className={styles.activeListItemGlow} />}
-                        </motion.button>
-                      ))}
+                      {lprState.candidates.map((candidate) => {
+                        const selection = candidateSelection(candidate);
+                        const isActive = candidate.id === lprState.acceptedCandidateId || (lprState.acceptedCandidateId === null && selection.isSuggested);
+                        return (
+                          <motion.button
+                            layout
+                            variants={listItemVariants}
+                            whileTap={{ scale: 0.98 }}
+                            key={candidate.id}
+                            type="button"
+                            className={`${styles.listItemBtn} ${isActive ? styles.listItemBtnActive : ''}`}
+                            onClick={() => void sendAction({ type: 'accept-candidate', candidateId: candidate.id })}
+                          >
+                            <span className={styles.listItemMainText}>{candidate.text}</span>
+                            <span className={styles.listItemBadge}>{candidateBadgeLabel(candidate, lprState.acceptedCandidateId)}</span>
+                            {isActive && <motion.div layoutId="activeCandidate" className={styles.activeListItemGlow} />}
+                          </motion.button>
+                        );
+                      })}
+                      {topCandidate && candidateSelection(topCandidate).reviewRequired && lprState.acceptedCandidateId === null && (
+                        <div className={styles.emptyInline}>Review needed: {candidateSelection(topCandidate).reasons.map(formatReviewReason).join(', ') || 'manual confirmation required'}.</div>
+                      )}
                     </motion.div>
                   )}
 

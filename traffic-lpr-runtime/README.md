@@ -79,12 +79,23 @@ Start by copying [benchmarks/manifests/templates/sample-manifest.json](benchmark
 
 The benchmark output includes per-case exact match, top-3 match, and character error rate so you can compare tracker / fusion / restoration changes against the same hard-case set.
 
+The benchmark output now also includes localization recall / IoU when ground-truth boxes are present, accepted-candidate margin, confidence-calibration bins, failure-taxonomy summaries, interval track-consistency metrics, and p50 / p95 latency.
+
 If you want a public benchmark set that does not depend on your own clips, see [benchmarks/README.md](benchmarks/README.md) and run either:
 
 - `benchmarks/scripts/prepare_public_benchmark.py` for the existing CCPD-only hard-case manifest
 - `benchmarks/scripts/prepare_multisource_benchmark.py --datasets ccpd uc3m-lp` for a more diverse public benchmark that adds UC3M-LP as a European counterweight
 
 The UC3M-LP path uses HTTP range reads against the published Zenodo archive, so the generator can sample real cases without forcing a full archive download before manifest creation.
+
+If you already have local AOLP and UFPR-ALPR datasets in the workspace root, you can fold them into the same generator:
+
+```powershell
+cd traffic-lpr-runtime
+.\.venv\Scripts\python.exe benchmarks\scripts\prepare_multisource_benchmark.py --datasets aolp ufpr-alpr --per-category 12 --ufpr-split testing
+```
+
+That command writes machine-local manifests under `.runtime/benchmarks/manifests/local/multisource/` and materializes any needed UFPR interval videos under `.runtime/benchmarks/datasets/local-multisource/`.
 
 ## Evidence Export
 
@@ -96,3 +107,14 @@ The desktop export action now writes an evidence bundle instead of only a single
 - the top-level snapshot JSON you chose from the export dialog
 
 This makes it possible to review not only the final string, but also which frame(s) supported that decision and what the preprocessing stack produced for each one.
+
+## Reliability Gates
+
+Frame and interval analysis now apply reliability gates before auto-accepting a candidate. The runtime can keep a candidate as a suggested result while leaving `acceptedCandidateId` empty when any of these checks fail:
+
+- low accepted confidence
+- low margin versus the next candidate
+- insufficient multi-frame support for interval results
+- Taiwan-format mismatch when `countryHints` prefer Taiwan
+
+When this happens, diagnostics include a `selection` block with the suggested candidate, fallback usage, and review reasons. The desktop UI uses that information to surface review-needed cases instead of silently treating the first candidate as accepted.
