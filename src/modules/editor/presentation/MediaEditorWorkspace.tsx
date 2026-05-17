@@ -46,6 +46,7 @@ import {
   type VideoMarkerRect,
 } from '../domain/model';
 import { getLprSessionByFileId } from '../domain/analysisState';
+import { resolveLprAnalysisTargetVehicleKind } from '../domain/lprState';
 import {
   buildEditorAsset,
   exportFrameImage,
@@ -377,6 +378,10 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     [lprState.acceptedCandidateId, lprState.candidates],
   );
   const lprTopCandidate = lprAcceptedCandidate ?? lprState.candidates[0] ?? null;
+  const lprAnalysisVehicleKind = useMemo(
+    () => resolveLprAnalysisTargetVehicleKind(lprSelectedTrack, lprState.targetVehicleKind),
+    [lprSelectedTrack, lprState.targetVehicleKind],
+  );
   const canAnalyzeRange = Boolean(activeFile && !lprBusy && lprSelectedTrack && lprState.interval);
 
   useEffect(() => {
@@ -1308,7 +1313,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         sourcePath: activeFile.asset.path,
         timeMs: Math.max(0, Math.round(livePlayheadMsRef.current)),
         markerRect: activeFile.markerRect,
-        targetVehicleKind: lprState.targetVehicleKind,
+        targetVehicleKind: lprAnalysisVehicleKind,
         selectedTargetBox: lprSelectedTrackFrame?.box ?? null,
         countryHints,
         analysisProfileId: lprState.selectedAnalysisProfileId,
@@ -1413,7 +1418,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         sourcePath: activeFile.asset.path,
         interval,
         anchorTimeMs: Math.max(0, Math.round(livePlayheadMsRef.current)),
-        targetVehicleKind: lprState.targetVehicleKind,
+        targetVehicleKind: lprAnalysisVehicleKind,
         selectedTargetBox: (lprSelectedTrackFrame ?? lprSelectedTrack.frames[0])?.box ?? null,
         countryHints,
         sampleEveryMs,

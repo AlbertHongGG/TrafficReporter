@@ -269,6 +269,7 @@ export const PlateWindow: React.FC = () => {
   const jobBadge = React.useMemo(() => buildJobBadge(lprState.job), [lprState.job]);
   const reviewBadge = React.useMemo(() => buildReviewBadge(lprState.review), [lprState.review]);
   const evidenceCount = evidenceSamples.length > 0 ? evidenceSamples.length : lprState.samples.length;
+  const statusDetail = lprState.job.detail || runtimeStatus?.detail || 'Ready for analysis.';
   const playheadEvidenceSample = React.useMemo(
     () => evidenceSamples.find((entry) => entry.sample.timeMs === currentPlayheadMs) ?? null,
     [currentPlayheadMs, evidenceSamples],
@@ -392,6 +393,14 @@ export const PlateWindow: React.FC = () => {
                 </div>
               </div>
               <div className={styles.heroStatus}>
+                <div className={styles.statusLine}>
+                  {isBusy ? <LoaderCircle size={14} className={styles.spinningIcon} /> : topCandidate ? <Check size={14} className={styles.successIcon} /> : <AlertCircle size={14} className={styles.idleIcon} />}
+                  <AnimatePresence mode="popLayout">
+                    <motion.span key={statusDetail} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                      {statusDetail}
+                    </motion.span>
+                  </AnimatePresence>
+                </div>
                 <div className={styles.heroBadgeRow}>
                   <span className={`${styles.statusChip} ${styles[`statusChip${jobBadge.tone[0].toUpperCase()}${jobBadge.tone.slice(1)}`]}`}>
                     {isBusy ? <LoaderCircle size={12} className={styles.spinningIcon} /> : jobBadge.tone === 'success' ? <Check size={12} className={styles.successIcon} /> : <AlertCircle size={12} className={styles.idleIcon} />}

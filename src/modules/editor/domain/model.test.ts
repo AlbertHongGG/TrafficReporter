@@ -7,6 +7,7 @@ import {
   buildEditorFileState,
   findClosestTrackFrame,
 } from './model'
+import { resolveLprAnalysisTargetVehicleKind } from './lprState'
 
 describe('editor model', () => {
   it('starts a new workspace with no active file and no imported media', () => {
@@ -66,5 +67,12 @@ describe('editor model', () => {
     expect(findClosestTrackFrame(track, 260)?.id).toBe('f2')
     expect(findClosestTrackFrame(track, 280)?.id).toBe('f2')
     expect(findClosestTrackFrame(track, 800, 100)).toBeNull()
+  })
+
+  it('narrows analysis vehicle kind to the selected target class', () => {
+    expect(resolveLprAnalysisTargetVehicleKind({ className: 'motorcycle' }, 'vehicle')).toBe('motorcycle')
+    expect(resolveLprAnalysisTargetVehicleKind({ className: 'car' }, 'vehicle')).toBe('car')
+    expect(resolveLprAnalysisTargetVehicleKind({ className: 'vehicle' }, 'vehicle')).toBe('vehicle')
+    expect(resolveLprAnalysisTargetVehicleKind(null, 'truck')).toBe('truck')
   })
 })

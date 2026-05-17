@@ -7,6 +7,7 @@ import type {
   LprResultHistoryEntry,
   LprSessionState,
   LprTargetTrack,
+  LprVehicleKind,
   TimelineIntervalSelection,
 } from '../../../shared/contracts';
 import { defaultLprAnalysisProfileId } from '../../../shared/lprAnalysisProfiles';
@@ -79,6 +80,21 @@ function cloneLprHistory(history: LprResultHistoryEntry[]) {
     interval: cloneIntervalSelection(entry.interval),
     candidates: cloneLprPlateCandidates(entry.candidates),
   }));
+}
+
+export function resolveLprAnalysisTargetVehicleKind(
+  selectedTargetTrack: Pick<LprTargetTrack, 'className'> | null | undefined,
+  fallbackVehicleKind: LprVehicleKind,
+): LprVehicleKind {
+  switch (selectedTargetTrack?.className) {
+    case 'car':
+    case 'motorcycle':
+    case 'truck':
+    case 'bus':
+      return selectedTargetTrack.className;
+    default:
+      return fallbackVehicleKind;
+  }
 }
 
 export function buildDefaultLprState(overrides: Partial<LprSessionState> = {}): LprSessionState {
