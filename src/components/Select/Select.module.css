@@ -25,6 +25,12 @@
   cursor: pointer;
 }
 
+.triggerCompact {
+  height: 34px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
 .trigger:hover {
   background: rgba(255, 255, 255, 0.05);
   border-color: var(--text-secondary);
@@ -37,6 +43,30 @@
 
 .placeholder {
   color: var(--text-muted);
+}
+
+.valueBlock {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.valueDescription {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: 11px;
 }
 
 .dropdown {
@@ -69,6 +99,29 @@
   border-radius: var(--radius-sm);
   cursor: pointer;
   border: none;
+}
+
+.optionTextBlock {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.optionLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.optionDescription {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: normal;
 }
 
 .option:hover {

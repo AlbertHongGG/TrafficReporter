@@ -6,6 +6,7 @@ import styles from './Select.module.css';
 interface Option {
   value: string;
   label: string;
+  description?: string;
 }
 
 interface SelectProps {
@@ -14,13 +15,24 @@ interface SelectProps {
   onChange: (value: string) => void;
   placeholder?: string;
   disabled?: boolean;
+  size?: 'default' | 'compact';
+  ariaLabel?: string;
 }
 
-export const Select: React.FC<SelectProps> = ({ options, value, onChange, placeholder = 'Select...', disabled }) => {
+export const Select: React.FC<SelectProps> = ({
+  options,
+  value,
+  onChange,
+  placeholder = 'Select...',
+  disabled,
+  size = 'default',
+  ariaLabel,
+}) => {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const selectedOption = options.find((opt) => opt.value === value);
+  const isCompact = size === 'compact';
 
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
@@ -38,12 +50,18 @@ export const Select: React.FC<SelectProps> = ({ options, value, onChange, placeh
     <div className={`${styles.container} ${disabled ? styles.disabled : ''}`} ref={containerRef}>
       <button
         type="button"
-        className={`${styles.trigger} ${isOpen ? styles.open : ''}`}
+        className={`${styles.trigger} ${isCompact ? styles.triggerCompact : ''} ${isOpen ? styles.open : ''}`}
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
+        aria-label={ariaLabel}
       >
-        <span className={selectedOption ? styles.value : styles.placeholder}>
-          {selectedOption ? selectedOption.label : placeholder}
+        <span className={styles.valueBlock}>
+          <span className={selectedOption ? styles.value : styles.placeholder}>
+            {selectedOption ? selectedOption.label : placeholder}
+          </span>
+          {!isCompact && selectedOption?.description && (
+            <span className={styles.valueDescription}>{selectedOption.description}</span>
+          )}
         </span>
         <motion.div animate={{ rotate: isOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
           <ChevronDown size={16} />
@@ -69,7 +87,10 @@ export const Select: React.FC<SelectProps> = ({ options, value, onChange, placeh
                   setIsOpen(false);
                 }}
               >
-                {opt.label}
+                <span className={styles.optionTextBlock}>
+                  <span className={styles.optionLabel}>{opt.label}</span>
+                  {opt.description && <span className={styles.optionDescription}>{opt.description}</span>}
+                </span>
                 {opt.value === value && <Check size={14} className={styles.checkIcon} />}
               </button>
             ))}

@@ -59,6 +59,55 @@ describe('editorReducer LPR workflow', () => {
     expect(lprState.targetTracks[0]?.frames[0]?.box.x).toBe(0.1)
   })
 
+  it('keeps scanned targets when storing a separate analysis track', () => {
+    const state = createWorkspaceState()
+    const scanTrack = {
+      id: 'scan-track-1',
+      className: 'motorcycle',
+      label: 'motorcycle 1',
+      confidence: 0.93,
+      frames: [
+        {
+          id: 'frame-1',
+          timeMs: 1200,
+          box: { x: 0.1, y: 0.2, width: 0.25, height: 0.18 },
+          confidence: 0.88,
+          className: 'motorcycle',
+        },
+      ],
+    }
+    const analysisTrack = {
+      id: 'analysis-track-1',
+      className: 'motorcycle',
+      label: 'tracked target',
+      confidence: 0.9,
+      frames: [
+        {
+          id: 'frame-2',
+          timeMs: 1500,
+          box: { x: 0.3, y: 0.4, width: 0.12, height: 0.1 },
+          confidence: 0.85,
+          className: 'motorcycle',
+        },
+      ],
+    }
+
+    let nextState = editorReducer(state, {
+      type: 'set-lpr-target-tracks',
+      targetTracks: [scanTrack],
+    })
+    nextState = editorReducer(nextState, {
+      type: 'set-lpr-analysis-track',
+      analysisTrack,
+    })
+
+    const lprState = getLprSessionByFileId(nextState.analysis, nextState.activeFileId)
+
+    expect(lprState.targetTracks).toHaveLength(1)
+    expect(lprState.targetTracks[0]?.id).toBe('scan-track-1')
+    expect(lprState.analysisTrack?.id).toBe('analysis-track-1')
+  })
+
   it('clears transient LPR results while keeping interval and history evidence', () => {
     const candidate = {
       id: 'candidate-1',
@@ -101,6 +150,7 @@ describe('editorReducer LPR workflow', () => {
     expect(lprState.candidates).toEqual([])
     expect(lprState.samples).toEqual([])
     expect(lprState.targetTracks).toEqual([])
+    expect(lprState.analysisTrack).toBeNull()
     expect(lprState.interval).toEqual({ startMs: 1000, endMs: 2400 })
     expect(lprState.history).toHaveLength(1)
     expect(lprState.history[0]?.summary).toBe('Best candidate ABC1234')

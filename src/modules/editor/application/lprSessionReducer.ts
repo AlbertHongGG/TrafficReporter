@@ -24,6 +24,7 @@ export type LprSessionAction =
       toggles: Partial<Pick<LprSessionState, 'useDenseSampling' | 'showDeveloperDiagnostics'>>;
     }
   | { type: 'set-lpr-target-tracks'; targetTracks: LprTargetTrack[] }
+  | { type: 'set-lpr-analysis-track'; analysisTrack: LprTargetTrack | null }
   | { type: 'select-lpr-target-track'; targetTrackId: string | null }
   | { type: 'set-lpr-job'; job: Partial<LprJobState> }
   | { type: 'set-lpr-samples'; samples: LprFrameSample[] }
@@ -44,6 +45,7 @@ const LPR_SESSION_ACTION_TYPES = new Set<LprSessionAction['type']>([
   'set-lpr-country-hints',
   'set-lpr-toggles',
   'set-lpr-target-tracks',
+  'set-lpr-analysis-track',
   'select-lpr-target-track',
   'set-lpr-job',
   'set-lpr-samples',
@@ -140,6 +142,12 @@ export function reduceLprSession(lprState: LprSessionState, action: LprSessionAc
           : action.targetTracks[0]?.id ?? null,
       };
 
+    case 'set-lpr-analysis-track':
+      return {
+        ...lprState,
+        analysisTrack: buildDefaultLprState({ analysisTrack: action.analysisTrack }).analysisTrack,
+      };
+
     case 'select-lpr-target-track':
       return {
         ...lprState,
@@ -203,6 +211,7 @@ export function reduceLprSession(lprState: LprSessionState, action: LprSessionAc
         job: buildDefaultLprState().job,
         targetTracks: [],
         selectedTargetTrackId: null,
+        analysisTrack: null,
         samples: [],
         candidates: [],
         review: null,

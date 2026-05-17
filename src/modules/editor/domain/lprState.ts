@@ -51,6 +51,10 @@ function cloneLprTargetTracks(targetTracks: LprTargetTrack[]) {
   }));
 }
 
+function cloneLprTargetTrack(track: LprTargetTrack | null) {
+  return track ? cloneLprTargetTracks([track])[0] ?? null : null;
+}
+
 function cloneLprPlateCandidates(candidates: LprPlateCandidate[]) {
   return candidates.map((candidate) => ({
     ...candidate,
@@ -89,6 +93,7 @@ export function buildDefaultLprState(overrides: Partial<LprSessionState> = {}): 
     job: cloneLprJobState(overrides.job ?? DEFAULT_LPR_JOB_STATE),
     targetTracks: cloneLprTargetTracks(overrides.targetTracks ?? []),
     selectedTargetTrackId: overrides.selectedTargetTrackId ?? null,
+    analysisTrack: cloneLprTargetTrack(overrides.analysisTrack ?? null),
     samples: cloneLprSamples(overrides.samples ?? []),
     candidates: cloneLprPlateCandidates(overrides.candidates ?? []),
     review: cloneLprReviewState(overrides.review ?? null),

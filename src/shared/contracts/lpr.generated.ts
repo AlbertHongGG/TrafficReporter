@@ -163,6 +163,7 @@ export interface LprSessionState {
   job: LprJobState;
   targetTracks: LprTargetTrack[];
   selectedTargetTrackId: string | null;
+  analysisTrack: LprTargetTrack | null;
   samples: LprFrameSample[];
   candidates: LprPlateCandidate[];
   review: LprReviewState | null;

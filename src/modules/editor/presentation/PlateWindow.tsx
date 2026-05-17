@@ -9,7 +9,6 @@ import {
   Clock,
   Crop,
   Database,
-  Eye,
   FileOutput,
   Globe,
   Image,
@@ -21,6 +20,7 @@ import {
   X,
   Zap,
 } from 'lucide-react';
+import { Select } from '../../../components/Select/Select';
 import {
   samplePrimaryText,
   PLATE_SESSION_UPDATED_EVENT,
@@ -55,11 +55,11 @@ function formatHistoryLabel(interval: TimelineIntervalSelection | null, analysis
   return [
     interval ? formatIntervalLabel(interval) : 'frame',
     getLprAnalysisProfileLabel(analysisProfileId),
-    developerDiagnosticsEnabled ? 'dev' : null,
+    developerDiagnosticsEnabled ? 'dx' : null,
   ].filter(Boolean).join(' · ');
 }
 
-type TabType = 'candidates' | 'targets' | 'evidence' | 'samples' | 'history';
+type TabType = 'targets' | 'candidates' | 'evidence' | 'samples' | 'history';
 
 type EvidenceArtifact = {
   key: string;
@@ -163,13 +163,6 @@ function formatMetric(value: number | null | undefined) {
   return `${Math.round(clamp(value, 0, 1) * 100)}%`;
 }
 
-function evidenceReason(entry: EvidenceSample) {
-  if (entry.matchingCandidate) {
-    return `Matched ${entry.matchingCandidate.text} with ${formatConfidence(entry.matchingCandidate.confidence)}`;
-  }
-  return `Top OCR sample ${samplePrimaryText(entry.sample)}`;
-}
-
 function qualityMetrics(sample: LprFrameSample): Array<[string, number | null | undefined]> {
   const quality = sample.quality;
   return [
@@ -183,6 +176,19 @@ function qualityMetrics(sample: LprFrameSample): Array<[string, number | null | 
 
 function evidenceCandidates(sample: LprFrameSample) {
   return sample.candidates.slice(0, 3);
+}
+
+function compactProfileDescription(profileId: string, fallbackDescription: string) {
+  switch (profileId) {
+    case 'precision':
+      return 'strict';
+    case 'balanced':
+      return 'default';
+    case 'recovery':
+      return 'loose';
+    default:
+      return fallbackDescription.length > 18 ? `${fallbackDescription.slice(0, 18)}...` : fallbackDescription;
+  }
 }
 
 function candidateSelection(candidate: LprPlateCandidate | null | undefined) {
@@ -199,28 +205,42 @@ function candidateSelection(candidate: LprPlateCandidate | null | undefined) {
   };
 }
 
-function formatReviewReason(reason: string) {
-  switch (reason) {
-    case 'low-confidence':
-      return 'low confidence';
-    case 'low-margin':
-      return 'small margin';
-    case 'insufficient-support':
-      return 'weak support';
-    case 'format-mismatch':
-      return 'format mismatch';
-    case 'no-candidate':
-      return 'no candidate';
-    default:
-      return reason.replace(/-/g, ' ');
+type StatusTone = 'neutral' | 'success' | 'warning' | 'danger';
+
+function buildJobBadge(job: LprJobState): { label: string; tone: StatusTone } {
+  if (job.status === 'running' || job.status === 'queued') {
+    return { label: job.stage || 'Run', tone: 'warning' };
   }
+  if (job.status === 'failed') {
+    return { label: 'Fail', tone: 'danger' };
+  }
+  if (job.status === 'cancelled') {
+    return { label: 'Stop', tone: 'neutral' };
+  }
+  if (job.status === 'completed') {
+    return { label: 'Done', tone: 'success' };
+  }
+  return { label: 'Idle', tone: 'neutral' };
+}
+
+function buildReviewBadge(review: LprReviewState | null): { label: string; tone: StatusTone } | null {
+  if (!review) {
+    return null;
+  }
+  if (review.status === 'accepted') {
+    return { label: 'Lock', tone: 'success' };
+  }
+  if (review.status === 'review-required') {
+    return { label: 'Check', tone: 'warning' };
+  }
+  return { label: 'Empty', tone: 'neutral' };
 }
 
 function candidateBadgeLabel(candidate: LprPlateCandidate, acceptedCandidateId: string | null) {
   const selection = candidateSelection(candidate);
   const confidenceLabel = formatConfidence(candidate.confidence);
   if (selection.reviewRequired && selection.isSuggested && acceptedCandidateId === null) {
-    return `${confidenceLabel} Review`;
+    return `${confidenceLabel} Check`;
   }
   if (selection.isAccepted || candidate.id === acceptedCandidateId) {
     return `${confidenceLabel} Accepted`;
@@ -231,59 +251,11 @@ function candidateBadgeLabel(candidate: LprPlateCandidate, acceptedCandidateId: 
   return confidenceLabel;
 }
 
-function formatCurrentReview(review: LprReviewState | null, candidates: LprPlateCandidate[]) {
-  if (!review) {
-    return 'Review: --';
-  }
-
-  if (review.status === 'no-candidate') {
-    return 'Review: no candidate';
-  }
-
-  if (review.status === 'review-required') {
-    const reasonLabel = review.reasons.map(formatReviewReason).join(', ');
-    return reasonLabel ? `Review: required (${reasonLabel})` : 'Review: required';
-  }
-
-  const acceptedCandidate = candidates.find((candidate) => candidate.id === review.acceptedCandidateId)
-    ?? candidates.find((candidate) => candidate.id === review.suggestedCandidateId)
-    ?? null;
-  return acceptedCandidate ? `Review: accepted ${acceptedCandidate.text}` : 'Review: accepted';
-}
-
-function formatEvidenceState(samples: LprFrameSample[], evidenceSamples: EvidenceSample[], topCandidate: LprPlateCandidate | null) {
-  if (!topCandidate && samples.length === 0) {
-    return 'Evidence: none';
-  }
-
-  if (evidenceSamples.length > 0) {
-    return `Evidence: ${evidenceSamples.length} frame(s)`;
-  }
-
-  return `Evidence: ${samples.length} sample(s)`;
-}
-
-function formatJobState(job: LprJobState) {
-  if (job.status === 'running' || job.status === 'queued') {
-    return `Job: ${job.stage || 'LPR'} ${Math.round(clamp(job.progress, 0, 1) * 100)}%`;
-  }
-  if (job.status === 'cancelled') {
-    return 'Job: cancelled';
-  }
-  if (job.status === 'failed') {
-    return 'Job: failed';
-  }
-  if (job.status === 'completed') {
-    return 'Job: completed';
-  }
-  return 'Job: idle';
-}
-
 export const PlateWindow: React.FC = () => {
   const [snapshot, setSnapshot] = React.useState<PlateWindowSessionSnapshot | null>(null);
   const [countryHintsDraft, setCountryHintsDraft] = React.useState('');
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
-  const [activeTab, setActiveTab] = React.useState<TabType>('candidates');
+  const [activeTab, setActiveTab] = React.useState<TabType>('targets');
   const [selectedEvidenceSampleId, setSelectedEvidenceSampleId] = React.useState<string | null>(null);
   const [isEvidenceSelectionPinned, setIsEvidenceSelectionPinned] = React.useState(false);
 
@@ -294,9 +266,9 @@ export const PlateWindow: React.FC = () => {
   const isBusy = lprState.job.status === 'queued' || lprState.job.status === 'running';
   const currentPlayheadMs = snapshot?.playheadMs ?? 0;
   const evidenceSamples = React.useMemo(() => buildEvidenceSamples(lprState.samples, topCandidate), [lprState.samples, topCandidate]);
-  const reviewSummary = React.useMemo(() => formatCurrentReview(lprState.review, lprState.candidates), [lprState.candidates, lprState.review]);
-  const evidenceSummary = React.useMemo(() => formatEvidenceState(lprState.samples, evidenceSamples, topCandidate), [evidenceSamples, lprState.samples, topCandidate]);
-  const jobSummary = React.useMemo(() => formatJobState(lprState.job), [lprState.job]);
+  const jobBadge = React.useMemo(() => buildJobBadge(lprState.job), [lprState.job]);
+  const reviewBadge = React.useMemo(() => buildReviewBadge(lprState.review), [lprState.review]);
+  const evidenceCount = evidenceSamples.length > 0 ? evidenceSamples.length : lprState.samples.length;
   const playheadEvidenceSample = React.useMemo(
     () => evidenceSamples.find((entry) => entry.sample.timeMs === currentPlayheadMs) ?? null,
     [currentPlayheadMs, evidenceSamples],
@@ -420,18 +392,28 @@ export const PlateWindow: React.FC = () => {
                 </div>
               </div>
               <div className={styles.heroStatus}>
-                <div className={styles.statusLine}>
-                  {isBusy ? <LoaderCircle size={14} className={styles.spinningIcon} /> : topCandidate ? <Check size={14} className={styles.successIcon} /> : <AlertCircle size={14} className={styles.idleIcon} />}
-                  <AnimatePresence mode="popLayout">
-                    <motion.span key={lprState.job.detail || 'Ready.'} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                      {lprState.job.detail || runtimeStatus?.detail || 'Ready for analysis.'}
-                    </motion.span>
-                  </AnimatePresence>
-                </div>
-                <div className={styles.statusPillRow}>
-                  <span className={styles.infoItemPill}>{jobSummary}</span>
-                  <span className={styles.infoItemPill}>{reviewSummary}</span>
-                  <span className={styles.infoItemPill}>{evidenceSummary}</span>
+                <div className={styles.heroBadgeRow}>
+                  <span className={`${styles.statusChip} ${styles[`statusChip${jobBadge.tone[0].toUpperCase()}${jobBadge.tone.slice(1)}`]}`}>
+                    {isBusy ? <LoaderCircle size={12} className={styles.spinningIcon} /> : jobBadge.tone === 'success' ? <Check size={12} className={styles.successIcon} /> : <AlertCircle size={12} className={styles.idleIcon} />}
+                    {jobBadge.label}
+                  </span>
+                  {reviewBadge && (
+                    <span className={`${styles.statusChip} ${styles[`statusChip${reviewBadge.tone[0].toUpperCase()}${reviewBadge.tone.slice(1)}`]}`}>
+                      {reviewBadge.label}
+                    </span>
+                  )}
+                  {lprState.targetTracks.length > 0 && (
+                    <span className={styles.counterChip}>
+                      <Target size={12} />
+                      {lprState.targetTracks.length}
+                    </span>
+                  )}
+                  {evidenceCount > 0 && (
+                    <span className={styles.counterChip}>
+                      <Image size={12} />
+                      {evidenceCount}
+                    </span>
+                  )}
                 </div>
                 <AnimatePresence>
                   {(lprState.job.error || errorMessage) && (
@@ -464,16 +446,16 @@ export const PlateWindow: React.FC = () => {
                     <X size={15} />
                   </motion.button>
                 )}
-                <motion.button whileTap={{ scale: 0.95 }} type="button" className={`${styles.actionBtnUtility} ${lprState.showDeveloperDiagnostics ? styles.utilityActive : ''}`} onClick={() => void sendAction({ type: 'toggle-developer-diagnostics' })} title="Toggle Developer Diagnostics">
-                  <Zap size={15} />
-                </motion.button>
-                <motion.button whileTap={{ scale: 0.95 }} type="button" className={`${styles.actionBtnUtility} ${lprState.useDenseSampling ? styles.utilityActive : ''}`} onClick={() => void sendAction({ type: 'toggle-dense-sampling' })} title="Toggle Dense Sampling">
+                <motion.button whileTap={{ scale: 0.95 }} type="button" className={`${styles.actionBtnUtility} ${lprState.useDenseSampling ? styles.utilityActive : ''}`} onClick={() => void sendAction({ type: 'toggle-dense-sampling' })} title="Dense Sampling">
                   <Database size={15} />
+                </motion.button>
+                <motion.button whileTap={{ scale: 0.95 }} type="button" className={`${styles.actionBtnUtility} ${lprState.showDeveloperDiagnostics ? styles.utilityActive : ''}`} onClick={() => void sendAction({ type: 'toggle-developer-diagnostics' })} title="Diagnostics">
+                  <Zap size={15} />
                 </motion.button>
                 <motion.button whileTap={{ scale: 0.95 }} type="button" className={styles.actionBtnUtility} onClick={() => void sendAction({ type: 'export-evidence' })} disabled={!topCandidate && lprState.samples.length === 0} title="Export Evidence">
                   <FileOutput size={15} />
                 </motion.button>
-                <motion.button whileTap={{ scale: 0.95 }} type="button" className={styles.actionBtnUtility} onClick={() => void sendAction({ type: 'clear-results' })} disabled={lprState.candidates.length === 0 && lprState.targetTracks.length === 0} title="Reset Results">
+                <motion.button whileTap={{ scale: 0.95 }} type="button" className={styles.actionBtnUtility} onClick={() => void sendAction({ type: 'clear-results' })} disabled={lprState.candidates.length === 0 && lprState.targetTracks.length === 0 && !lprState.analysisTrack && lprState.samples.length === 0} title="Reset Results">
                   <RotateCcw size={15} />
                 </motion.button>
               </div>
@@ -490,17 +472,18 @@ export const PlateWindow: React.FC = () => {
                 <div className={styles.segmentDivider} />
                 <button type="button" onClick={() => void sendAction({ type: 'clear-interval' })} disabled={!snapshot.explicitInterval}>Clear</button>
               </div>
-              <div className={styles.selectWrapper}>
-                <select
-                  className={styles.select}
+              <div className={styles.profileSelectGroup}>
+                <Select
+                  size="compact"
+                  ariaLabel="Analysis profile"
                   value={lprState.selectedAnalysisProfileId}
-                  onChange={(event) => void sendAction({ type: 'set-analysis-profile', analysisProfileId: event.target.value })}
-                  title="Analysis Profile"
-                >
-                  {analysisProfiles.map((profile) => (
-                    <option key={profile.id} value={profile.id}>{profile.label}</option>
-                  ))}
-                </select>
+                  onChange={(analysisProfileId) => void sendAction({ type: 'set-analysis-profile', analysisProfileId })}
+                  options={analysisProfiles.map((profile) => ({
+                    value: profile.id,
+                    label: profile.label,
+                    description: compactProfileDescription(profile.id, profile.description),
+                  }))}
+                />
               </div>
               <div className={styles.intervalBadge}>
                 <Clock size={12} className={styles.mutedIcon} />
@@ -528,13 +511,13 @@ export const PlateWindow: React.FC = () => {
             {/* DATA VIEWER (TABS) */}
             <section className={styles.dataViewer}>
               <div className={styles.tabHeader}>
-                <button type="button" className={`${styles.tabBtn} ${activeTab === 'candidates' ? styles.tabBtnActive : ''}`} onClick={() => setActiveTab('candidates')}>
-                  Candidates {lprState.candidates.length > 0 && <span className={styles.tabCount}>{lprState.candidates.length}</span>}
-                  {activeTab === 'candidates' && <motion.div layoutId="activeTabIndicator" className={styles.activeTabIndicator} />}
-                </button>
                 <button type="button" className={`${styles.tabBtn} ${activeTab === 'targets' ? styles.tabBtnActive : ''}`} onClick={() => setActiveTab('targets')}>
                   Targets {lprState.targetTracks.length > 0 && <span className={styles.tabCount}>{lprState.targetTracks.length}</span>}
                   {activeTab === 'targets' && <motion.div layoutId="activeTabIndicator" className={styles.activeTabIndicator} />}
+                </button>
+                <button type="button" className={`${styles.tabBtn} ${activeTab === 'candidates' ? styles.tabBtnActive : ''}`} onClick={() => setActiveTab('candidates')}>
+                  Candidates {lprState.candidates.length > 0 && <span className={styles.tabCount}>{lprState.candidates.length}</span>}
+                  {activeTab === 'candidates' && <motion.div layoutId="activeTabIndicator" className={styles.activeTabIndicator} />}
                 </button>
                 <button type="button" className={`${styles.tabBtn} ${activeTab === 'evidence' ? styles.tabBtnActive : ''}`} onClick={() => setActiveTab('evidence')}>
                   Evidence {evidenceSamples.length > 0 && <span className={styles.tabCount}>{evidenceSamples.length}</span>}
@@ -549,9 +532,30 @@ export const PlateWindow: React.FC = () => {
                   {activeTab === 'history' && <motion.div layoutId="activeTabIndicator" className={styles.activeTabIndicator} />}
                 </button>
               </div>
-
               <div className={styles.tabContent}>
                 <AnimatePresence mode="wait">
+                  {/* TARGETS TAB */}
+                  {activeTab === 'targets' && (
+                    <motion.div key="targets" variants={tabContentVariants} initial="hidden" animate="show" exit="exit" className={styles.listContainer}>
+                      {lprState.targetTracks.length === 0 && <div className={styles.emptyInline}>No targets</div>}
+                      {lprState.targetTracks.map((track) => (
+                        <motion.button
+                          layout
+                          variants={listItemVariants}
+                          whileTap={{ scale: 0.98 }}
+                          key={track.id}
+                          type="button"
+                          className={`${styles.listItemBtn} ${track.id === lprState.selectedTargetTrackId ? styles.listItemBtnActive : ''}`}
+                          onClick={() => void sendAction({ type: 'select-target-track', targetTrackId: track.id })}
+                        >
+                          <span className={styles.listItemMainText}>{track.label}</span>
+                          <span className={styles.listItemBadge}>{formatConfidence(track.confidence)}</span>
+                          {track.id === lprState.selectedTargetTrackId && <motion.div layoutId="activeTarget" className={styles.activeListItemGlow} />}
+                        </motion.button>
+                      ))}
+                    </motion.div>
+                  )}
+
                   {/* CANDIDATES TAB */}
                   {activeTab === 'candidates' && (
                     <motion.div key="candidates" variants={tabContentVariants} initial="hidden" animate="show" exit="exit" className={styles.listContainer}>
@@ -575,48 +579,32 @@ export const PlateWindow: React.FC = () => {
                           </motion.button>
                         );
                       })}
-                      {lprState.review?.status === 'review-required' && lprState.acceptedCandidateId === null && (
-                        <div className={styles.emptyInline}>{reviewSummary}.</div>
-                      )}
-                    </motion.div>
-                  )}
-
-                  {/* TARGETS TAB */}
-                  {activeTab === 'targets' && (
-                    <motion.div key="targets" variants={tabContentVariants} initial="hidden" animate="show" exit="exit" className={styles.listContainer}>
-                      {lprState.targetTracks.length === 0 && <div className={styles.emptyInline}>No tracking targets found.</div>}
-                      {lprState.targetTracks.map((track) => (
-                        <motion.button
-                          layout
-                          variants={listItemVariants}
-                          whileTap={{ scale: 0.98 }}
-                          key={track.id}
-                          type="button"
-                          className={`${styles.listItemBtn} ${track.id === lprState.selectedTargetTrackId ? styles.listItemBtnActive : ''}`}
-                          onClick={() => void sendAction({ type: 'select-target-track', targetTrackId: track.id })}
-                        >
-                          <span className={styles.listItemMainText}>{track.label}</span>
-                          <span className={styles.listItemBadge}>{formatConfidence(track.confidence)}</span>
-                          {track.id === lprState.selectedTargetTrackId && <motion.div layoutId="activeTarget" className={styles.activeListItemGlow} />}
-                        </motion.button>
-                      ))}
                     </motion.div>
                   )}
 
                   {activeTab === 'evidence' && (
-                    <motion.div key="evidence" variants={tabContentVariants} initial="hidden" animate="show" exit="exit" className={styles.evidenceLayout}>
-                      {evidenceSamples.length === 0 && <div className={styles.emptyInline}>No evidence frames with saved artifacts yet. Enable artifact persistence or run frame/range analysis.</div>}
-                      {evidenceSamples.length > 0 && activeEvidenceSample && (
-                        <>
-                          <div className={styles.evidenceRail}>
-                            {evidenceSamples.map((entry) => (
-                              <motion.button
-                                layout
-                                variants={listItemVariants}
-                                whileTap={{ scale: 0.98 }}
-                                key={entry.sample.id}
+                    <motion.div key="evidence" variants={tabContentVariants} initial="hidden" animate="show" exit="exit" className={styles.listContainer}>
+                      {evidenceSamples.length === 0 && <div className={styles.emptyInline}>No evidence</div>}
+                      {evidenceSamples.map((entry) => {
+                        const isActive = entry.sample.id === activeEvidenceSample?.sample.id;
+                        return (
+                          <motion.div
+                            layout
+                            variants={listItemVariants}
+                            key={entry.sample.id}
+                            className={`${styles.evidenceListItem} ${isActive ? styles.evidenceListItemActive : ''}`}
+                          >
+                            <div className={styles.evidenceListHeader}>
+                              <button
                                 type="button"
-                                className={`${styles.evidenceChip} ${entry.sample.id === activeEvidenceSample.sample.id ? styles.evidenceChipActive : ''}`}
+                                className={styles.evidenceJumpInline}
+                                onClick={() => void handleSeekToSample(entry.sample.id, entry.sample.timeMs)}
+                              >
+                                Jump
+                              </button>
+                              <button
+                                type="button"
+                                className={styles.evidenceRowButton}
                                 onClick={() => {
                                   setSelectedEvidenceSampleId(entry.sample.id);
                                   setIsEvidenceSelectionPinned(true);
@@ -624,70 +612,47 @@ export const PlateWindow: React.FC = () => {
                               >
                                 <div className={styles.evidenceChipTopRow}>
                                   <span className={styles.evidenceChipTime}>{formatSampleTimestamp(entry.sample.timeMs)}</span>
-                                  <span className={styles.evidenceChipBadge}>{formatConfidence(entry.sample.quality?.overallScore ?? 0)}</span>
+                                  <div className={styles.evidenceChipBadges}>
+                                    <span className={styles.evidenceMiniPill}>{entry.artifacts.length}</span>
+                                    <span className={styles.evidenceChipBadge}>{formatConfidence(entry.sample.quality?.overallScore ?? 0)}</span>
+                                  </div>
                                 </div>
                                 <strong className={styles.evidenceChipText}>{entry.matchingCandidate?.text ?? samplePrimaryText(entry.sample)}</strong>
-                                <span className={styles.evidenceChipReason}>{evidenceReason(entry)}</span>
-                              </motion.button>
-                            ))}
-                          </div>
-
-                          <div className={styles.evidenceCard}>
-                            <div className={styles.evidenceCardHeader}>
-                              <div>
-                                <div className={styles.evidenceCardTitleRow}>
-                                  <Eye size={14} className={styles.mutedIcon} />
-                                  <strong>Decision Frame {formatSampleTimestamp(activeEvidenceSample.sample.timeMs)}</strong>
-                                </div>
-                                <span className={styles.evidenceCardSubtitle}>{evidenceReason(activeEvidenceSample)}</span>
-                              </div>
-                              <button
-                                type="button"
-                                className={styles.evidenceJumpButton}
-                                onClick={() => void handleSeekToSample(activeEvidenceSample.sample.id, activeEvidenceSample.sample.timeMs)}
-                              >
-                                Jump To Frame
                               </button>
                             </div>
 
-                            <div className={styles.evidencePreviewGrid}>
-                              {activeEvidenceSample.artifacts.map((artifact) => (
-                                <div key={artifact.key} className={styles.evidencePreviewCard}>
-                                  <div className={styles.evidencePreviewLabel}><Image size={12} className={styles.mutedIcon} /> {artifact.label}</div>
-                                  <img className={styles.evidencePreviewImage} src={toImageSrc(artifact.path)} alt={`${artifact.label} ${formatSampleTimestamp(activeEvidenceSample.sample.timeMs)}`} />
+                            {isActive && (
+                              <div className={styles.evidenceExpanded}>
+                                <div className={styles.evidencePreviewGrid}>
+                                  {entry.artifacts.map((artifact) => (
+                                    <div key={artifact.key} className={styles.evidencePreviewCard}>
+                                      <div className={styles.evidencePreviewLabel}><Image size={12} className={styles.mutedIcon} /> {artifact.label}</div>
+                                      <img className={styles.evidencePreviewImage} src={toImageSrc(artifact.path)} alt={`${artifact.label} ${formatSampleTimestamp(entry.sample.timeMs)}`} />
+                                    </div>
+                                  ))}
                                 </div>
-                              ))}
-                            </div>
 
-                            {lprState.showDeveloperDiagnostics && (
-                              <div className={styles.evidenceMetaGrid}>
-                                <div className={styles.evidenceMetaSection}>
-                                  <div className={styles.evidenceMetaTitle}>Quality</div>
-                                  <div className={styles.evidenceMetricList}>
-                                    {qualityMetrics(activeEvidenceSample.sample).map(([label, value]) => (
-                                      <div key={label} className={styles.evidenceMetricRow}>
+                                {lprState.showDeveloperDiagnostics && (
+                                  <div className={styles.evidenceMetaRail}>
+                                    {qualityMetrics(entry.sample).map(([label, value]) => (
+                                      <div key={label} className={styles.evidenceMetricPill}>
                                         <span>{label}</span>
                                         <strong>{formatMetric(value)}</strong>
                                       </div>
                                     ))}
-                                  </div>
-                                </div>
-                                <div className={styles.evidenceMetaSection}>
-                                  <div className={styles.evidenceMetaTitle}>Top OCR Outputs</div>
-                                  <div className={styles.evidenceCandidateList}>
-                                    {evidenceCandidates(activeEvidenceSample.sample).map((candidate) => (
-                                      <div key={candidate.id} className={styles.evidenceCandidateRow}>
+                                    {evidenceCandidates(entry.sample).map((candidate) => (
+                                      <div key={candidate.id} className={styles.evidenceCandidatePill}>
                                         <span>{candidate.text}</span>
                                         <strong>{formatConfidence(candidate.confidence)}</strong>
                                       </div>
                                     ))}
                                   </div>
-                                </div>
+                                )}
                               </div>
                             )}
-                          </div>
-                        </>
-                      )}
+                          </motion.div>
+                        );
+                      })}
                     </motion.div>
                   )}
 

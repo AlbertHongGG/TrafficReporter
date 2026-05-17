@@ -278,6 +278,7 @@
         { "name": "job", "type": "LprJobState" },
         { "name": "targetTracks", "type": "array", "items": "LprTargetTrack" },
         { "name": "selectedTargetTrackId", "type": "string", "nullable": true },
+        { "name": "analysisTrack", "type": "LprTargetTrack", "nullable": true },
         { "name": "samples", "type": "array", "items": "LprFrameSample" },
         { "name": "candidates", "type": "array", "items": "LprPlateCandidate" },
         { "name": "review", "type": "LprReviewState", "nullable": true },

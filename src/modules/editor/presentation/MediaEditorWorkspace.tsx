@@ -189,15 +189,15 @@ function defaultLprEvidenceFileName(fileState: EditorFileState, playheadMs: numb
 function formatLprReviewReason(reason: string) {
   switch (reason) {
     case 'low-confidence':
-      return 'low confidence';
+      return 'confidence stayed low';
     case 'low-margin':
-      return 'small margin';
+      return 'the runner-up stayed too close';
     case 'insufficient-support':
-      return 'weak multi-frame support';
+      return 'too few sampled frames agreed';
     case 'format-mismatch':
-      return 'format mismatch';
+      return 'the plate pattern looked off';
     case 'no-candidate':
-      return 'no candidate';
+      return 'no readable candidate was found';
     default:
       return reason.replace(/-/g, ' ');
   }
@@ -216,7 +216,7 @@ function buildLprCompletionDetail(
 
   if (review?.status === 'review-required') {
     const reasonLabel = review.reasons.map(formatLprReviewReason).join(', ') || 'manual review required';
-    return `Suggested ${suggestedCandidate.text}, ${reasonLabel}.`;
+    return `Best current read ${suggestedCandidate.text}. Auto-accept is paused because ${reasonLabel}.`;
   }
 
   const acceptedCandidate = candidates.find((candidate) => candidate.id === review?.acceptedCandidateId)
@@ -355,18 +355,22 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     () => lprState.targetTracks.find((track) => track.id === lprState.selectedTargetTrackId) ?? null,
     [lprState.selectedTargetTrackId, lprState.targetTracks],
   );
+  const lprAnalysisTrack = lprState.analysisTrack;
   const lprSelectedTrackFrame = useMemo(
     () => (lprSelectedTrack ? findClosestTrackFrame(lprSelectedTrack, lprPreviewPlayheadMs) : null),
     [lprPreviewPlayheadMs, lprSelectedTrack],
   );
   const lprOverlayTracks = useMemo(
-    () => lprState.targetTracks
-      .map((track) => ({
+    () => (lprAnalysisTrack
+      ? [{ track: lprAnalysisTrack, selectionTrackId: lprState.selectedTargetTrackId }]
+      : lprState.targetTracks.map((track) => ({ track, selectionTrackId: track.id })))
+      .map(({ track, selectionTrackId }) => ({
         track,
+        selectionTrackId,
         frame: findClosestTrackFrame(track, deferredOverlayPlayheadMs),
       }))
-      .filter((entry): entry is { track: LprTargetTrack; frame: LprTrackedRegion } => Boolean(entry.frame)),
-    [deferredOverlayPlayheadMs, lprState.targetTracks],
+      .filter((entry): entry is { track: LprTargetTrack; selectionTrackId: string | null; frame: LprTrackedRegion } => Boolean(entry.frame)),
+    [deferredOverlayPlayheadMs, lprAnalysisTrack, lprState.selectedTargetTrackId, lprState.targetTracks],
   );
   const lprAcceptedCandidate = useMemo(
     () => lprState.candidates.find((candidate) => candidate.id === lprState.acceptedCandidateId) ?? null,
@@ -1261,6 +1265,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
 
       dispatch({ type: 'set-lpr-runtime-status', runtimeStatus: response.runtime });
       dispatch({ type: 'set-lpr-target-tracks', targetTracks: buildTargetTracksFromDetections(response.detections) });
+      dispatch({ type: 'set-lpr-analysis-track', analysisTrack: null });
       dispatch({ type: 'set-lpr-mode', workflowMode: response.detections.length > 0 ? 'target' : 'range' });
       updateLprJob({
         status: 'completed',
@@ -1316,7 +1321,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       }
 
       dispatch({ type: 'set-lpr-runtime-status', runtimeStatus: response.runtime });
-      dispatch({ type: 'set-lpr-target-tracks', targetTracks: buildTargetTracksFromDetections(response.detections) });
+      dispatch({ type: 'set-lpr-analysis-track', analysisTrack: null });
       dispatch({ type: 'set-lpr-samples', samples: response.sample ? [response.sample] : [] });
       dispatch({ type: 'set-lpr-candidates', candidates: response.candidates });
       dispatch({ type: 'set-lpr-review', review: response.review ?? null });
@@ -1424,7 +1429,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
 
       dispatch({ type: 'set-lpr-runtime-status', runtimeStatus: response.runtime });
       dispatch({ type: 'set-lpr-interval', interval });
-      dispatch({ type: 'set-lpr-target-tracks', targetTracks: response.targetTracks });
+      dispatch({ type: 'set-lpr-analysis-track', analysisTrack: response.targetTracks[0] ?? null });
       dispatch({ type: 'set-lpr-samples', samples: response.samples });
       dispatch({ type: 'set-lpr-candidates', candidates: response.candidates });
       dispatch({ type: 'set-lpr-review', review: response.review ?? null });
@@ -1437,7 +1442,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
           id: createId('lpr-history'),
           createdAt: new Date().toISOString(),
           interval,
-          targetTrackId: response.targetTracks[0]?.id ?? null,
+          targetTrackId: lprSelectedTrack?.id ?? null,
           acceptedCandidateId: response.acceptedCandidateId ?? null,
           analysisProfileId: lprState.selectedAnalysisProfileId,
           developerDiagnosticsEnabled: lprState.showDeveloperDiagnostics,
@@ -1498,7 +1503,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         timeMs: Math.max(0, Math.round(livePlayheadMsRef.current)),
         markerRect: activeFile.markerRect,
         interval: lprState.interval,
-        targetTrack: lprSelectedTrack,
+        targetTrack: lprAnalysisTrack ?? lprSelectedTrack,
         acceptedCandidate: lprAcceptedCandidate,
         candidates: lprState.candidates,
         samples: lprState.samples,
@@ -1851,7 +1856,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
 
               {activeFile && previewViewport.width > 0 && (
                 <div className={styles.previewMarkerLayer}>
-                  {lprOverlayTracks.map(({ track, frame }) => {
+                  {lprOverlayTracks.map(({ track, frame, selectionTrackId }) => {
                     const box = frame.box;
                     const overlayStyle = {
                       left: `${previewViewport.left + (box.x * previewViewport.width)}px`,
@@ -1864,9 +1869,9 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
                       <button
                         key={track.id}
                         type="button"
-                        className={`${styles.lprOverlayTarget} ${track.id === lprState.selectedTargetTrackId ? styles.lprOverlayTargetSelected : ''}`}
+                        className={`${styles.lprOverlayTarget} ${selectionTrackId === lprState.selectedTargetTrackId ? styles.lprOverlayTargetSelected : ''}`}
                         style={overlayStyle}
-                        onClick={() => handleSelectTargetTrack(track.id)}
+                        onClick={() => selectionTrackId && handleSelectTargetTrack(selectionTrackId)}
                       >
                         <span className={styles.lprOverlayLabel}>{track.label}</span>
                       </button>

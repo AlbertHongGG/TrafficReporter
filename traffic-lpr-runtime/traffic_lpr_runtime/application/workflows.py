@@ -169,7 +169,9 @@ class IntervalAnalysisWorkflow:
         samples: list[FrameSample] = []
         observations: list[PlateObservation] = []
         for tracked_frame in tracked_frames:
-            analysis_target_box = tracked_frame.box
+            raw_tracking_box = tracked_frame.box
+            calibrated_target_box = calibrated_target_boxes.get(tracked_frame.time_ms)
+            analysis_target_box = calibrated_target_box or raw_tracking_box
             frame = self._frame_reader.read_frame(payload['sourcePath'], tracked_frame.time_ms)
             _, sample, observation = self._analyze_plate_candidates(
                 frame,
@@ -180,18 +182,18 @@ class IntervalAnalysisWorkflow:
                 sample_options,
                 artifact_root / f'sample-{tracked_frame.time_ms}' if artifact_root else None,
             )
-            calibrated_target_box = calibrated_target_boxes.get(tracked_frame.time_ms)
             if calibrated_target_box is not None:
                 tracked_frame.diagnostics = {
                     **(tracked_frame.diagnostics or {}),
                     'analysisBox': analysis_target_box.to_payload(),
+                    'rawTrackingBox': raw_tracking_box.to_payload(),
                     'calibratedBox': calibrated_target_box.to_payload(),
                 }
                 tracked_frame.box = calibrated_target_box
-                sample.target_box = calibrated_target_box
                 sample.diagnostics = {
                     **(sample.diagnostics or {}),
                     'analysisTargetBox': analysis_target_box.to_payload(),
+                    'rawTrackingBox': raw_tracking_box.to_payload(),
                 }
             samples.append(sample)
             if observation is not None:
