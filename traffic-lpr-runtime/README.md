@@ -117,4 +117,4 @@ Frame and interval analysis now apply reliability gates before auto-accepting a 
 - insufficient multi-frame support for interval results
 - Taiwan-format mismatch when `countryHints` prefer Taiwan
 
-When this happens, diagnostics include a `selection` block with the suggested candidate, fallback usage, and review reasons. The desktop UI uses that information to surface review-needed cases instead of silently treating the first candidate as accepted.
+When this happens, diagnostics still include a `selection` block for developer inspection, but the runtime now emits formal `review` and `provenance` payloads directly in the analysis response. The desktop host and benchmark pipeline consume those contract fields instead of re-deriving review state from diagnostics.

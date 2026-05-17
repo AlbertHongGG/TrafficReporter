@@ -10,7 +10,7 @@ This folder is the independent benchmark system for the repository. It is intent
 - compact suite inspection
 - runtime-backed suite execution
 - resumable progress/checkpoint execution
-- threshold gate evaluation for exact/top3/CER/IoU/latency
+- threshold gate evaluation for exact/top3/CER/review/IoU/latency
 - standalone HTML/JSON/analysis report output
 - cross-profile sweep comparison output
 - benchmark tool unit tests
@@ -25,7 +25,7 @@ python traffic-lpr-benchmark/cli.py doctor --suite .runtime/benchmark-tool/suite
 python traffic-lpr-benchmark/cli.py print-summary --suite .runtime/benchmark-tool/suites/sample-template.json
 python traffic-lpr-benchmark/cli.py import-legacy-manifest --manifest traffic-lpr-runtime/.runtime/benchmarks/manifests/local/smoke/all.json --suite-id smoke-one --limit 1 --output .runtime/benchmark-tool/suites/smoke-one.json
 python traffic-lpr-benchmark/cli.py run --suite .runtime/benchmark-tool/suites/smoke-one.json
-python traffic-lpr-benchmark/cli.py run --suite .runtime/benchmark-tool/suites/smoke-one.json --run-id smoke-gate --min-exact-rate 1.0 --min-top3-rate 1.0 --max-mean-cer 0.0 --min-plate-iou 1.0 --max-p95-latency-ms 60000
+python traffic-lpr-benchmark/cli.py run --suite .runtime/benchmark-tool/suites/smoke-one.json --run-id smoke-gate --min-exact-rate 1.0 --min-top3-rate 1.0 --max-mean-cer 0.0 --max-review-required-rate 0.0 --max-no-candidate-rate 0.0 --min-plate-iou 1.0 --max-p95-latency-ms 60000
 python traffic-lpr-benchmark/cli.py run --suite .runtime/benchmark-tool/suites/smoke-one.json --run-id smoke-gate --resume
 python traffic-lpr-benchmark/cli.py profile-sweep --suite .runtime/benchmark-tool/suites/smoke-one.json --profiles balanced precision recovery
 ```
@@ -46,12 +46,16 @@ Each benchmark run now writes the following files under `.runtime/benchmark-tool
 
 - `progress.json`: live execution status updated after each case
 - `checkpoint.json`: resumable partial results for `--resume`
-- `result.json`: validated benchmark run bundle
+- `result.json`: validated benchmark run bundle with stricter per-case metrics and mandatory `review` / `provenance` payloads on every case
+- `suite-registry.json`: immutable case registry with content IDs, source integrity, and validation state
+- `run-ledger.json`: append-style per-run case ledger with content IDs, source hashes, and resolved outcomes
 - `summary.md`: compact run summary
 - `analysis.json`: dataset / split / category / failure-source breakdown
 - `analysis.md`: human-readable Taiwan-first benchmark interpretation
+- `evaluation.json`: hierarchical stage/component attribution plus review-state / review-reason breakdown
+- `evaluation.md`: human-readable evaluation breakdown from the new evaluation engine
 - `report.html`: per-case HTML report
-- `gate.json`: threshold checks when gate options are supplied
+- `gate.json`: threshold checks when gate options are supplied, including review-aware checks
 
 `run` is now suitable for longer suites because it can expose progress, preserve resumable checkpoints, and fail the command when gate thresholds are not met.
 

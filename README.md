@@ -51,6 +51,8 @@ Longer benchmark runs now emit resumable `progress.json` / `checkpoint.json` art
 
 Shared benchmark and LPR profile schemas now live under `schemas/` so the benchmark tool and runtime-facing JSON assets can evolve from one repo-level source of truth.
 
+The architecture cut line, dataset policy, artifact policy, and cross-layer dependency rules are documented in `docs/lpr-architecture-boundaries.md`.
+
 The LPR request/response contract is now generated from `schemas/lpr/lpr-contracts.json`. Regenerate the checked-in TypeScript and Rust payload definitions with:
 
 ```bash

@@ -60,6 +60,8 @@ def build_profile_sweep_markdown(payload: dict[str, Any]) -> str:
             '- '
             f"{entry.get('profileId')}: exact={_format_rate(entry.get('exactMatchRate'))}, "
             f"top3={_format_rate(entry.get('top3MatchRate'))}, "
+            f"review={_format_rate(entry.get('reviewRequiredRate'))}, "
+            f"none={_format_rate(entry.get('noCandidateRate'))}, "
             f"cer={_format_number(entry.get('meanCharacterErrorRate'))}, "
             f"plateIoU={_format_number(entry.get('meanPlateIoU'))}, "
             f"p95={_format_number(entry.get('p95LatencyMs'), 1)}ms, "
@@ -100,6 +102,9 @@ def summarize_profile_run(
         'summary': runtime_result.get('summary'),
         'exactMatchRate': metrics.get('exactMatchRate'),
         'top3MatchRate': metrics.get('top3MatchRate'),
+        'acceptedRate': metrics.get('acceptedRate'),
+        'reviewRequiredRate': metrics.get('reviewRequiredRate'),
+        'noCandidateRate': metrics.get('noCandidateRate'),
         'meanCharacterErrorRate': metrics.get('meanCharacterErrorRate'),
         'meanAcceptedMargin': metrics.get('meanAcceptedMargin'),
         'meanPlateIoU': _mean_case_metric(runtime_result.get('cases') or [], 'localization', 'plateMeanIoU'),

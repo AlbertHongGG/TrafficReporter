@@ -29,7 +29,7 @@ import {
 import { requestPlateWindowSession, sendPlateWindowAction } from '../infrastructure/plateWindowApi';
 import { clamp, formatRulerLabel, formatTransportTime } from '../domain/model';
 import { buildDefaultLprState } from '../domain/lprState';
-import type { LprFrameSample, LprPlateCandidate, TimelineIntervalSelection } from '../../../shared/contracts';
+import type { LprFrameSample, LprJobState, LprPlateCandidate, LprReviewState, TimelineIntervalSelection } from '../../../shared/contracts';
 import { getLprAnalysisProfileLabel, getLprAnalysisProfiles } from '../../../shared/lprAnalysisProfiles';
 import { createLogger, getErrorSummary, serializeError } from '../../../utils/logger';
 import styles from './PlateWindow.module.css';
@@ -231,6 +231,54 @@ function candidateBadgeLabel(candidate: LprPlateCandidate, acceptedCandidateId: 
   return confidenceLabel;
 }
 
+function formatCurrentReview(review: LprReviewState | null, candidates: LprPlateCandidate[]) {
+  if (!review) {
+    return 'Review: --';
+  }
+
+  if (review.status === 'no-candidate') {
+    return 'Review: no candidate';
+  }
+
+  if (review.status === 'review-required') {
+    const reasonLabel = review.reasons.map(formatReviewReason).join(', ');
+    return reasonLabel ? `Review: required (${reasonLabel})` : 'Review: required';
+  }
+
+  const acceptedCandidate = candidates.find((candidate) => candidate.id === review.acceptedCandidateId)
+    ?? candidates.find((candidate) => candidate.id === review.suggestedCandidateId)
+    ?? null;
+  return acceptedCandidate ? `Review: accepted ${acceptedCandidate.text}` : 'Review: accepted';
+}
+
+function formatEvidenceState(samples: LprFrameSample[], evidenceSamples: EvidenceSample[], topCandidate: LprPlateCandidate | null) {
+  if (!topCandidate && samples.length === 0) {
+    return 'Evidence: none';
+  }
+
+  if (evidenceSamples.length > 0) {
+    return `Evidence: ${evidenceSamples.length} frame(s)`;
+  }
+
+  return `Evidence: ${samples.length} sample(s)`;
+}
+
+function formatJobState(job: LprJobState) {
+  if (job.status === 'running' || job.status === 'queued') {
+    return `Job: ${job.stage || 'LPR'} ${Math.round(clamp(job.progress, 0, 1) * 100)}%`;
+  }
+  if (job.status === 'cancelled') {
+    return 'Job: cancelled';
+  }
+  if (job.status === 'failed') {
+    return 'Job: failed';
+  }
+  if (job.status === 'completed') {
+    return 'Job: completed';
+  }
+  return 'Job: idle';
+}
+
 export const PlateWindow: React.FC = () => {
   const [snapshot, setSnapshot] = React.useState<PlateWindowSessionSnapshot | null>(null);
   const [countryHintsDraft, setCountryHintsDraft] = React.useState('');
@@ -246,6 +294,9 @@ export const PlateWindow: React.FC = () => {
   const isBusy = lprState.job.status === 'queued' || lprState.job.status === 'running';
   const currentPlayheadMs = snapshot?.playheadMs ?? 0;
   const evidenceSamples = React.useMemo(() => buildEvidenceSamples(lprState.samples, topCandidate), [lprState.samples, topCandidate]);
+  const reviewSummary = React.useMemo(() => formatCurrentReview(lprState.review, lprState.candidates), [lprState.candidates, lprState.review]);
+  const evidenceSummary = React.useMemo(() => formatEvidenceState(lprState.samples, evidenceSamples, topCandidate), [evidenceSamples, lprState.samples, topCandidate]);
+  const jobSummary = React.useMemo(() => formatJobState(lprState.job), [lprState.job]);
   const playheadEvidenceSample = React.useMemo(
     () => evidenceSamples.find((entry) => entry.sample.timeMs === currentPlayheadMs) ?? null,
     [currentPlayheadMs, evidenceSamples],
@@ -377,6 +428,11 @@ export const PlateWindow: React.FC = () => {
                     </motion.span>
                   </AnimatePresence>
                 </div>
+                <div className={styles.statusPillRow}>
+                  <span className={styles.infoItemPill}>{jobSummary}</span>
+                  <span className={styles.infoItemPill}>{reviewSummary}</span>
+                  <span className={styles.infoItemPill}>{evidenceSummary}</span>
+                </div>
                 <AnimatePresence>
                   {(lprState.job.error || errorMessage) && (
                     <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className={styles.errorBanner}>
@@ -403,6 +459,11 @@ export const PlateWindow: React.FC = () => {
               </div>
 
               <div className={styles.utilityActions}>
+                {isBusy && (
+                  <motion.button whileTap={{ scale: 0.95 }} type="button" className={styles.actionBtnUtility} onClick={() => void sendAction({ type: 'cancel-job' })} title="Cancel Current LPR Job">
+                    <X size={15} />
+                  </motion.button>
+                )}
                 <motion.button whileTap={{ scale: 0.95 }} type="button" className={`${styles.actionBtnUtility} ${lprState.showDeveloperDiagnostics ? styles.utilityActive : ''}`} onClick={() => void sendAction({ type: 'toggle-developer-diagnostics' })} title="Toggle Developer Diagnostics">
                   <Zap size={15} />
                 </motion.button>
@@ -514,8 +575,8 @@ export const PlateWindow: React.FC = () => {
                           </motion.button>
                         );
                       })}
-                      {topCandidate && candidateSelection(topCandidate).reviewRequired && lprState.acceptedCandidateId === null && (
-                        <div className={styles.emptyInline}>Review needed: {candidateSelection(topCandidate).reasons.map(formatReviewReason).join(', ') || 'manual confirmation required'}.</div>
+                      {lprState.review?.status === 'review-required' && lprState.acceptedCandidateId === null && (
+                        <div className={styles.emptyInline}>{reviewSummary}.</div>
                       )}
                     </motion.div>
                   )}

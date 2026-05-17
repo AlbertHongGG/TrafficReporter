@@ -29,6 +29,7 @@ export interface PlateWindowSessionSnapshot {
 
 export type PlateWindowAction =
   | { type: 'refresh-runtime' }
+  | { type: 'cancel-job' }
   | { type: 'use-clip-interval' }
   | { type: 'set-interval-boundary'; boundary: 'start' | 'end' }
   | { type: 'clear-interval' }

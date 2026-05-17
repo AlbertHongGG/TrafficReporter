@@ -17,9 +17,12 @@ if str(RUNTIME_ROOT) not in sys.path:
 from gate import evaluate_runtime_result_gate
 from legacy_import import import_legacy_manifest
 from analysis import build_run_analysis
+from evaluation import build_run_evaluation
+from registry import build_suite_registry, summarize_suite_registry
 from profile_sweep import apply_analysis_profile_to_suite, build_profile_sweep_payload
 from reporting import write_run_artifacts
-from traffic_lpr_runtime.application.benchmark_workflow import summarize_benchmark_results
+from runtime_bridge import RuntimeInvokeError, build_runtime_request_envelope, unwrap_runtime_response
+from traffic_lpr_runtime.application.benchmark_workflow import BenchmarkRunWorkflow, summarize_benchmark_results
 from validation import ValidationError, inspect_suite_payload, validate_profile_catalog_file, validate_suite_payload
 
 
@@ -29,6 +32,7 @@ class BenchmarkToolTests(unittest.TestCase):
             'schemaVersion': 1,
             'suiteId': 'frame-suite',
             'title': 'Frame Suite',
+            'analysisProfileId': 'precision',
             'cases': [
                 {
                     'id': 'case-001',
@@ -37,6 +41,7 @@ class BenchmarkToolTests(unittest.TestCase):
                     'timeMs': 1200,
                     'expectedText': 'ABC1234',
                     'tags': ['taiwan'],
+                    'metadata': {'dataset': 'AOLP', 'category': 'blur'},
                 }
             ],
         }
@@ -47,14 +52,57 @@ class BenchmarkToolTests(unittest.TestCase):
         payload = {
             'schemaVersion': 1,
             'suiteId': 'duplicate-suite',
+            'analysisProfileId': 'precision',
             'cases': [
-                {'id': 'case-001', 'mode': 'frame', 'sourcePath': 'a', 'timeMs': 1, 'expectedText': 'AAA1111'},
-                {'id': 'case-001', 'mode': 'frame', 'sourcePath': 'b', 'timeMs': 2, 'expectedText': 'BBB2222'},
+                {'id': 'case-001', 'mode': 'frame', 'sourcePath': 'a', 'timeMs': 1, 'expectedText': 'AAA1111', 'metadata': {'dataset': 'AOLP', 'category': 'blur'}},
+                {'id': 'case-001', 'mode': 'frame', 'sourcePath': 'b', 'timeMs': 2, 'expectedText': 'BBB2222', 'metadata': {'dataset': 'AOLP', 'category': 'night'}},
             ],
         }
 
         with self.assertRaises(ValidationError):
             validate_suite_payload(payload)
+
+    def test_validate_suite_payload_rejects_missing_benchmark_semantics(self) -> None:
+        payload = {
+            'schemaVersion': 1,
+            'suiteId': 'semantic-suite',
+            'cases': [
+                {
+                    'id': 'case-001',
+                    'mode': 'interval',
+                    'sourcePath': 'track.mp4',
+                    'expectedText': 'AAA1111',
+                    'anchorTimeMs': 300,
+                    'interval': {'startMs': 400, 'endMs': 800},
+                    'selectedTargetBox': {'x': 0.1, 'y': 0.2, 'width': 0.3, 'height': 0.2},
+                    'metadata': {'dataset': 'UFPR-ALPR'},
+                }
+            ],
+        }
+
+        with self.assertRaises(ValidationError) as error:
+            validate_suite_payload(payload)
+
+        self.assertIn('metadata.category or metadata.dominantCategory is required', str(error.exception))
+        self.assertIn('analysisProfileId is required unless suite.analysisProfileId is declared', str(error.exception))
+        self.assertIn('anchorTimeMs must lie within interval.startMs/endMs', str(error.exception))
+
+    def test_runtime_request_envelope_uses_protocol_version(self) -> None:
+        envelope = build_runtime_request_envelope('benchmark-run', {'cases': []}, request_id='req-001')
+
+        self.assertEqual(envelope['protocolVersion'], 1)
+        self.assertEqual(envelope['subcommand'], 'benchmark-run')
+        self.assertEqual(envelope['requestId'], 'req-001')
+        self.assertEqual(envelope['payload'], {'cases': []})
+
+    def test_unwrap_runtime_response_rejects_protocol_mismatch(self) -> None:
+        with self.assertRaises(RuntimeInvokeError):
+            unwrap_runtime_response({'protocolVersion': 2, 'ok': True, 'result': {}})
+
+    def test_unwrap_runtime_response_accepts_versioned_payload(self) -> None:
+        result = unwrap_runtime_response({'protocolVersion': 1, 'ok': True, 'result': {'summary': 'ok'}})
+
+        self.assertEqual(result, {'summary': 'ok'})
 
     def test_validate_profile_catalog_file_accepts_shared_catalog(self) -> None:
         catalog_path = TOOL_ROOT.parent / 'src' / 'shared' / 'config' / 'lpr-analysis-profiles.json'
@@ -74,17 +122,130 @@ class BenchmarkToolTests(unittest.TestCase):
         runtime_result = {
             'summary': '1 case, exact=100.0%',
             'cases': [
-                {'id': 'case-001', 'mode': 'frame', 'expectedText': 'AAA1111', 'bestText': 'AAA1111', 'localization': {}}
+                {
+                    'id': 'case-001',
+                    'mode': 'frame',
+                    'expectedText': 'AAA1111',
+                    'bestText': 'AAA1111',
+                    'bestSource': 'ocr:model-a',
+                    'allSources': ['ocr:model-a'],
+                    'top3Texts': ['AAA1111'],
+                    'exactMatch': True,
+                    'top3Match': True,
+                    'characterErrorRate': 0.0,
+                    'acceptedCandidateId': 'candidate-1',
+                    'acceptedConfidence': 1.0,
+                    'acceptedMargin': 1.0,
+                    'latencyMs': 10.0,
+                    'localization': {
+                        'groundTruthFrameCount': 1,
+                        'matchedFrameCount': 1,
+                        'plateMeanIoU': 1.0,
+                        'plateRecall': 1.0,
+                        'targetMeanIoU': None,
+                        'targetRecall': None,
+                    },
+                    'trackMetrics': None,
+                    'failureReason': 'correct',
+                    'review': {
+                        'status': 'accepted',
+                        'acceptedCandidateId': 'candidate-1',
+                        'suggestedCandidateId': 'candidate-1',
+                        'reasons': [],
+                    },
+                    'provenance': {
+                        'requestId': 'req-001',
+                        'command': 'analyze-frame',
+                        'analysisProfileId': 'precision',
+                        'developerDiagnosticsEnabled': False,
+                        'runtimeVersion': 'runtime-1',
+                        'emittedAtMs': 1,
+                    },
+                    'summary': '',
+                    'tags': ['aolp'],
+                    'metadata': {'dataset': 'AOLP', 'split': 'subset-ac'},
+                }
             ],
             'metrics': {
                 'totalCases': 1,
                 'exactMatchRate': 1.0,
                 'top3MatchRate': 1.0,
                 'meanCharacterErrorRate': 0.0,
+                'acceptedRate': 1.0,
+                'reviewRequiredRate': 0.0,
+                'noCandidateRate': 0.0,
+                'reviewBreakdown': {'accepted': 1},
+                'reviewReasonBreakdown': {},
+                'sourceWinCounts': {'ocr:model-a': 1},
                 'meanAcceptedMargin': 1.0,
-                'latencyMs': {'p95': 10.0},
+                'latencyMs': {'mean': 10.0, 'p50': 10.0, 'p95': 10.0},
+                'confidenceCalibration': {'expectedCalibrationError': 0.0, 'bins': []},
                 'failureBreakdown': {'correct': 1},
+                'tagBreakdown': {
+                    'aolp': {
+                        'totalCases': 1,
+                        'exactMatchRate': 1.0,
+                        'top3MatchRate': 1.0,
+                        'meanCharacterErrorRate': 0.0,
+                        'acceptedRate': 1.0,
+                        'reviewRequiredRate': 0.0,
+                        'noCandidateRate': 0.0,
+                        'meanLatencyMs': 10.0,
+                        'meanAcceptedMargin': 1.0,
+                        'meanPlateIoU': 1.0,
+                        'plateLocalizationRecall': 1.0,
+                        'meanTargetIoU': None,
+                        'targetLocalizationRecall': None,
+                        'trackMajorityExactMatchRate': None,
+                        'meanPredictionSwitchCount': None,
+                        'meanSampleExactMatchRate': None,
+                        'meanTimeToFirstCorrectMs': None,
+                    }
+                },
+                'datasetBreakdown': {
+                    'AOLP': {
+                        'totalCases': 1,
+                        'exactMatchRate': 1.0,
+                        'top3MatchRate': 1.0,
+                        'meanCharacterErrorRate': 0.0,
+                        'acceptedRate': 1.0,
+                        'reviewRequiredRate': 0.0,
+                        'noCandidateRate': 0.0,
+                        'meanLatencyMs': 10.0,
+                        'meanAcceptedMargin': 1.0,
+                        'meanPlateIoU': 1.0,
+                        'plateLocalizationRecall': 1.0,
+                        'meanTargetIoU': None,
+                        'targetLocalizationRecall': None,
+                        'trackMajorityExactMatchRate': None,
+                        'meanPredictionSwitchCount': None,
+                        'meanSampleExactMatchRate': None,
+                        'meanTimeToFirstCorrectMs': None,
+                    }
+                },
+                'splitBreakdown': {
+                    'subset-ac': {
+                        'totalCases': 1,
+                        'exactMatchRate': 1.0,
+                        'top3MatchRate': 1.0,
+                        'meanCharacterErrorRate': 0.0,
+                        'acceptedRate': 1.0,
+                        'reviewRequiredRate': 0.0,
+                        'noCandidateRate': 0.0,
+                        'meanLatencyMs': 10.0,
+                        'meanAcceptedMargin': 1.0,
+                        'meanPlateIoU': 1.0,
+                        'plateLocalizationRecall': 1.0,
+                        'meanTargetIoU': None,
+                        'targetLocalizationRecall': None,
+                        'trackMajorityExactMatchRate': None,
+                        'meanPredictionSwitchCount': None,
+                        'meanSampleExactMatchRate': None,
+                        'meanTimeToFirstCorrectMs': None,
+                    }
+                },
             },
+            'runtime': {'status': 'ready'},
         }
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -100,9 +261,17 @@ class BenchmarkToolTests(unittest.TestCase):
             self.assertTrue(result_json.exists())
             self.assertTrue(Path(artifact_paths['analysisJson']).exists())
             self.assertTrue(Path(artifact_paths['analysisMarkdown']).exists())
+            self.assertTrue(Path(artifact_paths['suiteRegistryJson']).exists())
+            self.assertTrue(Path(artifact_paths['runLedgerJson']).exists())
+            self.assertTrue(Path(artifact_paths['evaluationJson']).exists())
+            self.assertTrue(Path(artifact_paths['evaluationMarkdown']).exists())
             payload = json.loads(result_json.read_text(encoding='utf-8'))
             self.assertEqual(payload['runId'], 'run-001')
             self.assertEqual(payload['suite']['suiteId'], 'bundle-suite')
+            self.assertEqual(payload['result']['cases'][0]['provenance']['analysisProfileId'], 'precision')
+            run_ledger = json.loads(Path(artifact_paths['runLedgerJson']).read_text(encoding='utf-8'))
+            self.assertEqual(run_ledger['caseCount'], 1)
+            self.assertEqual(run_ledger['completedCaseCount'], 1)
 
     def test_inspect_suite_payload_reports_missing_sources_and_datasets(self) -> None:
         payload = {
@@ -141,9 +310,134 @@ class BenchmarkToolTests(unittest.TestCase):
             summary = inspect_suite_payload(payload)
 
         self.assertEqual(summary['datasets'], {'AOLP': 1, 'UFPR-ALPR': 1})
+        self.assertEqual(summary['splits'], {'unknown': 2})
         self.assertEqual(summary['categories'], {'blur': 1, 'tracking': 1})
         self.assertEqual(summary['missingSourcePathCount'], 1)
+        self.assertEqual(summary['validationCounts'], {'blocked': 1, 'warning': 1})
         self.assertFalse(summary['readyToRun'])
+
+    def test_build_suite_registry_materializes_case_content_and_source_integrity(self) -> None:
+        payload = {
+            'schemaVersion': 1,
+            'suiteId': 'registry-suite',
+            'analysisProfileId': 'precision',
+            'cases': [
+                {
+                    'id': 'case-001',
+                    'mode': 'frame',
+                    'sourcePath': 'frame.jpg',
+                    'timeMs': 150,
+                    'expectedText': 'ABC1234',
+                    'metadata': {'dataset': 'AOLP', 'split': 'subset-ac', 'category': 'blur'},
+                },
+                {
+                    'id': 'case-002',
+                    'mode': 'interval',
+                    'sourcePath': 'missing.mp4',
+                    'expectedText': 'BBB2222',
+                    'anchorTimeMs': 1000,
+                    'interval': {'startMs': 900, 'endMs': 1400},
+                    'selectedTargetBox': {'x': 0.1, 'y': 0.2, 'width': 0.3, 'height': 0.2},
+                    'metadata': {'dataset': 'UFPR-ALPR'},
+                },
+            ],
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / 'frame.jpg').write_bytes(b'frame-data')
+            registry = build_suite_registry(payload, base_dir=root)
+            summary = summarize_suite_registry(registry)
+
+        self.assertEqual(len(registry.cases), 2)
+        self.assertNotEqual(registry.cases[0].content_id, registry.cases[1].content_id)
+        self.assertEqual(summary['sourceIntegrity']['missingSourceCount'], 1)
+        self.assertEqual(summary['sourceIntegrity']['hashedSourceCount'], 1)
+        self.assertEqual(summary['validationCounts'], {'blocked': 1, 'ready': 1})
+
+    def test_build_run_evaluation_emits_hierarchical_attribution_and_registry_context(self) -> None:
+        suite_payload = {
+            'schemaVersion': 1,
+            'suiteId': 'evaluation-suite',
+            'cases': [
+                {
+                    'id': 'case-001',
+                    'mode': 'frame',
+                    'sourcePath': 'frame.jpg',
+                    'timeMs': 100,
+                    'expectedText': 'AAA1111',
+                    'metadata': {'dataset': 'AOLP', 'split': 'subset-ac', 'category': 'blur'},
+                },
+                {
+                    'id': 'case-002',
+                    'mode': 'interval',
+                    'sourcePath': 'track.mp4',
+                    'expectedText': 'BBB2222',
+                    'metadata': {'dataset': 'UFPR-ALPR', 'split': 'testing', 'category': 'tracking'},
+                },
+            ],
+        }
+        bundle = {
+            'runId': 'run-eval',
+            'generatedAt': '2026-05-17T00:00:00Z',
+            'suite': {'suiteId': 'evaluation-suite', 'title': 'Evaluation Suite', 'caseCount': 2},
+            'result': {
+                'summary': '2 cases',
+                'cases': [
+                    {
+                        'id': 'case-001',
+                        'expectedText': 'AAA1111',
+                        'bestText': 'AAA1111',
+                        'exactMatch': True,
+                        'failureReason': 'correct',
+                        'acceptedCandidateId': 'candidate-1',
+                        'review': {
+                            'status': 'accepted',
+                            'acceptedCandidateId': 'candidate-1',
+                            'suggestedCandidateId': 'candidate-1',
+                            'reasons': [],
+                        },
+                        'latencyMs': 10.0,
+                        'characterErrorRate': 0.0,
+                        'metadata': {'dataset': 'AOLP', 'split': 'subset-ac', 'category': 'blur'},
+                    },
+                    {
+                        'id': 'case-002',
+                        'expectedText': 'BBB2222',
+                        'bestText': 'BBC2222',
+                        'exactMatch': False,
+                        'failureReason': 'fusion-unstable',
+                        'acceptedCandidateId': None,
+                        'review': {
+                            'status': 'review-required',
+                            'acceptedCandidateId': None,
+                            'suggestedCandidateId': 'candidate-2',
+                            'reasons': ['low-margin'],
+                        },
+                        'latencyMs': 30.0,
+                        'characterErrorRate': 0.2,
+                        'metadata': {'dataset': 'UFPR-ALPR', 'split': 'testing', 'category': 'tracking'},
+                    },
+                ],
+                'metrics': {},
+            },
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / 'frame.jpg').write_bytes(b'frame-data')
+            (root / 'track.mp4').write_bytes(b'track-data')
+            registry = build_suite_registry(suite_payload, base_dir=root)
+
+        evaluation = build_run_evaluation(bundle, suite_registry=registry)
+
+        self.assertEqual(evaluation['stageBreakdown'], {'correct': 1, 'temporal': 1})
+        self.assertEqual(evaluation['componentBreakdown'], {'correct': 1, 'fusion': 1})
+        self.assertEqual(evaluation['datasetComponentBreakdown']['UFPR-ALPR'], {'fusion': 1})
+        self.assertEqual(evaluation['reviewBreakdown'], {'accepted': 1, 'review-required': 1})
+        self.assertEqual(evaluation['datasetReviewBreakdown']['UFPR-ALPR'], {'review-required': 1})
+        self.assertEqual(evaluation['topRegressions'][0]['id'], 'case-002')
+        self.assertEqual(evaluation['registry']['suiteHash'], registry.suite_hash)
 
     def test_import_legacy_manifest_promotes_dominant_category(self) -> None:
         legacy_payload = {
@@ -170,6 +464,59 @@ class BenchmarkToolTests(unittest.TestCase):
 
         self.assertEqual(suite_payload['cases'][0]['metadata']['category'], 'blur')
 
+    def test_benchmark_run_preserves_runtime_review_state_in_case_results(self) -> None:
+        workflow = BenchmarkRunWorkflow(
+            ensure_ready=lambda: None,
+            status=lambda: {'status': 'ready'},
+            analyze_frame=lambda payload: {
+                'candidates': [
+                    {
+                        'id': 'candidate-1',
+                        'text': 'AAB1111',
+                        'confidence': 0.91,
+                        'source': 'fused',
+                    }
+                ],
+                'acceptedCandidateId': None,
+                'review': {
+                    'status': 'review-required',
+                    'acceptedCandidateId': None,
+                    'suggestedCandidateId': 'candidate-1',
+                    'reasons': ['low-margin'],
+                },
+                'provenance': {
+                    'requestId': 'req-001',
+                    'command': 'analyze-frame',
+                    'analysisProfileId': 'precision',
+                    'developerDiagnosticsEnabled': False,
+                    'runtimeVersion': 'runtime-1',
+                    'emittedAtMs': 1,
+                },
+                'summary': 'review needed',
+                'runtime': {'status': 'ready'},
+            },
+            analyze_interval=lambda payload: {'candidates': [], 'summary': '', 'runtime': {'status': 'ready'}},
+        )
+
+        runtime_result = workflow.run(
+            {
+                'cases': [
+                    {
+                        'id': 'case-001',
+                        'mode': 'frame',
+                        'sourcePath': 'frame.jpg',
+                        'timeMs': 0,
+                        'expectedText': 'AAA1111',
+                    }
+                ]
+            }
+        )
+
+        self.assertEqual(runtime_result['cases'][0]['acceptedCandidateId'], None)
+        self.assertEqual(runtime_result['cases'][0]['review']['status'], 'review-required')
+        self.assertEqual(runtime_result['cases'][0]['review']['suggestedCandidateId'], 'candidate-1')
+        self.assertEqual(runtime_result['cases'][0]['provenance']['analysisProfileId'], 'precision')
+
     def test_summarize_benchmark_results_rebuilds_metrics_from_case_results(self) -> None:
         runtime_result = summarize_benchmark_results(
             [
@@ -190,6 +537,13 @@ class BenchmarkToolTests(unittest.TestCase):
                     'localization': {'plateMeanIoU': 1.0, 'plateRecall': 1.0},
                     'trackMetrics': None,
                     'failureReason': 'correct',
+                    'acceptedCandidateId': 'candidate-1',
+                    'review': {
+                        'status': 'accepted',
+                        'acceptedCandidateId': 'candidate-1',
+                        'suggestedCandidateId': 'candidate-1',
+                        'reasons': [],
+                    },
                     'summary': 'ok',
                     'tags': ['aolp', 'blur'],
                     'metadata': {'dataset': 'AOLP', 'split': 'subset-ac'},
@@ -216,6 +570,13 @@ class BenchmarkToolTests(unittest.TestCase):
                         'timeToFirstCorrectMs': None,
                     },
                     'failureReason': 'fusion-unstable',
+                    'acceptedCandidateId': None,
+                    'review': {
+                        'status': 'review-required',
+                        'acceptedCandidateId': None,
+                        'suggestedCandidateId': 'candidate-2',
+                        'reasons': ['low-margin'],
+                    },
                     'summary': 'retry',
                     'tags': ['ufpr-alpr', 'tracking'],
                     'metadata': {'dataset': 'UFPR-ALPR', 'split': 'testing'},
@@ -226,21 +587,28 @@ class BenchmarkToolTests(unittest.TestCase):
 
         self.assertEqual(runtime_result['metrics']['totalCases'], 2)
         self.assertAlmostEqual(runtime_result['metrics']['exactMatchRate'], 0.5)
+        self.assertAlmostEqual(runtime_result['metrics']['acceptedRate'], 0.5)
+        self.assertAlmostEqual(runtime_result['metrics']['reviewRequiredRate'], 0.5)
+        self.assertAlmostEqual(runtime_result['metrics']['noCandidateRate'], 0.0)
+        self.assertEqual(runtime_result['metrics']['reviewReasonBreakdown'], {'low-margin': 1})
         self.assertEqual(runtime_result['metrics']['sourceWinCounts'], {'fused': 1, 'ocr:model-a': 1})
         self.assertEqual(runtime_result['metrics']['failureBreakdown'], {'correct': 1, 'fusion-unstable': 1})
         self.assertEqual(runtime_result['metrics']['datasetBreakdown']['AOLP']['totalCases'], 1)
+        self.assertEqual(runtime_result['metrics']['datasetBreakdown']['UFPR-ALPR']['reviewRequiredRate'], 1.0)
         self.assertEqual(runtime_result['metrics']['splitBreakdown']['testing']['totalCases'], 1)
 
     def test_evaluate_runtime_result_gate_reports_failed_thresholds(self) -> None:
         runtime_result = {
             'cases': [
-                {'localization': {'plateMeanIoU': 0.72}},
-                {'localization': {'plateMeanIoU': 0.68}},
+                {'localization': {'plateMeanIoU': 0.72}, 'review': {'status': 'accepted', 'reasons': []}},
+                {'localization': {'plateMeanIoU': 0.68}, 'review': {'status': 'review-required', 'reasons': ['low-margin']}},
             ],
             'metrics': {
                 'exactMatchRate': 0.75,
                 'top3MatchRate': 1.0,
                 'meanCharacterErrorRate': 0.05,
+                'reviewRequiredRate': 0.5,
+                'noCandidateRate': 0.0,
                 'latencyMs': {'p95': 850.0},
             },
         }
@@ -249,13 +617,15 @@ class BenchmarkToolTests(unittest.TestCase):
             'minExactRate': 0.8,
             'minTop3Rate': 0.95,
             'maxMeanCer': 0.1,
+            'maxReviewRequiredRate': 0.25,
+            'maxNoCandidateRate': 0.1,
             'minPlateIou': 0.75,
             'maxP95LatencyMs': 500.0,
         })
 
         self.assertFalse(gate_result['passed'])
         failed_metrics = {check['metric'] for check in gate_result['checks'] if not check['passed']}
-        self.assertEqual(failed_metrics, {'exactMatchRate', 'meanPlateIoU', 'p95LatencyMs'})
+        self.assertEqual(failed_metrics, {'exactMatchRate', 'reviewRequiredRate', 'meanPlateIoU', 'p95LatencyMs'})
 
     def test_build_run_analysis_groups_failure_sources_by_dataset(self) -> None:
         bundle = {
@@ -272,18 +642,24 @@ class BenchmarkToolTests(unittest.TestCase):
                         'id': 'case-001',
                         'exactMatch': True,
                         'failureReason': 'correct',
+                        'review': {'status': 'accepted', 'reasons': []},
+                        'provenance': {'analysisProfileId': 'balanced'},
                         'metadata': {'dataset': 'AOLP', 'split': 'subset-ac', 'dominantCategory': 'blur'},
                     },
                     {
                         'id': 'case-002',
                         'exactMatch': False,
                         'failureReason': 'plate-localization-missed',
+                        'review': {'status': 'review-required', 'reasons': ['low-confidence']},
+                        'provenance': {'analysisProfileId': 'balanced'},
                         'metadata': {'dataset': 'AOLP', 'split': 'subset-le', 'dominantCategory': 'small-plate'},
                     },
                     {
                         'id': 'case-003',
                         'exactMatch': False,
                         'failureReason': 'fusion-unstable',
+                        'review': {'status': 'review-required', 'reasons': ['fusion-unstable']},
+                        'provenance': {'analysisProfileId': 'balanced'},
                         'metadata': {'dataset': 'UFPR-ALPR', 'split': 'testing', 'dominantCategory': 'angle'},
                     },
                 ],

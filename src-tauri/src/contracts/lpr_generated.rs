@@ -38,6 +38,28 @@ pub struct LprAnalysisOptionsPayload {
     pub min_interval_support_frames: Option<u32>,
 }
 
+pub type LprReviewStatus = String;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LprReviewStatePayload {
+    pub status: LprReviewStatus,
+    pub accepted_candidate_id: Option<String>,
+    pub suggested_candidate_id: Option<String>,
+    pub reasons: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LprAnalysisProvenancePayload {
+    pub request_id: Option<String>,
+    pub command: String,
+    pub analysis_profile_id: Option<LprAnalysisProfileId>,
+    pub developer_diagnostics_enabled: bool,
+    pub runtime_version: Option<String>,
+    pub emitted_at_ms: u64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TimelineIntervalSelectionPayload {
@@ -127,6 +149,7 @@ pub struct LprTargetScanRequestPayload {
     pub time_ms: u64,
     pub marker_rect: Option<VideoMarkerRectPayload>,
     pub target_vehicle_kind: LprVehicleKind,
+    pub request_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -148,6 +171,7 @@ pub struct LprFrameAnalysisRequestPayload {
     pub analysis_profile_id: Option<LprAnalysisProfileId>,
     pub enable_developer_diagnostics: Option<bool>,
     pub analysis_options: Option<LprAnalysisOptionsPayload>,
+    pub request_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -157,6 +181,8 @@ pub struct LprFrameAnalysisResponsePayload {
     pub sample: Option<LprFrameSamplePayload>,
     pub candidates: Vec<LprPlateCandidatePayload>,
     pub accepted_candidate_id: Option<String>,
+    pub review: LprReviewStatePayload,
+    pub provenance: LprAnalysisProvenancePayload,
     pub runtime: LprRuntimeStatusPayload,
     pub diagnostics: Option<LprDiagnostics>,
 }
@@ -175,6 +201,7 @@ pub struct LprIntervalAnalysisRequestPayload {
     pub analysis_profile_id: Option<LprAnalysisProfileId>,
     pub enable_developer_diagnostics: Option<bool>,
     pub analysis_options: Option<LprAnalysisOptionsPayload>,
+    pub request_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -184,6 +211,8 @@ pub struct LprIntervalAnalysisResponsePayload {
     pub samples: Vec<LprFrameSamplePayload>,
     pub candidates: Vec<LprPlateCandidatePayload>,
     pub accepted_candidate_id: Option<String>,
+    pub review: LprReviewStatePayload,
+    pub provenance: LprAnalysisProvenancePayload,
     pub summary: String,
     pub runtime: LprRuntimeStatusPayload,
     pub diagnostics: Option<LprDiagnostics>,
@@ -201,6 +230,8 @@ pub struct LprEvidenceExportRequestPayload {
     pub accepted_candidate: Option<LprPlateCandidatePayload>,
     pub candidates: Vec<LprPlateCandidatePayload>,
     pub samples: Vec<LprFrameSamplePayload>,
+    pub review: Option<LprReviewStatePayload>,
+    pub provenance: Option<LprAnalysisProvenancePayload>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

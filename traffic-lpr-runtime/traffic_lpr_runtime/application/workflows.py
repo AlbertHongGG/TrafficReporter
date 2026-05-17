@@ -5,6 +5,8 @@ from typing import Any, Callable
 
 from traffic_lpr_runtime.application.pipeline_support import AnalysisOptions
 from traffic_lpr_runtime.application.preprocessing import PlateObservation
+from traffic_lpr_runtime.application.provenance import build_analysis_provenance
+from traffic_lpr_runtime.application.review_state import build_review_state
 from traffic_lpr_runtime.domain.errors import RuntimeFailure
 from traffic_lpr_runtime.domain.models import FrameSample, PlateCandidate, TargetTrack, TrackedRegion
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect
@@ -96,12 +98,15 @@ class FrameAnalysisWorkflow:
             **(sample.diagnostics or {}),
             'selection': selection_diagnostics,
         }
+        runtime_status = self._status()
         return {
             'detections': [detection.to_payload() for detection in detections],
             'sample': sample.to_payload(),
             'candidates': [candidate.to_payload() for candidate in candidates[:8]],
             'acceptedCandidateId': accepted_candidate_id,
-            'runtime': self._status(),
+            'review': build_review_state(candidates, accepted_candidate_id, selection_diagnostics),
+            'provenance': build_analysis_provenance('analyze-frame', payload, runtime_status),
+            'runtime': runtime_status,
             'diagnostics': {
                 'analysisOptions': options.to_payload(),
                 'artifactRoot': str(artifact_root) if artifact_root else None,
@@ -220,13 +225,16 @@ class IntervalAnalysisWorkflow:
         else:
             summary = f'{len(samples)} samples, no confident plate candidate.'
 
+        runtime_status = self._status()
         return {
             'targetTracks': [track.to_payload() for track in self._build_track_payload(tracked_frames, track_diagnostics)],
             'samples': [sample.to_payload() for sample in samples],
             'candidates': [candidate.to_payload() for candidate in candidates],
             'acceptedCandidateId': accepted_candidate_id,
+            'review': build_review_state(candidates, accepted_candidate_id, selection_diagnostics),
+            'provenance': build_analysis_provenance('analyze-interval', payload, runtime_status),
             'summary': summary,
-            'runtime': self._status(),
+            'runtime': runtime_status,
             'diagnostics': {
                 'analysisOptions': options.to_payload(),
                 'artifactRoot': str(artifact_root) if artifact_root else None,

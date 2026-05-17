@@ -1,7 +1,9 @@
 import type {
+  LprAnalysisProvenance,
   LprFrameSample,
   LprJobState,
   LprPlateCandidate,
+  LprReviewState,
   LprResultHistoryEntry,
   LprSessionState,
   LprTargetTrack,
@@ -26,6 +28,17 @@ function cloneIntervalSelection(interval: TimelineIntervalSelection | null) {
 
 function cloneLprJobState(job: LprJobState) {
   return { ...job };
+}
+
+function cloneLprReviewState(review: LprReviewState | null) {
+  return review ? {
+    ...review,
+    reasons: [...review.reasons],
+  } : null;
+}
+
+function cloneLprAnalysisProvenance(provenance: LprAnalysisProvenance | null) {
+  return provenance ? { ...provenance } : null;
 }
 
 function cloneLprTargetTracks(targetTracks: LprTargetTrack[]) {
@@ -78,6 +91,8 @@ export function buildDefaultLprState(overrides: Partial<LprSessionState> = {}): 
     selectedTargetTrackId: overrides.selectedTargetTrackId ?? null,
     samples: cloneLprSamples(overrides.samples ?? []),
     candidates: cloneLprPlateCandidates(overrides.candidates ?? []),
+    review: cloneLprReviewState(overrides.review ?? null),
+    lastAnalysisProvenance: cloneLprAnalysisProvenance(overrides.lastAnalysisProvenance ?? null),
     acceptedCandidateId: overrides.acceptedCandidateId ?? null,
     history: cloneLprHistory(overrides.history ?? []),
   };

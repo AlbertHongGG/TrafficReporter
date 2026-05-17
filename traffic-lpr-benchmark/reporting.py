@@ -7,7 +7,10 @@ from pathlib import Path
 from typing import Any
 
 from analysis import build_analysis_markdown, build_run_analysis
+from evaluation import build_evaluation_markdown, build_run_evaluation
+from ledger import build_run_ledger
 from models import BenchmarkRunBundle, BenchmarkSuite
+from registry import build_suite_registry
 from validation import validate_run_bundle_payload
 from workspace import default_report_root, default_run_root
 
@@ -39,6 +42,7 @@ def write_run_artifacts(
     run_id: str,
     run_root: Path | None = None,
     report_root: Path | None = None,
+  suite_base_dir: Path | None = None,
 ) -> dict[str, str]:
     resolved_run_root = (run_root or default_run_root()).resolve() / run_id
     resolved_report_root = (report_root or default_report_root()).resolve()
@@ -60,14 +64,25 @@ def write_run_artifacts(
     summary_path = resolved_run_root / 'summary.md'
     analysis_json_path = resolved_run_root / 'analysis.json'
     analysis_markdown_path = resolved_run_root / 'analysis.md'
+    suite_registry_path = resolved_run_root / 'suite-registry.json'
+    run_ledger_path = resolved_run_root / 'run-ledger.json'
+    evaluation_json_path = resolved_run_root / 'evaluation.json'
+    evaluation_markdown_path = resolved_run_root / 'evaluation.md'
     report_path = resolved_run_root / 'report.html'
     latest_report_path = resolved_report_root / f'{suite_payload.get("suiteId") or "benchmark"}-latest.html'
+    suite_registry = build_suite_registry(suite_payload, base_dir=suite_base_dir)
     analysis_payload = build_run_analysis(bundle)
+    run_ledger = build_run_ledger(run_id, bundle['generatedAt'], suite_registry, runtime_result)
+    evaluation_payload = build_run_evaluation(bundle, suite_registry=suite_registry)
 
     result_path.write_text(json.dumps(bundle, indent=2), encoding='utf-8')
     summary_path.write_text(build_summary_markdown(bundle), encoding='utf-8')
     analysis_json_path.write_text(json.dumps(analysis_payload, indent=2), encoding='utf-8')
     analysis_markdown_path.write_text(build_analysis_markdown(bundle, analysis_payload), encoding='utf-8')
+    suite_registry_path.write_text(json.dumps(suite_registry.to_payload(), indent=2), encoding='utf-8')
+    run_ledger_path.write_text(json.dumps(run_ledger, indent=2), encoding='utf-8')
+    evaluation_json_path.write_text(json.dumps(evaluation_payload, indent=2), encoding='utf-8')
+    evaluation_markdown_path.write_text(build_evaluation_markdown(evaluation_payload), encoding='utf-8')
     report_html = build_report_html(bundle)
     report_path.write_text(report_html, encoding='utf-8')
     latest_report_path.write_text(report_html, encoding='utf-8')
@@ -76,8 +91,12 @@ def write_run_artifacts(
         'runDir': str(resolved_run_root),
         'resultJson': str(result_path),
         'summaryMarkdown': str(summary_path),
-      'analysisJson': str(analysis_json_path),
-      'analysisMarkdown': str(analysis_markdown_path),
+        'analysisJson': str(analysis_json_path),
+        'analysisMarkdown': str(analysis_markdown_path),
+        'suiteRegistryJson': str(suite_registry_path),
+        'runLedgerJson': str(run_ledger_path),
+        'evaluationJson': str(evaluation_json_path),
+        'evaluationMarkdown': str(evaluation_markdown_path),
         'reportHtml': str(report_path),
         'latestReportHtml': str(latest_report_path),
     }
@@ -94,6 +113,8 @@ def build_summary_markdown(bundle: dict[str, Any]) -> str:
         f"- Summary: {result.get('summary') or '--'}",
         f"- Exact match: {_format_rate(metrics.get('exactMatchRate'))}",
         f"- Top-3 match: {_format_rate(metrics.get('top3MatchRate'))}",
+        f"- Review required: {_format_rate(metrics.get('reviewRequiredRate'))}",
+        f"- No candidate: {_format_rate(metrics.get('noCandidateRate'))}",
         f"- Mean CER: {_format_number(metrics.get('meanCharacterErrorRate'))}",
         f"- Mean accepted margin: {_format_number(metrics.get('meanAcceptedMargin'))}",
     ]) + '\n'
@@ -109,6 +130,8 @@ def build_report_html(bundle: dict[str, Any]) -> str:
         ('Summary', _safe_text(result.get('summary') or '--')),
         ('Exact', _format_rate(metrics.get('exactMatchRate'))),
         ('Top-3', _format_rate(metrics.get('top3MatchRate'))),
+        ('Review', _format_rate(metrics.get('reviewRequiredRate'))),
+        ('No Candidate', _format_rate(metrics.get('noCandidateRate'))),
         ('Mean CER', _format_number(metrics.get('meanCharacterErrorRate'))),
         ('Mean Margin', _format_number(metrics.get('meanAcceptedMargin'))),
         ('P95 Latency', _format_number((metrics.get('latencyMs') or {}).get('p95'), 1) + ' ms'),
@@ -122,6 +145,8 @@ def build_report_html(bundle: dict[str, Any]) -> str:
     rows = []
     for case in cases:
         localization = case.get('localization') or {}
+        review = case['review']
+        provenance = case['provenance']
         rows.append(
             '<tr>'
             f'<td>{_safe_text(case.get("id"))}</td>'
@@ -129,6 +154,8 @@ def build_report_html(bundle: dict[str, Any]) -> str:
             f'<td>{_safe_text(case.get("expectedText"))}</td>'
             f'<td>{_safe_text(case.get("bestText"))}</td>'
             f'<td>{_safe_text(case.get("failureReason"))}</td>'
+            f'<td>{_safe_text(review.get("status"))}</td>'
+            f'<td>{_safe_text(provenance.get("analysisProfileId"))}</td>'
             f'<td>{_format_number(case.get("acceptedConfidence"), 3)}</td>'
             f'<td>{_format_number(case.get("latencyMs"), 1)}</td>'
             f'<td>{_format_number(localization.get("plateMeanIoU"), 3)}</td>'
@@ -136,11 +163,15 @@ def build_report_html(bundle: dict[str, Any]) -> str:
             '</tr>'
         )
 
-    rows_markup = ''.join(rows) or '<tr><td colspan="9">No cases.</td></tr>'
+    rows_markup = ''.join(rows) or '<tr><td colspan="11">No cases.</td></tr>'
     failure_breakdown = ''.join(
         f'<li><strong>{_safe_text(name)}</strong>: {_safe_text(count)}</li>'
         for name, count in sorted((metrics.get('failureBreakdown') or {}).items())
     ) or '<li>No failures recorded.</li>'
+    review_breakdown = ''.join(
+        f'<li><strong>{_safe_text(name)}</strong>: {_safe_text(count)}</li>'
+        for name, count in sorted((metrics.get('reviewBreakdown') or {}).items())
+    ) or '<li>No review states recorded.</li>'
 
     return f'''<!DOCTYPE html>
 <html lang="en">
@@ -189,6 +220,8 @@ def build_report_html(bundle: dict[str, Any]) -> str:
         <aside class="panel">
           <h2>Failure Breakdown</h2>
           <ul>{failure_breakdown}</ul>
+          <h2>Review Breakdown</h2>
+          <ul>{review_breakdown}</ul>
         </aside>
         <section class="panel">
           <h2>Cases</h2>
@@ -200,6 +233,8 @@ def build_report_html(bundle: dict[str, Any]) -> str:
                 <th>Expected</th>
                 <th>Best</th>
                 <th>Failure</th>
+                <th>Review</th>
+                <th>Profile</th>
                 <th>Confidence</th>
                 <th>Latency ms</th>
                 <th>Plate IoU</th>

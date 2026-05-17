@@ -1,5 +1,4 @@
 import type {
-  LprSessionState,
   LprTrackedRegion,
   LprTargetTrack,
   MediaProbeResult,
@@ -9,7 +8,7 @@ import type {
   TimelineTrack,
   VideoMarkerRect,
 } from '../../../shared/contracts';
-import { buildDefaultLprState } from './lprState';
+import { buildDefaultAnalysisState, type EditorAnalysisState } from './analysisState';
 
 export type { AudioBitrateKbps, VideoQuality } from '../../../shared/contracts';
 
@@ -52,13 +51,13 @@ export interface EditorFileState {
   previewMuted: boolean;
   isPlaying: boolean;
   markerRect: VideoMarkerRect | null;
-  lpr: LprSessionState;
 }
 
 export interface EditorWorkspaceState {
   workspaceName: string;
   activeFileId: string | null;
   files: EditorFileState[];
+  analysis: EditorAnalysisState;
 }
 
 export const DEFAULT_WORKSPACE_NAME = 'Video Workspace';
@@ -211,7 +210,6 @@ export interface BuildEditorFileStateOptions {
   clips?: TimelineClip[];
   renderProfile?: RenderProfile;
   markerRect?: VideoMarkerRect | null;
-  lpr?: LprSessionState;
 }
 
 export function buildEditorFileState(asset: EditorAsset, options: BuildEditorFileStateOptions = {}): EditorFileState {
@@ -236,7 +234,6 @@ export function buildEditorFileState(asset: EditorAsset, options: BuildEditorFil
     previewMuted: false,
     isPlaying: false,
     markerRect: options.markerRect ? normalizeMarkerRect(options.markerRect) : null,
-    lpr: buildDefaultLprState(options.lpr),
   };
 }
 
@@ -245,6 +242,7 @@ export function buildDefaultWorkspaceState(): EditorWorkspaceState {
     workspaceName: DEFAULT_WORKSPACE_NAME,
     activeFileId: null,
     files: [],
+    analysis: buildDefaultAnalysisState(),
   };
 }
 

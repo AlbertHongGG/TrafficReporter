@@ -122,6 +122,35 @@
       ]
     },
     {
+      "name": "LprReviewStatus",
+      "kind": "stringUnion",
+      "values": ["accepted", "review-required", "no-candidate"]
+    },
+    {
+      "name": "LprReviewState",
+      "kind": "object",
+      "rustName": "LprReviewStatePayload",
+      "fields": [
+        { "name": "status", "type": "LprReviewStatus" },
+        { "name": "acceptedCandidateId", "type": "string", "nullable": true },
+        { "name": "suggestedCandidateId", "type": "string", "nullable": true },
+        { "name": "reasons", "type": "array", "items": "string" }
+      ]
+    },
+    {
+      "name": "LprAnalysisProvenance",
+      "kind": "object",
+      "rustName": "LprAnalysisProvenancePayload",
+      "fields": [
+        { "name": "requestId", "type": "string", "nullable": true },
+        { "name": "command", "type": "string" },
+        { "name": "analysisProfileId", "type": "LprAnalysisProfileId", "nullable": true },
+        { "name": "developerDiagnosticsEnabled", "type": "boolean" },
+        { "name": "runtimeVersion", "type": "string", "nullable": true },
+        { "name": "emittedAtMs", "type": "number", "rustType": "u64" }
+      ]
+    },
+    {
       "name": "TimelineIntervalSelection",
       "kind": "object",
       "rustName": "TimelineIntervalSelectionPayload",
@@ -251,6 +280,8 @@
         { "name": "selectedTargetTrackId", "type": "string", "nullable": true },
         { "name": "samples", "type": "array", "items": "LprFrameSample" },
         { "name": "candidates", "type": "array", "items": "LprPlateCandidate" },
+        { "name": "review", "type": "LprReviewState", "nullable": true },
+        { "name": "lastAnalysisProvenance", "type": "LprAnalysisProvenance", "nullable": true },
         { "name": "acceptedCandidateId", "type": "string", "nullable": true },
         { "name": "history", "type": "array", "items": "LprResultHistoryEntry" }
       ]
@@ -277,7 +308,8 @@
         { "name": "sourcePath", "type": "string" },
         { "name": "timeMs", "type": "number", "rustType": "u64" },
         { "name": "markerRect", "type": "VideoMarkerRect", "nullable": true },
-        { "name": "targetVehicleKind", "type": "LprVehicleKind" }
+        { "name": "targetVehicleKind", "type": "LprVehicleKind" },
+        { "name": "requestId", "type": "string", "optional": true, "nullable": true }
       ]
     },
     {
@@ -302,7 +334,8 @@
         { "name": "countryHints", "type": "array", "items": "string" },
         { "name": "analysisProfileId", "type": "LprAnalysisProfileId", "optional": true, "nullable": true },
         { "name": "enableDeveloperDiagnostics", "type": "boolean", "optional": true },
-        { "name": "analysisOptions", "type": "LprAnalysisOptions", "optional": true, "nullable": true }
+        { "name": "analysisOptions", "type": "LprAnalysisOptions", "optional": true, "nullable": true },
+        { "name": "requestId", "type": "string", "optional": true, "nullable": true }
       ]
     },
     {
@@ -314,6 +347,8 @@
         { "name": "sample", "type": "LprFrameSample", "nullable": true },
         { "name": "candidates", "type": "array", "items": "LprPlateCandidate" },
         { "name": "acceptedCandidateId", "type": "string", "nullable": true },
+        { "name": "review", "type": "LprReviewState" },
+        { "name": "provenance", "type": "LprAnalysisProvenance" },
         { "name": "runtime", "type": "LprRuntimeStatus" },
         { "name": "diagnostics", "type": "LprDiagnostics", "optional": true, "nullable": true }
       ]
@@ -333,7 +368,8 @@
         { "name": "maxSamples", "type": "number", "rustType": "u32", "optional": true },
         { "name": "analysisProfileId", "type": "LprAnalysisProfileId", "optional": true, "nullable": true },
         { "name": "enableDeveloperDiagnostics", "type": "boolean", "optional": true },
-        { "name": "analysisOptions", "type": "LprAnalysisOptions", "optional": true, "nullable": true }
+        { "name": "analysisOptions", "type": "LprAnalysisOptions", "optional": true, "nullable": true },
+        { "name": "requestId", "type": "string", "optional": true, "nullable": true }
       ]
     },
     {
@@ -345,6 +381,8 @@
         { "name": "samples", "type": "array", "items": "LprFrameSample" },
         { "name": "candidates", "type": "array", "items": "LprPlateCandidate" },
         { "name": "acceptedCandidateId", "type": "string", "nullable": true },
+        { "name": "review", "type": "LprReviewState" },
+        { "name": "provenance", "type": "LprAnalysisProvenance" },
         { "name": "summary", "type": "string" },
         { "name": "runtime", "type": "LprRuntimeStatus" },
         { "name": "diagnostics", "type": "LprDiagnostics", "optional": true, "nullable": true }
@@ -363,7 +401,9 @@
         { "name": "targetTrack", "type": "LprTargetTrack", "nullable": true },
         { "name": "acceptedCandidate", "type": "LprPlateCandidate", "nullable": true },
         { "name": "candidates", "type": "array", "items": "LprPlateCandidate" },
-        { "name": "samples", "type": "array", "items": "LprFrameSample" }
+        { "name": "samples", "type": "array", "items": "LprFrameSample" },
+        { "name": "review", "type": "LprReviewState", "optional": true, "nullable": true },
+        { "name": "provenance", "type": "LprAnalysisProvenance", "optional": true, "nullable": true }
       ]
     },
     {

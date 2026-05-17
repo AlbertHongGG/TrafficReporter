@@ -9,6 +9,7 @@ import type {
   LprWorkflowMode,
   TimelineIntervalSelection,
 } from '../domain/model';
+import type { LprAnalysisProvenance, LprReviewState } from '../../../shared/contracts';
 import { buildDefaultLprState } from '../domain/lprState';
 
 export type LprSessionAction =
@@ -27,6 +28,8 @@ export type LprSessionAction =
   | { type: 'set-lpr-job'; job: Partial<LprJobState> }
   | { type: 'set-lpr-samples'; samples: LprFrameSample[] }
   | { type: 'set-lpr-candidates'; candidates: LprPlateCandidate[] }
+  | { type: 'set-lpr-review'; review: LprReviewState | null }
+  | { type: 'set-lpr-provenance'; provenance: LprAnalysisProvenance | null }
   | { type: 'accept-lpr-candidate'; candidateId: string | null }
   | { type: 'append-lpr-history'; entry: LprResultHistoryEntry }
   | { type: 'clear-lpr-results' }
@@ -44,12 +47,37 @@ const LPR_SESSION_ACTION_TYPES = new Set<LprSessionAction['type']>([
   'select-lpr-target-track',
   'set-lpr-job',
   'set-lpr-samples',
+  'set-lpr-review',
+  'set-lpr-provenance',
   'set-lpr-candidates',
   'accept-lpr-candidate',
   'append-lpr-history',
   'clear-lpr-results',
   'reset-lpr-session',
 ]);
+
+function reconcileReviewSelection(
+  lprState: LprSessionState,
+  candidateId: string | null,
+): LprReviewState | null {
+  if (!lprState.review) {
+    return null;
+  }
+
+  if (!candidateId) {
+    return {
+      ...lprState.review,
+      acceptedCandidateId: null,
+      status: lprState.review.suggestedCandidateId ? 'review-required' : lprState.review.status,
+    };
+  }
+
+  return {
+    ...lprState.review,
+    acceptedCandidateId: candidateId,
+    status: 'accepted',
+  };
+}
 
 export function isLprSessionAction(action: { type: string }): action is LprSessionAction {
   return LPR_SESSION_ACTION_TYPES.has(action.type as LprSessionAction['type']);
@@ -143,9 +171,22 @@ export function reduceLprSession(lprState: LprSessionState, action: LprSessionAc
           : action.candidates[0]?.id ?? null,
       };
 
+    case 'set-lpr-review':
+      return {
+        ...lprState,
+        review: action.review ? buildDefaultLprState({ review: action.review }).review : null,
+      };
+
+    case 'set-lpr-provenance':
+      return {
+        ...lprState,
+        lastAnalysisProvenance: action.provenance ? buildDefaultLprState({ lastAnalysisProvenance: action.provenance }).lastAnalysisProvenance : null,
+      };
+
     case 'accept-lpr-candidate':
       return {
         ...lprState,
+        review: reconcileReviewSelection(lprState, action.candidateId),
         acceptedCandidateId: action.candidateId,
         workflowMode: action.candidateId ? 'review' : lprState.workflowMode,
       };
@@ -164,6 +205,8 @@ export function reduceLprSession(lprState: LprSessionState, action: LprSessionAc
         selectedTargetTrackId: null,
         samples: [],
         candidates: [],
+        review: null,
+        lastAnalysisProvenance: null,
         acceptedCandidateId: null,
       };
 

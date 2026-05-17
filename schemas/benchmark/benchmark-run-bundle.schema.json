@@ -2,6 +2,257 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "traffic/schemas/benchmark/benchmark-run-bundle.schema.json",
   "title": "Traffic Benchmark Run Bundle",
+  "$defs": {
+    "reviewState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "acceptedCandidateId", "suggestedCandidateId", "reasons"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["accepted", "review-required", "no-candidate"]
+        },
+        "acceptedCandidateId": { "type": ["string", "null"] },
+        "suggestedCandidateId": { "type": ["string", "null"] },
+        "reasons": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requestId", "command", "analysisProfileId", "developerDiagnosticsEnabled", "runtimeVersion", "emittedAtMs"],
+      "properties": {
+        "requestId": { "type": ["string", "null"] },
+        "command": { "type": "string", "minLength": 1 },
+        "analysisProfileId": { "type": ["string", "null"] },
+        "developerDiagnosticsEnabled": { "type": "boolean" },
+        "runtimeVersion": { "type": ["string", "null"] },
+        "emittedAtMs": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "localization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["groundTruthFrameCount", "matchedFrameCount", "plateMeanIoU", "plateRecall", "targetMeanIoU", "targetRecall"],
+      "properties": {
+        "groundTruthFrameCount": { "type": "integer", "minimum": 0 },
+        "matchedFrameCount": { "type": "integer", "minimum": 0 },
+        "plateMeanIoU": { "type": ["number", "null"] },
+        "plateRecall": { "type": ["number", "null"] },
+        "targetMeanIoU": { "type": ["number", "null"] },
+        "targetRecall": { "type": ["number", "null"] }
+      }
+    },
+    "trackMetrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sampleCount", "predictionSwitchCount", "majorityText", "majorityExactMatch", "sampleExactMatchRate", "timeToFirstCorrectMs"],
+      "properties": {
+        "sampleCount": { "type": "integer", "minimum": 0 },
+        "predictionSwitchCount": { "type": "integer", "minimum": 0 },
+        "majorityText": { "type": "string" },
+        "majorityExactMatch": { "type": "boolean" },
+        "sampleExactMatchRate": { "type": "number" },
+        "timeToFirstCorrectMs": { "type": ["number", "null"] }
+      }
+    },
+    "metricBucket": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "totalCases",
+        "exactMatchRate",
+        "top3MatchRate",
+        "meanCharacterErrorRate",
+        "acceptedRate",
+        "reviewRequiredRate",
+        "noCandidateRate",
+        "meanLatencyMs",
+        "meanAcceptedMargin",
+        "meanPlateIoU",
+        "plateLocalizationRecall",
+        "meanTargetIoU",
+        "targetLocalizationRecall",
+        "trackMajorityExactMatchRate",
+        "meanPredictionSwitchCount",
+        "meanSampleExactMatchRate",
+        "meanTimeToFirstCorrectMs"
+      ],
+      "properties": {
+        "totalCases": { "type": "integer", "minimum": 0 },
+        "exactMatchRate": { "type": "number" },
+        "top3MatchRate": { "type": "number" },
+        "meanCharacterErrorRate": { "type": "number" },
+        "acceptedRate": { "type": "number" },
+        "reviewRequiredRate": { "type": "number" },
+        "noCandidateRate": { "type": "number" },
+        "meanLatencyMs": { "type": "number" },
+        "meanAcceptedMargin": { "type": "number" },
+        "meanPlateIoU": { "type": ["number", "null"] },
+        "plateLocalizationRecall": { "type": ["number", "null"] },
+        "meanTargetIoU": { "type": ["number", "null"] },
+        "targetLocalizationRecall": { "type": ["number", "null"] },
+        "trackMajorityExactMatchRate": { "type": ["number", "null"] },
+        "meanPredictionSwitchCount": { "type": ["number", "null"] },
+        "meanSampleExactMatchRate": { "type": ["number", "null"] },
+        "meanTimeToFirstCorrectMs": { "type": ["number", "null"] }
+      }
+    },
+    "calibrationBin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lowerBound", "upperBound", "count", "meanConfidence", "accuracy"],
+      "properties": {
+        "lowerBound": { "type": "number" },
+        "upperBound": { "type": "number" },
+        "count": { "type": "integer", "minimum": 0 },
+        "meanConfidence": { "type": "number" },
+        "accuracy": { "type": "number" }
+      }
+    },
+    "caseResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "mode",
+        "expectedText",
+        "bestText",
+        "bestSource",
+        "allSources",
+        "top3Texts",
+        "exactMatch",
+        "top3Match",
+        "characterErrorRate",
+        "acceptedConfidence",
+        "acceptedMargin",
+        "latencyMs",
+        "localization",
+        "trackMetrics",
+        "failureReason",
+        "review",
+        "provenance",
+        "summary",
+        "tags",
+        "metadata"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "mode": { "type": "string", "enum": ["frame", "interval"] },
+        "expectedText": { "type": "string" },
+        "bestText": { "type": "string" },
+        "bestSource": { "type": "string" },
+        "allSources": { "type": "array", "items": { "type": "string" } },
+        "top3Texts": { "type": "array", "items": { "type": "string" } },
+        "exactMatch": { "type": "boolean" },
+        "top3Match": { "type": "boolean" },
+        "characterErrorRate": { "type": "number" },
+        "acceptedCandidateId": { "type": ["string", "null"] },
+        "acceptedConfidence": { "type": "number" },
+        "acceptedMargin": { "type": "number" },
+        "latencyMs": { "type": "number" },
+        "localization": { "$ref": "#/$defs/localization" },
+        "trackMetrics": {
+          "oneOf": [
+            { "$ref": "#/$defs/trackMetrics" },
+            { "type": "null" }
+          ]
+        },
+        "failureReason": { "type": "string", "minLength": 1 },
+        "review": { "$ref": "#/$defs/reviewState" },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "summary": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "metadata": { "type": "object" }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "totalCases",
+        "exactMatchRate",
+        "top3MatchRate",
+        "meanCharacterErrorRate",
+        "acceptedRate",
+        "reviewRequiredRate",
+        "noCandidateRate",
+        "reviewBreakdown",
+        "reviewReasonBreakdown",
+        "sourceWinCounts",
+        "meanAcceptedMargin",
+        "latencyMs",
+        "confidenceCalibration",
+        "failureBreakdown",
+        "tagBreakdown",
+        "datasetBreakdown",
+        "splitBreakdown"
+      ],
+      "properties": {
+        "totalCases": { "type": "integer", "minimum": 0 },
+        "exactMatchRate": { "type": "number" },
+        "top3MatchRate": { "type": "number" },
+        "meanCharacterErrorRate": { "type": "number" },
+        "acceptedRate": { "type": "number" },
+        "reviewRequiredRate": { "type": "number" },
+        "noCandidateRate": { "type": "number" },
+        "reviewBreakdown": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "reviewReasonBreakdown": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "sourceWinCounts": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "meanAcceptedMargin": { "type": "number" },
+        "latencyMs": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mean", "p50", "p95"],
+          "properties": {
+            "mean": { "type": "number" },
+            "p50": { "type": "number" },
+            "p95": { "type": "number" }
+          }
+        },
+        "confidenceCalibration": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["expectedCalibrationError", "bins"],
+          "properties": {
+            "expectedCalibrationError": { "type": "number" },
+            "bins": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/calibrationBin" }
+            }
+          }
+        },
+        "failureBreakdown": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "tagBreakdown": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/metricBucket" }
+        },
+        "datasetBreakdown": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/metricBucket" }
+        },
+        "splitBreakdown": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/metricBucket" }
+        }
+      }
+    }
+  },
   "type": "object",
   "additionalProperties": false,
   "required": ["runId", "generatedAt", "suite", "result"],
@@ -20,12 +271,15 @@
     },
     "result": {
       "type": "object",
-      "additionalProperties": true,
-      "required": ["summary", "cases", "metrics"],
+      "additionalProperties": false,
+      "required": ["summary", "cases", "metrics", "runtime"],
       "properties": {
         "summary": { "type": "string" },
-        "cases": { "type": "array" },
-        "metrics": { "type": "object" },
+        "cases": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/caseResult" }
+        },
+        "metrics": { "$ref": "#/$defs/metrics" },
         "runtime": { "type": ["object", "null"] }
       }
     }

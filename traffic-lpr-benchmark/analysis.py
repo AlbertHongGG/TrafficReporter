@@ -3,16 +3,11 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from typing import Any
 
+from evaluation import build_run_evaluation, classify_failure_attribution
+
 
 def classify_failure_source(failure_reason: Any) -> str:
-    reason = str(failure_reason or 'unknown')
-    if reason == 'correct':
-        return 'correct'
-    if reason in {'target-missed', 'plate-localization-missed'}:
-        return 'localization'
-    if reason == 'fusion-unstable':
-        return 'tracking'
-    return 'ocr'
+    return classify_failure_attribution({'failureReason': failure_reason})['family']
 
 
 def build_run_analysis(bundle: dict[str, Any]) -> dict[str, Any]:
@@ -80,6 +75,12 @@ def build_run_analysis(bundle: dict[str, Any]) -> dict[str, Any]:
             'movingCameraReliability': moving_camera_gate,
         }
 
+    evaluation = build_run_evaluation(bundle)
+    analysis['stageBreakdown'] = dict(evaluation.get('stageBreakdown') or {})
+    analysis['componentBreakdown'] = dict(evaluation.get('componentBreakdown') or {})
+    analysis['datasetComponentBreakdown'] = dict(evaluation.get('datasetComponentBreakdown') or {})
+    analysis['topRegressions'] = list(evaluation.get('topRegressions') or [])
+
     return analysis
 
 
@@ -114,6 +115,14 @@ def build_analysis_markdown(bundle: dict[str, Any], analysis: dict[str, Any]) ->
 
     lines.extend([
         '',
+        '## Failure Components',
+        '',
+    ])
+    for name, count in analysis.get('componentBreakdown', {}).items():
+        lines.append(f'- {name}: {count}')
+
+    lines.extend([
+        '',
         '## Category Coverage',
         '',
     ])
@@ -125,6 +134,27 @@ def build_analysis_markdown(bundle: dict[str, Any], analysis: dict[str, Any]) ->
         lines.append(
             f"- {category}: cases={payload.get('cases')}, exact={_format_rate(payload.get('exactMatchRate'))}, failureSources={failure_sources}"
         )
+
+    regressions = analysis.get('topRegressions') or []
+    lines.extend([
+        '',
+        '## Top Regressions',
+        '',
+    ])
+    if not regressions:
+        lines.append('- none')
+    else:
+        for row in regressions:
+            lines.append(
+                '- {id}: dataset={dataset}, category={category}, failure={failure}, component={component}, best={best}'.format(
+                    id=row.get('id') or '--',
+                    dataset=row.get('dataset') or 'unknown',
+                    category=row.get('category') or 'uncategorized',
+                    failure=row.get('failureReason') or 'unknown',
+                    component=row.get('component') or 'unknown',
+                    best=row.get('bestText') or '--',
+                )
+            )
 
     return '\n'.join(lines) + '\n'
 

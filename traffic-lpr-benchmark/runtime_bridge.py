@@ -11,8 +11,49 @@ from typing import Any
 from workspace import default_runtime_root, discover_python
 
 
+RUNTIME_BROKER_PROTOCOL_VERSION = 1
+
+
 class RuntimeInvokeError(RuntimeError):
     pass
+
+
+def build_runtime_request_envelope(
+    subcommand: str,
+    payload: dict[str, Any],
+    *,
+    request_id: str | None = None,
+) -> dict[str, Any]:
+    envelope: dict[str, Any] = {
+        'protocolVersion': RUNTIME_BROKER_PROTOCOL_VERSION,
+        'subcommand': subcommand,
+        'payload': payload,
+    }
+    if request_id:
+        envelope['requestId'] = request_id
+    return envelope
+
+
+def unwrap_runtime_response(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise RuntimeInvokeError('Runtime returned a non-object benchmark result.')
+
+    protocol_version = payload.get('protocolVersion')
+    if protocol_version is None:
+        return payload
+    if protocol_version != RUNTIME_BROKER_PROTOCOL_VERSION:
+        raise RuntimeInvokeError(
+            f'Runtime broker protocol mismatch: expected {RUNTIME_BROKER_PROTOCOL_VERSION}, received {protocol_version}.',
+        )
+
+    if payload.get('ok') is False:
+        detail = payload.get('error') or (payload.get('runtime') or {}).get('detail') or 'Unknown benchmark runtime failure.'
+        raise RuntimeInvokeError(str(detail))
+
+    result = payload.get('result')
+    if not isinstance(result, dict):
+        raise RuntimeInvokeError('Runtime returned success without a benchmark result payload.')
+    return result
 
 
 def run_benchmark_suite(
@@ -38,6 +79,7 @@ def run_benchmark_suite(
         request_payload['checkpointPath'] = str(resolved_checkpoint_path)
     if resume_from_checkpoint:
         request_payload['resumeFromCheckpoint'] = True
+    request_envelope = build_runtime_request_envelope('benchmark-run', request_payload)
 
     with tempfile.TemporaryFile(mode='w+t', encoding='utf-8') as stdout_file, tempfile.TemporaryFile(mode='w+t', encoding='utf-8') as stderr_file:
         completed = subprocess.Popen(
@@ -51,7 +93,7 @@ def run_benchmark_suite(
 
         if completed.stdin is None:
             raise RuntimeInvokeError('Runtime bridge could not open stdin for benchmark execution.')
-        completed.stdin.write(json.dumps(request_payload))
+        completed.stdin.write(json.dumps(request_envelope))
         completed.stdin.close()
 
         last_progress_signature: tuple[Any, ...] | None = None
@@ -82,10 +124,7 @@ def run_benchmark_suite(
         result = json.loads(stdout)
     except json.JSONDecodeError as error:
         raise RuntimeInvokeError(f'Runtime returned invalid JSON: {error}') from error
-
-    if not isinstance(result, dict):
-        raise RuntimeInvokeError('Runtime returned a non-object benchmark result.')
-    return result
+    return unwrap_runtime_response(result)
 
 
 def _emit_progress_update(

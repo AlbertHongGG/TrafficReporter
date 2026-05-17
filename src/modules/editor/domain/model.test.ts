@@ -16,6 +16,10 @@ describe('editor model', () => {
       workspaceName: 'Video Workspace',
       activeFileId: null,
       files: [],
+      analysis: {
+        lprRuntimeStatus: null,
+        lprSessionsByFileId: {},
+      },
     })
   })
 

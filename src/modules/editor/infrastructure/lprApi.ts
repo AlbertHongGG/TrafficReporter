@@ -15,6 +15,10 @@ export function getLprRuntimeStatus() {
   return invoke<LprRuntimeStatus>('get_lpr_runtime_status');
 }
 
+export function cancelLprRuntimeJob() {
+  return invoke<boolean>('cancel_lpr_runtime_job');
+}
+
 export function scanLprTargets(request: LprTargetScanRequest) {
   return invoke<LprTargetScanResponse>('scan_lpr_targets', { request });
 }

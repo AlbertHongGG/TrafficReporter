@@ -11,18 +11,22 @@ use serde::{Deserialize, Serialize};
 use tauri::Emitter;
 
 use crate::contracts::{
-    FrameExportRequest, LprEvidenceExportRequestPayload, LprEvidenceExportResponsePayload,
+    FrameExportRequest, LprAnalysisProvenancePayload,
+    LprEvidenceExportRequestPayload, LprEvidenceExportResponsePayload,
     LprFrameAnalysisRequestPayload, LprFrameAnalysisResponsePayload,
     LprIntervalAnalysisRequestPayload, LprIntervalAnalysisResponsePayload,
-    LprRuntimeStatusPayload, LprTargetScanRequestPayload, LprTargetScanResponsePayload,
-    MediaProbePayload, VideoMarkerRectPayload,
+    LprReviewStatePayload, LprRuntimeStatusPayload,
+    LprTargetScanRequestPayload, LprTargetScanResponsePayload, MediaProbePayload,
+    VideoMarkerRectPayload,
 };
 use crate::platform::process::{find_bundled, find_lpr_runtime_root, find_python_runtime, hidden_command};
 
 const LPR_RUNTIME_RETRY_LIMIT: usize = 1;
+const LPR_RUNTIME_PROTOCOL_VERSION: u8 = 1;
 const APP_LOG_EVENT: &str = "app/log";
 
 static LPR_RUNTIME_WORKER: OnceLock<Mutex<Option<PersistentLprRuntime>>> = OnceLock::new();
+static LPR_RUNTIME_WORKER_PID: OnceLock<Mutex<Option<u32>>> = OnceLock::new();
 
 struct PersistentLprRuntime {
     child: Child,
@@ -34,6 +38,7 @@ struct PersistentLprRuntime {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RuntimeWorkerRequest<'a, TRequest: Serialize> {
+    protocol_version: u8,
     request_id: u64,
     subcommand: &'a str,
     payload: &'a TRequest,
@@ -42,6 +47,7 @@ struct RuntimeWorkerRequest<'a, TRequest: Serialize> {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RuntimeWorkerResponse<TResponse> {
+    protocol_version: u8,
     request_id: u64,
     ok: bool,
     result: Option<TResponse>,
@@ -102,6 +108,7 @@ impl PersistentLprRuntime {
             .stderr(Stdio::piped())
             .spawn()
             .map_err(|error| format!("Failed to start the local LPR runtime worker: {}", error))?;
+        let child_pid = child.id();
 
         if let Some(stderr) = child.stderr.take() {
             let stderr_app_handle = app_handle.clone();
@@ -141,6 +148,8 @@ impl PersistentLprRuntime {
             .take()
             .ok_or_else(|| "Failed to open stdout for the local LPR runtime worker.".to_string())?;
 
+        set_runtime_worker_pid(Some(child_pid));
+
         Ok(Self {
             child,
             stdin,
@@ -163,6 +172,7 @@ impl PersistentLprRuntime {
         TResponse: DeserializeOwned,
     {
         let request = RuntimeWorkerRequest {
+            protocol_version: LPR_RUNTIME_PROTOCOL_VERSION,
             request_id: self.next_request_id,
             subcommand,
             payload,
@@ -225,6 +235,14 @@ impl PersistentLprRuntime {
             )));
         }
 
+        if response.protocol_version != request.protocol_version {
+            return Err(RuntimeWorkerInvokeError::Recoverable(format!(
+                "Mismatched LPR runtime worker protocol: expected version {}, received {}.",
+                request.protocol_version,
+                response.protocol_version,
+            )));
+        }
+
         if response.ok {
             return response.result.ok_or_else(|| {
                 RuntimeWorkerInvokeError::Unrecoverable(
@@ -239,6 +257,123 @@ impl PersistentLprRuntime {
 
 fn runtime_worker_slot() -> &'static Mutex<Option<PersistentLprRuntime>> {
     LPR_RUNTIME_WORKER.get_or_init(|| Mutex::new(None))
+}
+
+fn runtime_worker_pid_slot() -> &'static Mutex<Option<u32>> {
+    LPR_RUNTIME_WORKER_PID.get_or_init(|| Mutex::new(None))
+}
+
+fn set_runtime_worker_pid(pid: Option<u32>) {
+    if let Ok(mut guard) = runtime_worker_pid_slot().lock() {
+        *guard = pid;
+    }
+}
+
+fn active_runtime_worker_pid() -> Result<Option<u32>, String> {
+    runtime_worker_pid_slot()
+        .lock()
+        .map(|guard| *guard)
+        .map_err(|_| "Failed to lock the local LPR runtime worker pid slot.".to_string())
+}
+
+#[cfg(target_os = "windows")]
+fn kill_process_tree(pid: u32) -> Result<(), String> {
+    let output = hidden_command("taskkill")
+        .args(["/PID", &pid.to_string(), "/T", "/F"])
+        .output()
+        .map_err(|error| format!("Failed to execute taskkill for pid {}: {}", pid, error))?;
+
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    Err(if detail.is_empty() {
+        format!("taskkill failed for pid {}.", pid)
+    } else {
+        detail
+    })
+}
+
+#[cfg(not(target_os = "windows"))]
+fn kill_process_tree(pid: u32) -> Result<(), String> {
+    let output = hidden_command("kill")
+        .args(["-TERM", &pid.to_string()])
+        .output()
+        .map_err(|error| format!("Failed to execute kill for pid {}: {}", pid, error))?;
+
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    Err(if detail.is_empty() {
+        format!("kill failed for pid {}.", pid)
+    } else {
+        detail
+    })
+}
+
+fn terminate_lpr_runtime_process(app_handle: &tauri::AppHandle, reason: &str) -> Result<bool, String> {
+    let Some(pid) = active_runtime_worker_pid()? else {
+        emit_app_log(app_handle, "debug", "LprRuntimeWorker", format!("Cancellation skipped: no active worker. reason={}", reason));
+        return Ok(false);
+    };
+
+    emit_app_log(
+        app_handle,
+        "warn",
+        "LprRuntimeWorker",
+        format!("Terminating persistent Python runtime worker pid={} reason={}", pid, reason),
+    );
+    kill_process_tree(pid)?;
+    set_runtime_worker_pid(None);
+    Ok(true)
+}
+
+fn emit_lpr_request_log(
+    app_handle: &tauri::AppHandle,
+    command: &str,
+    request_id: Option<&str>,
+    analysis_profile_id: Option<&str>,
+    developer_diagnostics_enabled: bool,
+) {
+    emit_app_log(
+        app_handle,
+        "info",
+        "LprRuntimeRequest",
+        format!(
+            "command={} requestId={} profile={} developerDiagnostics={}",
+            command,
+            request_id.unwrap_or("-"),
+            analysis_profile_id.unwrap_or("-"),
+            developer_diagnostics_enabled,
+        ),
+    );
+}
+
+fn emit_lpr_result_log(
+    app_handle: &tauri::AppHandle,
+    provenance: &LprAnalysisProvenancePayload,
+    review: &LprReviewStatePayload,
+    candidate_count: usize,
+) {
+    emit_app_log(
+        app_handle,
+        "info",
+        "LprRuntimeResult",
+        format!(
+            "command={} requestId={} status={} suggested={} accepted={} candidates={} profile={} runtimeVersion={}",
+            provenance.command,
+            provenance.request_id.as_deref().unwrap_or("-"),
+            review.status,
+            review.suggested_candidate_id.as_deref().unwrap_or("-"),
+            review.accepted_candidate_id.as_deref().unwrap_or("-"),
+            candidate_count,
+            provenance.analysis_profile_id.as_deref().unwrap_or("-"),
+            provenance.runtime_version.as_deref().unwrap_or("-"),
+        ),
+    );
 }
 
 fn format_worker_error<TResponse>(response: RuntimeWorkerResponse<TResponse>) -> String {
@@ -330,6 +465,7 @@ where
             .map(|worker| !worker.is_alive())
             .unwrap_or(true);
         if needs_restart {
+            set_runtime_worker_pid(None);
             *worker_guard = Some(PersistentLprRuntime::start(app_handle.clone())?);
         }
 
@@ -342,6 +478,7 @@ where
             Err(RuntimeWorkerInvokeError::Unrecoverable(error)) => return Err(error),
             Err(RuntimeWorkerInvokeError::Recoverable(error)) => {
                 emit_app_log(&app_handle, "warn", "LprRuntimeWorker", format!("Worker request failed and will be restarted: {}", error));
+                set_runtime_worker_pid(None);
                 *worker_guard = None;
                 if attempt >= LPR_RUNTIME_RETRY_LIMIT {
                     return Err(error);
@@ -598,7 +735,27 @@ pub async fn scan_lpr_targets(
     app_handle: tauri::AppHandle,
     request: LprTargetScanRequestPayload,
 ) -> Result<LprTargetScanResponsePayload, String> {
-    tauri::async_runtime::spawn_blocking(move || invoke_lpr_runtime(app_handle, "scan-targets", &request))
+    tauri::async_runtime::spawn_blocking(move || {
+        emit_lpr_request_log(
+            &app_handle,
+            "scan-targets",
+            request.request_id.as_deref(),
+            None,
+            false,
+        );
+        let response: LprTargetScanResponsePayload = invoke_lpr_runtime(app_handle.clone(), "scan-targets", &request)?;
+        emit_app_log(
+            &app_handle,
+            "info",
+            "LprRuntimeResult",
+            format!(
+                "command=scan-targets requestId={} detections={}",
+                request.request_id.as_deref().unwrap_or("-"),
+                response.detections.len(),
+            ),
+        );
+        Ok(response)
+    })
         .await
         .map_err(|error| format!("Failed to join target scan task: {}", error))?
 }
@@ -608,7 +765,19 @@ pub async fn analyze_lpr_frame(
     app_handle: tauri::AppHandle,
     request: LprFrameAnalysisRequestPayload,
 ) -> Result<LprFrameAnalysisResponsePayload, String> {
-    tauri::async_runtime::spawn_blocking(move || invoke_lpr_runtime(app_handle, "analyze-frame", &request))
+    tauri::async_runtime::spawn_blocking(move || {
+        emit_lpr_request_log(
+            &app_handle,
+            "analyze-frame",
+            request.request_id.as_deref(),
+            request.analysis_profile_id.as_deref(),
+            request.enable_developer_diagnostics.unwrap_or(false),
+        );
+        let response: LprFrameAnalysisResponsePayload =
+            invoke_lpr_runtime(app_handle.clone(), "analyze-frame", &request)?;
+        emit_lpr_result_log(&app_handle, &response.provenance, &response.review, response.candidates.len());
+        Ok(response)
+    })
         .await
         .map_err(|error| format!("Failed to join frame analysis task: {}", error))?
 }
@@ -618,16 +787,45 @@ pub async fn analyze_lpr_interval(
     app_handle: tauri::AppHandle,
     request: LprIntervalAnalysisRequestPayload,
 ) -> Result<LprIntervalAnalysisResponsePayload, String> {
-    tauri::async_runtime::spawn_blocking(move || invoke_lpr_runtime(app_handle, "analyze-interval", &request))
+    tauri::async_runtime::spawn_blocking(move || {
+        emit_lpr_request_log(
+            &app_handle,
+            "analyze-interval",
+            request.request_id.as_deref(),
+            request.analysis_profile_id.as_deref(),
+            request.enable_developer_diagnostics.unwrap_or(false),
+        );
+        let response: LprIntervalAnalysisResponsePayload =
+            invoke_lpr_runtime(app_handle.clone(), "analyze-interval", &request)?;
+        emit_lpr_result_log(&app_handle, &response.provenance, &response.review, response.candidates.len());
+        Ok(response)
+    })
         .await
         .map_err(|error| format!("Failed to join interval analysis task: {}", error))?
 }
 
 #[tauri::command]
+pub fn cancel_lpr_runtime_job(
+    app_handle: tauri::AppHandle,
+) -> Result<bool, String> {
+    terminate_lpr_runtime_process(&app_handle, "ui-request")
+}
+
+#[tauri::command]
 pub async fn export_lpr_evidence(
+    app_handle: tauri::AppHandle,
     request: LprEvidenceExportRequestPayload,
 ) -> Result<LprEvidenceExportResponsePayload, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    let log_request_id = request
+        .provenance
+        .as_ref()
+        .and_then(|provenance| provenance.request_id.clone());
+    let log_analysis_profile_id = request
+        .provenance
+        .as_ref()
+        .and_then(|provenance| provenance.analysis_profile_id.clone());
+    let log_review_status = request.review.as_ref().map(|review| review.status.clone());
+    let response = tauri::async_runtime::spawn_blocking(move || -> Result<LprEvidenceExportResponsePayload, String> {
         let json_path = PathBuf::from(&request.output_path);
         if let Some(parent) = json_path.parent() {
             if !parent.as_os_str().is_empty() {
@@ -667,6 +865,8 @@ pub async fn export_lpr_evidence(
             "acceptedCandidate": request.accepted_candidate,
             "candidates": request.candidates,
             "samples": request.samples,
+            "review": request.review,
+            "provenance": request.provenance,
             "imagePath": image_path.to_string_lossy(),
             "bundleDir": bundle_dir.to_string_lossy(),
             "decisionFrames": exported_decision_frames,
@@ -687,7 +887,22 @@ pub async fn export_lpr_evidence(
         })
     })
     .await
-    .map_err(|error| format!("Failed to join evidence export task: {}", error))?
+    .map_err(|error| format!("Failed to join evidence export task: {}", error))??;
+
+    emit_app_log(
+        &app_handle,
+        "info",
+        "LprEvidenceExport",
+        format!(
+            "requestId={} profile={} reviewStatus={} output={}",
+            log_request_id.as_deref().unwrap_or("-"),
+            log_analysis_profile_id.as_deref().unwrap_or("-"),
+            log_review_status.as_deref().unwrap_or("-"),
+            response.bundle_dir,
+        ),
+    );
+
+    Ok(response)
 }
 
 struct DecisionSampleExport<'a> {

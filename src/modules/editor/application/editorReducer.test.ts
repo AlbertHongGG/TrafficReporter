@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { editorReducer } from './editorReducer'
+import { getLprSessionByFileId } from '../domain/analysisState'
 import { buildDefaultWorkspaceState, buildEditorFileState } from '../domain/model'
 import type { EditorWorkspaceState } from '../domain/model'
 
@@ -50,11 +51,12 @@ describe('editorReducer LPR workflow', () => {
       type: 'set-lpr-target-tracks',
       targetTracks: [track],
     })
+    const lprState = getLprSessionByFileId(nextState.analysis, nextState.activeFileId)
 
     track.frames[0].box.x = 0.75
 
-    expect(nextState.files[0]?.lpr.selectedTargetTrackId).toBe('track-1')
-    expect(nextState.files[0]?.lpr.targetTracks[0]?.frames[0]?.box.x).toBe(0.1)
+    expect(lprState.selectedTargetTrackId).toBe('track-1')
+    expect(lprState.targetTracks[0]?.frames[0]?.box.x).toBe(0.1)
   })
 
   it('clears transient LPR results while keeping interval and history evidence', () => {
@@ -94,13 +96,13 @@ describe('editorReducer LPR workflow', () => {
     })
 
     const nextState = editorReducer(state, { type: 'clear-lpr-results' })
-    const lprState = nextState.files[0]?.lpr
+    const lprState = getLprSessionByFileId(nextState.analysis, nextState.activeFileId)
 
-    expect(lprState?.candidates).toEqual([])
-    expect(lprState?.samples).toEqual([])
-    expect(lprState?.targetTracks).toEqual([])
-    expect(lprState?.interval).toEqual({ startMs: 1000, endMs: 2400 })
-    expect(lprState?.history).toHaveLength(1)
-    expect(lprState?.history[0]?.summary).toBe('Best candidate ABC1234')
+    expect(lprState.candidates).toEqual([])
+    expect(lprState.samples).toEqual([])
+    expect(lprState.targetTracks).toEqual([])
+    expect(lprState.interval).toEqual({ startMs: 1000, endMs: 2400 })
+    expect(lprState.history).toHaveLength(1)
+    expect(lprState.history[0]?.summary).toBe('Best candidate ABC1234')
   })
 })

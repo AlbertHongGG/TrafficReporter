@@ -59,6 +59,8 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument('--min-exact-rate', type=float)
     run_parser.add_argument('--min-top3-rate', type=float)
     run_parser.add_argument('--max-mean-cer', type=float)
+    run_parser.add_argument('--max-review-required-rate', type=float)
+    run_parser.add_argument('--max-no-candidate-rate', type=float)
     run_parser.add_argument('--min-plate-iou', type=float)
     run_parser.add_argument('--max-p95-latency-ms', type=float)
 
@@ -73,6 +75,8 @@ def build_parser() -> argparse.ArgumentParser:
     sweep_parser.add_argument('--min-exact-rate', type=float)
     sweep_parser.add_argument('--min-top3-rate', type=float)
     sweep_parser.add_argument('--max-mean-cer', type=float)
+    sweep_parser.add_argument('--max-review-required-rate', type=float)
+    sweep_parser.add_argument('--max-no-candidate-rate', type=float)
     sweep_parser.add_argument('--min-plate-iou', type=float)
     sweep_parser.add_argument('--max-p95-latency-ms', type=float)
 
@@ -163,7 +167,7 @@ def command_run(args: argparse.Namespace) -> int:
         resume_from_checkpoint=bool(args.resume),
         progress_reporter=None if args.no_progress_log else _print_progress_update,
     )
-    artifact_paths = write_run_artifacts(payload, runtime_result, run_id, run_root=run_root, report_root=report_root)
+    artifact_paths = write_run_artifacts(payload, runtime_result, run_id, run_root=run_root, report_root=report_root, suite_base_dir=args.suite.parent)
     thresholds = build_gate_thresholds(args)
     gate_result = evaluate_runtime_result_gate(runtime_result, thresholds)
     gate_path = write_gate_result(run_dir / 'gate.json', gate_result) if gate_result is not None else None
@@ -218,7 +222,7 @@ def command_profile_sweep(args: argparse.Namespace) -> int:
             checkpoint_path=checkpoint_path,
             progress_reporter=None if args.no_progress_log else _make_progress_reporter(profile_id),
         )
-        artifact_paths = write_run_artifacts(profile_suite, runtime_result, run_id, run_root=run_root, report_root=report_root)
+        artifact_paths = write_run_artifacts(profile_suite, runtime_result, run_id, run_root=run_root, report_root=report_root, suite_base_dir=args.suite.parent)
         gate_result = evaluate_runtime_result_gate(runtime_result, thresholds)
         gate_path = write_gate_result(run_dir / 'gate.json', gate_result) if gate_result is not None else None
         if gate_result is not None and not gate_result.get('passed'):

@@ -10,8 +10,8 @@ use std::sync::Mutex;
 use app::AppState;
 use downloader::{download_youtube, get_youtube_info};
 use editor::{
-	analyze_lpr_frame, analyze_lpr_interval, export_frame_image, export_lpr_evidence,
-	get_lpr_runtime_status, probe_media_source, scan_lpr_targets,
+	analyze_lpr_frame, analyze_lpr_interval, cancel_lpr_runtime_job, export_frame_image,
+	export_lpr_evidence, get_lpr_runtime_status, probe_media_source, scan_lpr_targets,
 };
 use export::{get_pending_export_session, process_timeline_export, set_pending_export_session};
 
@@ -29,6 +29,7 @@ pub fn run() {
 			probe_media_source,
 			export_frame_image,
 			export_lpr_evidence,
+			cancel_lpr_runtime_job,
 			get_lpr_runtime_status,
 			scan_lpr_targets,
 			analyze_lpr_frame,

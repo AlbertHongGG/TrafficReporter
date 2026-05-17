@@ -1,8 +1,10 @@
 import type {
   EditorAsset,
+  LprSessionState,
   EditorWorkspaceState,
   VideoMarkerRect,
 } from '../domain/model';
+import type { LprRuntimeStatus } from '../../../shared/contracts';
 import {
   buildDefaultWorkspaceState,
   buildEditorFileState,
@@ -12,6 +14,12 @@ import {
   MIN_ZOOM,
   normalizeMarkerRect,
 } from '../domain/model';
+import {
+  getLprSessionByFileId,
+  pruneAnalysisSessions,
+  setAnalysisRuntimeStatus,
+  setLprSessionByFileId,
+} from '../domain/analysisState';
 import { isLprSessionAction, reduceLprSession, type LprSessionAction } from './lprSessionReducer';
 import {
   deleteSelectedClips,
@@ -45,6 +53,7 @@ export type EditorAction =
   | { type: 'set-preview-muted'; previewMuted: boolean }
   | { type: 'set-marker-rect'; markerRect: VideoMarkerRect }
   | { type: 'clear-marker' }
+  | { type: 'set-lpr-runtime-status'; runtimeStatus: LprRuntimeStatus | null }
   | LprSessionAction;
 
 export function createInitialEditorState() {
@@ -87,14 +96,23 @@ function stopPlaybackForAllFiles(files: EditorWorkspaceState['files']) {
   return files.map((fileState) => (fileState.isPlaying ? { ...fileState, isPlaying: false } : fileState));
 }
 
-function mapActiveLprState(
+function updateActiveLprSession(
   state: EditorWorkspaceState,
-  updater: (lprState: EditorWorkspaceState['files'][number]['lpr']) => EditorWorkspaceState['files'][number]['lpr'],
+  updater: (lprState: LprSessionState) => LprSessionState,
 ) {
-  return updateActiveFile(state, (fileState) => ({
-    ...fileState,
-    lpr: updater(fileState.lpr),
-  }));
+  const activeFile = getActiveFile(state);
+  if (!activeFile) {
+    return state;
+  }
+
+  return {
+    ...state,
+    analysis: setLprSessionByFileId(
+      state.analysis,
+      activeFile.id,
+      updater(getLprSessionByFileId(state.analysis, activeFile.id)),
+    ),
+  };
 }
 
 export function editorReducer(state: EditorWorkspaceState, action: EditorAction): EditorWorkspaceState {
@@ -129,6 +147,7 @@ export function editorReducer(state: EditorWorkspaceState, action: EditorAction)
       return {
         ...state,
         files: nextFiles,
+        analysis: pruneAnalysisSessions(state.analysis, nextFiles.map((fileState) => fileState.id)),
         activeFileId: nextFiles.length === 0
           ? null
           : state.activeFileId === action.fileId
@@ -239,11 +258,17 @@ export function editorReducer(state: EditorWorkspaceState, action: EditorAction)
         }),
       );
 
+    case 'set-lpr-runtime-status':
+      return {
+        ...state,
+        analysis: setAnalysisRuntimeStatus(state.analysis, action.runtimeStatus),
+      };
+
     default:
       if (!isLprSessionAction(action)) {
         return state;
       }
-      return mapActiveLprState(state, (lprState) => reduceLprSession(lprState, action));
+      return updateActiveLprSession(state, (lprState) => reduceLprSession(lprState, action));
   }
 }
 

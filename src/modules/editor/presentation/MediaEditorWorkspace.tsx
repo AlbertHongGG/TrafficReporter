@@ -45,7 +45,7 @@ import {
   type TimelineClip,
   type VideoMarkerRect,
 } from '../domain/model';
-import { buildDefaultLprState } from '../domain/lprState';
+import { getLprSessionByFileId } from '../domain/analysisState';
 import {
   buildEditorAsset,
   exportFrameImage,
@@ -54,6 +54,7 @@ import {
 import {
   analyzeLprFrame,
   analyzeLprInterval,
+  cancelLprRuntimeJob,
   exportLprEvidence,
   getLprRuntimeStatus,
   scanLprTargets,
@@ -70,7 +71,8 @@ import {
 import { emitPlateWindowSession, openPlateWindow } from '../infrastructure/plateWindowApi';
 import type {
   LprPlateCandidate,
-  LprRuntimeStatus,
+  LprReviewState,
+  LprSessionState,
   LprTargetTrack,
   LprTrackedRegion,
   TimelineIntervalSelection,
@@ -184,27 +186,6 @@ function defaultLprEvidenceFileName(fileState: EditorFileState, playheadMs: numb
   return replaceExtension(baseName, `${timeLabel}${candidateLabel}.json`);
 }
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return null;
-  }
-  return value as Record<string, unknown>;
-}
-
-function readLprSelectionDiagnostics(diagnostics: unknown) {
-  const root = asRecord(diagnostics);
-  const selection = asRecord(root?.selection);
-  const reasons = Array.isArray(selection?.reasons)
-    ? selection.reasons.filter((reason): reason is string => typeof reason === 'string')
-    : [];
-  return {
-    reviewRequired: selection?.reviewRequired === true,
-    acceptedCandidateId: typeof selection?.acceptedCandidateId === 'string' ? selection.acceptedCandidateId : null,
-    suggestedCandidateId: typeof selection?.suggestedCandidateId === 'string' ? selection.suggestedCandidateId : null,
-    reasons,
-  };
-}
-
 function formatLprReviewReason(reason: string) {
   switch (reason) {
     case 'low-confidence':
@@ -224,23 +205,21 @@ function formatLprReviewReason(reason: string) {
 
 function buildLprCompletionDetail(
   candidates: LprPlateCandidate[],
-  acceptedCandidateId: string | null | undefined,
-  diagnostics: unknown,
+  review: LprReviewState | null | undefined,
 ) {
-  const selection = readLprSelectionDiagnostics(diagnostics);
-  const suggestedCandidate = candidates.find((candidate) => candidate.id === selection.suggestedCandidateId)
+  const suggestedCandidate = candidates.find((candidate) => candidate.id === review?.suggestedCandidateId)
     ?? candidates[0]
     ?? null;
   if (!suggestedCandidate) {
     return 'No confident plate candidate.';
   }
 
-  if (selection.reviewRequired) {
-    const reasonLabel = selection.reasons.map(formatLprReviewReason).join(', ') || 'manual review required';
+  if (review?.status === 'review-required') {
+    const reasonLabel = review.reasons.map(formatLprReviewReason).join(', ') || 'manual review required';
     return `Suggested ${suggestedCandidate.text}, ${reasonLabel}.`;
   }
 
-  const acceptedCandidate = candidates.find((candidate) => candidate.id === (acceptedCandidateId ?? selection.acceptedCandidateId))
+  const acceptedCandidate = candidates.find((candidate) => candidate.id === review?.acceptedCandidateId)
     ?? suggestedCandidate;
   return `Accepted ${acceptedCandidate.text}`;
 }
@@ -269,7 +248,6 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
   const [state, dispatch] = useReducer(editorReducer, initialEditorState);
   const [workspaceFeedback, setWorkspaceFeedback] = useState<string | null>(null);
   const [importFeedback, setImportFeedback] = useState<string | null>(null);
-  const [lprRuntimeStatus, setLprRuntimeStatus] = useState<LprRuntimeStatus | null>(null);
   const [isExternalDropActive, setIsExternalDropActive] = useState(false);
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(0);
   const [timelineScrollLeft, setTimelineScrollLeft] = useState(0);
@@ -292,9 +270,12 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
   const currentTimecodeRef = useRef<HTMLSpanElement>(null);
   const livePlayheadMsRef = useRef(0);
   const latestCountryHintDraftRef = useRef<string | null>(null);
+  const activeLprRequestIdRef = useRef<string | null>(null);
+  const cancelledLprRequestIdsRef = useRef(new Set<string>());
 
   const activeFile = useMemo(() => getActiveFile(state), [state]);
-  const lprState = useMemo(() => activeFile?.lpr ?? buildDefaultLprState(), [activeFile]);
+  const lprRuntimeStatus = state.analysis.lprRuntimeStatus;
+  const lprState = useMemo(() => getLprSessionByFileId(state.analysis, activeFile?.id ?? null), [activeFile?.id, state.analysis]);
   const currentZoom = activeFile?.zoom ?? DEFAULT_ZOOM;
   const currentPlayheadMs = activeFile?.playheadMs ?? 0;
   const currentPreviewVolume = activeFile?.previewVolume ?? 0.85;
@@ -401,9 +382,11 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
   const refreshLprRuntimeStatus = useCallback(async () => {
     try {
       const runtimeStatus = await getLprRuntimeStatus();
-      setLprRuntimeStatus(runtimeStatus);
+      dispatch({ type: 'set-lpr-runtime-status', runtimeStatus });
     } catch (error) {
-      setLprRuntimeStatus({
+      dispatch({
+        type: 'set-lpr-runtime-status',
+        runtimeStatus: {
         available: false,
         pythonExecutable: null,
         runtimeScript: null,
@@ -411,11 +394,12 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         missingPackages: [],
         installedPackages: [],
         detail: getErrorMessage(error, 'Unable to inspect the local LPR runtime.'),
+        },
       });
     }
-  }, []);
+  }, [dispatch]);
 
-  const updateLprJob = useCallback((job: Partial<EditorFileState['lpr']['job']>) => {
+  const updateLprJob = useCallback((job: Partial<LprSessionState['job']>) => {
     dispatch({
       type: 'set-lpr-job',
       job: {
@@ -424,6 +408,74 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       },
     });
   }, [dispatch]);
+
+  const beginLprRequest = useCallback((stage: string, detail: string, progress: number) => {
+    const requestId = createId('lpr-request');
+    activeLprRequestIdRef.current = requestId;
+    cancelledLprRequestIdsRef.current.delete(requestId);
+    updateLprJob({
+      status: 'running',
+      requestId,
+      progress,
+      stage,
+      detail,
+      error: null,
+      startedAt: new Date().toISOString(),
+    });
+    return requestId;
+  }, [updateLprJob]);
+
+  const forgetLprRequest = useCallback((requestId: string) => {
+    if (activeLprRequestIdRef.current === requestId) {
+      activeLprRequestIdRef.current = null;
+    }
+    cancelledLprRequestIdsRef.current.delete(requestId);
+  }, []);
+
+  const shouldIgnoreLprRequestResult = useCallback((requestId: string) => (
+    activeLprRequestIdRef.current !== requestId || cancelledLprRequestIdsRef.current.has(requestId)
+  ), []);
+
+  const handleCancelLprJob = useCallback(async () => {
+    const requestId = activeLprRequestIdRef.current;
+    if (!requestId) {
+      return;
+    }
+
+    cancelledLprRequestIdsRef.current.add(requestId);
+    updateLprJob({
+      status: 'cancelled',
+      stage: lprJob.stage || 'LPR',
+      detail: 'Cancelling current LPR task.',
+      error: null,
+    });
+
+    try {
+      await cancelLprRuntimeJob();
+      if (activeLprRequestIdRef.current === requestId) {
+        activeLprRequestIdRef.current = null;
+      }
+      updateLprJob({
+        status: 'cancelled',
+        progress: 1,
+        stage: lprJob.stage || 'LPR',
+        detail: 'Current LPR task cancelled.',
+        error: null,
+      });
+      await refreshLprRuntimeStatus();
+    } catch (error) {
+      cancelledLprRequestIdsRef.current.delete(requestId);
+      const summary = getErrorSummary(error, 'Unable to cancel the current LPR task.');
+      updateLprJob({
+        status: 'failed',
+        progress: 1,
+        stage: lprJob.stage || 'LPR',
+        detail: 'Unable to cancel the current LPR task.',
+        error: summary,
+      });
+      setWorkspaceFeedback(summary);
+    }
+  }, [lprJob.stage, refreshLprRuntimeStatus, updateLprJob]);
 
   const applyCountryHints = useCallback((draftValue: string) => {
     const countryHints = draftValue
@@ -1192,14 +1244,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       return;
     }
 
-    updateLprJob({
-      status: 'running',
-      progress: 0.18,
-      stage: 'Targets',
-      detail: 'Scanning current frame for trackable targets.',
-      error: null,
-      startedAt: new Date().toISOString(),
-    });
+    const requestId = beginLprRequest('Targets', 'Scanning current frame for trackable targets.', 0.18);
 
     try {
       const response = await scanLprTargets({
@@ -1207,9 +1252,14 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         timeMs: Math.max(0, Math.round(livePlayheadMsRef.current)),
         markerRect: activeFile.markerRect,
         targetVehicleKind: lprState.targetVehicleKind,
+        requestId,
       });
 
-      setLprRuntimeStatus(response.runtime);
+      if (shouldIgnoreLprRequestResult(requestId)) {
+        return;
+      }
+
+      dispatch({ type: 'set-lpr-runtime-status', runtimeStatus: response.runtime });
       dispatch({ type: 'set-lpr-target-tracks', targetTracks: buildTargetTracksFromDetections(response.detections) });
       dispatch({ type: 'set-lpr-mode', workflowMode: response.detections.length > 0 ? 'target' : 'range' });
       updateLprJob({
@@ -1221,6 +1271,9 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
           : 'No target found in the current frame.',
       });
     } catch (error) {
+      if (shouldIgnoreLprRequestResult(requestId)) {
+        return;
+      }
       log.error('Target scan failed.', serializeError(error));
       updateLprJob({
         status: 'failed',
@@ -1230,6 +1283,8 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         error: getErrorSummary(error, 'Unable to scan targets.'),
       });
       setWorkspaceFeedback(getErrorSummary(error, 'Unable to scan targets.'));
+    } finally {
+      forgetLprRequest(requestId);
     }
   };
 
@@ -1239,16 +1294,9 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     }
 
     const countryHints = applyCountryHints(
-      latestCountryHintDraftRef.current ?? (activeFile.lpr.countryHints.join(', ')),
+      latestCountryHintDraftRef.current ?? (lprState.countryHints.join(', ')),
     );
-    updateLprJob({
-      status: 'running',
-      progress: 0.24,
-      stage: 'Frame',
-      detail: 'Analyzing the current frame.',
-      error: null,
-      startedAt: new Date().toISOString(),
-    });
+    const requestId = beginLprRequest('Frame', 'Analyzing the current frame.', 0.24);
 
     try {
       const response = await analyzeLprFrame({
@@ -1260,15 +1308,22 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         countryHints,
         analysisProfileId: lprState.selectedAnalysisProfileId,
         enableDeveloperDiagnostics: lprState.showDeveloperDiagnostics,
+        requestId,
       });
 
-      setLprRuntimeStatus(response.runtime);
+      if (shouldIgnoreLprRequestResult(requestId)) {
+        return;
+      }
+
+      dispatch({ type: 'set-lpr-runtime-status', runtimeStatus: response.runtime });
       dispatch({ type: 'set-lpr-target-tracks', targetTracks: buildTargetTracksFromDetections(response.detections) });
       dispatch({ type: 'set-lpr-samples', samples: response.sample ? [response.sample] : [] });
       dispatch({ type: 'set-lpr-candidates', candidates: response.candidates });
+      dispatch({ type: 'set-lpr-review', review: response.review ?? null });
       dispatch({ type: 'accept-lpr-candidate', candidateId: response.acceptedCandidateId ?? null });
+      dispatch({ type: 'set-lpr-provenance', provenance: response.provenance ?? null });
       if (response.candidates.length > 0) {
-        const completionDetail = buildLprCompletionDetail(response.candidates, response.acceptedCandidateId, response.diagnostics);
+        const completionDetail = buildLprCompletionDetail(response.candidates, response.review);
         dispatch({
           type: 'append-lpr-history',
           entry: {
@@ -1288,9 +1343,12 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         status: 'completed',
         progress: 1,
         stage: 'Frame',
-        detail: buildLprCompletionDetail(response.candidates, response.acceptedCandidateId, response.diagnostics),
+        detail: buildLprCompletionDetail(response.candidates, response.review),
       });
     } catch (error) {
+      if (shouldIgnoreLprRequestResult(requestId)) {
+        return;
+      }
       log.error('Frame analysis failed.', serializeError(error));
       updateLprJob({
         status: 'failed',
@@ -1300,6 +1358,8 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         error: getErrorSummary(error, 'Unable to analyze the current frame.'),
       });
       setWorkspaceFeedback(getErrorSummary(error, 'Unable to analyze the current frame.'));
+    } finally {
+      forgetLprRequest(requestId);
     }
   };
 
@@ -1336,19 +1396,12 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
 
     const interval = normalizeLprInterval(lprState.interval);
     const countryHints = applyCountryHints(
-      latestCountryHintDraftRef.current ?? (activeFile.lpr.countryHints.join(', ')),
+      latestCountryHintDraftRef.current ?? (lprState.countryHints.join(', ')),
     );
     const sampleDivisor = lprState.useDenseSampling ? 16 : 8;
     const sampleEveryMs = Math.max(120, Math.round((interval.endMs - interval.startMs) / sampleDivisor) || 120);
 
-    updateLprJob({
-      status: 'running',
-      progress: 0.12,
-      stage: 'Interval',
-      detail: 'Tracking the selected target across the chosen interval.',
-      error: null,
-      startedAt: new Date().toISOString(),
-    });
+    const requestId = beginLprRequest('Interval', 'Tracking the selected target across the chosen interval.', 0.12);
 
     try {
       const response = await analyzeLprInterval({
@@ -1362,15 +1415,22 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         maxSamples: lprState.useDenseSampling ? 18 : 8,
         analysisProfileId: lprState.selectedAnalysisProfileId,
         enableDeveloperDiagnostics: lprState.showDeveloperDiagnostics,
+        requestId,
       });
 
-      setLprRuntimeStatus(response.runtime);
+      if (shouldIgnoreLprRequestResult(requestId)) {
+        return;
+      }
+
+      dispatch({ type: 'set-lpr-runtime-status', runtimeStatus: response.runtime });
       dispatch({ type: 'set-lpr-interval', interval });
       dispatch({ type: 'set-lpr-target-tracks', targetTracks: response.targetTracks });
       dispatch({ type: 'set-lpr-samples', samples: response.samples });
       dispatch({ type: 'set-lpr-candidates', candidates: response.candidates });
+      dispatch({ type: 'set-lpr-review', review: response.review ?? null });
       dispatch({ type: 'accept-lpr-candidate', candidateId: response.acceptedCandidateId ?? null });
-      const intervalDetail = buildLprCompletionDetail(response.candidates, response.acceptedCandidateId, response.diagnostics) ?? response.summary;
+      dispatch({ type: 'set-lpr-provenance', provenance: response.provenance ?? null });
+      const intervalDetail = buildLprCompletionDetail(response.candidates, response.review) ?? response.summary;
       dispatch({
         type: 'append-lpr-history',
         entry: {
@@ -1393,6 +1453,9 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         detail: intervalDetail,
       });
     } catch (error) {
+      if (shouldIgnoreLprRequestResult(requestId)) {
+        return;
+      }
       log.error('Range analysis failed.', serializeError(error));
       updateLprJob({
         status: 'failed',
@@ -1402,6 +1465,8 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         error: getErrorSummary(error, 'Unable to analyze the selected interval.'),
       });
       setWorkspaceFeedback(getErrorSummary(error, 'Unable to analyze the selected interval.'));
+    } finally {
+      forgetLprRequest(requestId);
     }
   };
 
@@ -1437,6 +1502,8 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         acceptedCandidate: lprAcceptedCandidate,
         candidates: lprState.candidates,
         samples: lprState.samples,
+        review: lprState.review,
+        provenance: lprState.lastAnalysisProvenance,
       });
 
       setWorkspaceFeedback(`Evidence bundle exported to ${response.bundleDir} with ${response.decisionFrameCount} decision frames and ${response.exportedFileCount} files.`);
@@ -1455,6 +1522,9 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     switch (action.type) {
       case 'refresh-runtime':
         await refreshLprRuntimeStatus();
+        break;
+      case 'cancel-job':
+        await handleCancelLprJob();
         break;
       case 'use-clip-interval':
         handleUseClipInterval();

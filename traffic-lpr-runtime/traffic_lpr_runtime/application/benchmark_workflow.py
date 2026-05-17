@@ -108,6 +108,13 @@ class BenchmarkRunWorkflow:
                 response,
             )
 
+            review_payload = response.get('review')
+            if not isinstance(review_payload, dict):
+                raise ValueError(f'Benchmark case {case_id} is missing review payload from runtime response.')
+            provenance_payload = response.get('provenance')
+            if not isinstance(provenance_payload, dict):
+                raise ValueError(f'Benchmark case {case_id} is missing provenance payload from runtime response.')
+
             benchmark_results.append(
                 {
                     'id': case_id,
@@ -120,12 +127,15 @@ class BenchmarkRunWorkflow:
                     'exactMatch': exact_match,
                     'top3Match': top3_match,
                     'characterErrorRate': case_character_error_rate,
+                    'acceptedCandidateId': response.get('acceptedCandidateId'),
                     'acceptedConfidence': best_confidence,
                     'acceptedMargin': accepted_margin,
                     'latencyMs': latency_ms,
                     'localization': localization,
                     'trackMetrics': track_metrics_case,
                     'failureReason': failure_reason,
+                    'review': dict(review_payload),
+                    'provenance': dict(provenance_payload),
                     'summary': response.get('summary') or '',
                     'tags': list(case_payload.get('tags') or []),
                     'metadata': case_metadata,
@@ -168,6 +178,11 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
                 'exactMatchRate': 0.0,
                 'top3MatchRate': 0.0,
                 'meanCharacterErrorRate': 0.0,
+                'acceptedRate': 0.0,
+                'reviewRequiredRate': 0.0,
+                'noCandidateRate': 0.0,
+                'reviewBreakdown': {},
+                'reviewReasonBreakdown': {},
                 'sourceWinCounts': {},
                 'meanAcceptedMargin': 0.0,
                 'latencyMs': {
@@ -194,6 +209,8 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
     latency_values_ms: list[float] = []
     calibration_points: list[tuple[float, bool]] = []
     failure_counts: dict[str, int] = {}
+    review_status_counts: dict[str, int] = {}
+    review_reason_counts: dict[str, int] = {}
 
     for result in benchmark_results:
         exact_match = bool(result.get('exactMatch'))
@@ -207,6 +224,8 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
         localization = dict(result.get('localization') or {})
         track_metrics_case = dict(result.get('trackMetrics') or {}) if isinstance(result.get('trackMetrics'), dict) else None
         metadata = dict(result.get('metadata') or {})
+        review_payload = _normalized_review_payload(result)
+        review_status = review_payload['status']
 
         exact_matches += 1 if exact_match else 0
         top3_matches += 1 if top3_match else 0
@@ -214,6 +233,9 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
         latency_values_ms.append(latency_ms)
         calibration_points.append((accepted_confidence, exact_match))
         failure_counts[failure_reason] = failure_counts.get(failure_reason, 0) + 1
+        review_status_counts[review_status] = review_status_counts.get(review_status, 0) + 1
+        for reason in review_payload['reasons']:
+            review_reason_counts[reason] = review_reason_counts.get(reason, 0) + 1
         if best_source:
             source_wins[best_source] = source_wins.get(best_source, 0) + 1
 
@@ -221,6 +243,9 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
             'exactMatch': exact_match,
             'top3Match': top3_match,
             'characterErrorRate': character_error_rate_value,
+            'acceptedCase': review_status == 'accepted',
+            'reviewRequiredCase': review_status == 'review-required',
+            'noCandidateCase': review_status == 'no-candidate',
             'latencyMs': latency_ms,
             'acceptedMargin': accepted_margin,
             'plateIoU': localization.get('plateMeanIoU'),
@@ -247,6 +272,11 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
         'exactMatchRate': exact_matches / total_cases,
         'top3MatchRate': top3_matches / total_cases,
         'meanCharacterErrorRate': total_character_error_rate / total_cases,
+        'acceptedRate': review_status_counts.get('accepted', 0) / total_cases,
+        'reviewRequiredRate': review_status_counts.get('review-required', 0) / total_cases,
+        'noCandidateRate': review_status_counts.get('no-candidate', 0) / total_cases,
+        'reviewBreakdown': dict(sorted(review_status_counts.items())),
+        'reviewReasonBreakdown': dict(sorted(review_reason_counts.items())),
         'sourceWinCounts': source_wins,
         'meanAcceptedMargin': sum(float(result.get('acceptedMargin') or 0.0) for result in benchmark_results) / total_cases,
         'latencyMs': {
@@ -272,6 +302,7 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
     summary = (
         f"{total_cases} cases, exact={metrics['exactMatchRate']:.1%}, "
         f"top3={metrics['top3MatchRate']:.1%}, cer={metrics['meanCharacterErrorRate']:.3f}, "
+        f"review={metrics['reviewRequiredRate']:.1%}, noCandidate={metrics['noCandidateRate']:.1%}, "
         f"plateIoU={_safe_metric_average(benchmark_results, 'localization', 'plateMeanIoU'):.3f}, "
         f"p95={metrics['latencyMs']['p95']:.1f}ms"
     )
@@ -381,6 +412,9 @@ def _new_metric_bucket() -> dict[str, float]:
         'exact': 0.0,
         'top3': 0.0,
         'cer': 0.0,
+        'accepted': 0.0,
+        'reviewRequired': 0.0,
+        'noCandidate': 0.0,
         'latencyMs': 0.0,
         'acceptedMargin': 0.0,
         'plateIoUSum': 0.0,
@@ -406,6 +440,9 @@ def _update_metric_bucket(bucket: dict[str, float], case_metrics: dict[str, Any]
     bucket['exact'] += 1.0 if case_metrics.get('exactMatch') else 0.0
     bucket['top3'] += 1.0 if case_metrics.get('top3Match') else 0.0
     bucket['cer'] += float(case_metrics.get('characterErrorRate') or 0.0)
+    bucket['accepted'] += 1.0 if case_metrics.get('acceptedCase') else 0.0
+    bucket['reviewRequired'] += 1.0 if case_metrics.get('reviewRequiredCase') else 0.0
+    bucket['noCandidate'] += 1.0 if case_metrics.get('noCandidateCase') else 0.0
     bucket['latencyMs'] += float(case_metrics.get('latencyMs') or 0.0)
     bucket['acceptedMargin'] += float(case_metrics.get('acceptedMargin') or 0.0)
 
@@ -447,6 +484,9 @@ def _finalize_metric_bucket(bucket: dict[str, float]) -> dict[str, float | None]
         'exactMatchRate': bucket['exact'] / total_cases,
         'top3MatchRate': bucket['top3'] / total_cases,
         'meanCharacterErrorRate': bucket['cer'] / total_cases,
+        'acceptedRate': bucket['accepted'] / total_cases,
+        'reviewRequiredRate': bucket['reviewRequired'] / total_cases,
+        'noCandidateRate': bucket['noCandidate'] / total_cases,
         'meanLatencyMs': bucket['latencyMs'] / total_cases,
         'meanAcceptedMargin': bucket['acceptedMargin'] / total_cases,
         'meanPlateIoU': bucket['plateIoUSum'] / bucket['plateIoUCount'] if bucket['plateIoUCount'] else None,
@@ -727,3 +767,23 @@ def _safe_metric_average(results: list[dict[str, Any]], parent_key: str, value_k
         if isinstance(value, (int, float)):
             values.append(float(value))
     return sum(values) / len(values) if values else 0.0
+
+
+def _normalized_review_payload(result: dict[str, Any]) -> dict[str, Any]:
+    review_payload = result.get('review')
+    if not isinstance(review_payload, dict):
+        raise ValueError('Benchmark result is missing review payload.')
+
+    status = str(review_payload.get('status') or '').strip()
+    if status not in {'accepted', 'review-required', 'no-candidate'}:
+        raise ValueError(f'Unsupported review status: {status!r}')
+
+    reasons = [
+        str(reason)
+        for reason in review_payload.get('reasons') or []
+        if isinstance(reason, str) and reason
+    ]
+    if status == 'no-candidate' and not reasons:
+        reasons = ['no-candidate']
+
+    return {'status': status, 'reasons': reasons}

@@ -53,6 +53,24 @@ export interface LprAnalysisProfileCatalog {
   profiles: LprAnalysisProfileDefinition[];
 }
 
+export type LprReviewStatus = 'accepted' | 'review-required' | 'no-candidate';
+
+export interface LprReviewState {
+  status: LprReviewStatus;
+  acceptedCandidateId: string | null;
+  suggestedCandidateId: string | null;
+  reasons: string[];
+}
+
+export interface LprAnalysisProvenance {
+  requestId: string | null;
+  command: string;
+  analysisProfileId: LprAnalysisProfileId | null;
+  developerDiagnosticsEnabled: boolean;
+  runtimeVersion: string | null;
+  emittedAtMs: number;
+}
+
 export interface TimelineIntervalSelection {
   startMs: number;
   endMs: number;
@@ -147,6 +165,8 @@ export interface LprSessionState {
   selectedTargetTrackId: string | null;
   samples: LprFrameSample[];
   candidates: LprPlateCandidate[];
+  review: LprReviewState | null;
+  lastAnalysisProvenance: LprAnalysisProvenance | null;
   acceptedCandidateId: string | null;
   history: LprResultHistoryEntry[];
 }
@@ -166,6 +186,7 @@ export interface LprTargetScanRequest {
   timeMs: number;
   markerRect: VideoMarkerRect | null;
   targetVehicleKind: LprVehicleKind;
+  requestId?: string | null;
 }
 
 export interface LprTargetScanResponse {
@@ -183,6 +204,7 @@ export interface LprFrameAnalysisRequest {
   analysisProfileId?: LprAnalysisProfileId | null;
   enableDeveloperDiagnostics?: boolean;
   analysisOptions?: LprAnalysisOptions | null;
+  requestId?: string | null;
 }
 
 export interface LprFrameAnalysisResponse {
@@ -190,6 +212,8 @@ export interface LprFrameAnalysisResponse {
   sample: LprFrameSample | null;
   candidates: LprPlateCandidate[];
   acceptedCandidateId: string | null;
+  review: LprReviewState;
+  provenance: LprAnalysisProvenance;
   runtime: LprRuntimeStatus;
   diagnostics?: LprDiagnostics | null;
 }
@@ -206,6 +230,7 @@ export interface LprIntervalAnalysisRequest {
   analysisProfileId?: LprAnalysisProfileId | null;
   enableDeveloperDiagnostics?: boolean;
   analysisOptions?: LprAnalysisOptions | null;
+  requestId?: string | null;
 }
 
 export interface LprIntervalAnalysisResponse {
@@ -213,6 +238,8 @@ export interface LprIntervalAnalysisResponse {
   samples: LprFrameSample[];
   candidates: LprPlateCandidate[];
   acceptedCandidateId: string | null;
+  review: LprReviewState;
+  provenance: LprAnalysisProvenance;
   summary: string;
   runtime: LprRuntimeStatus;
   diagnostics?: LprDiagnostics | null;
@@ -228,6 +255,8 @@ export interface LprEvidenceExportRequest {
   acceptedCandidate: LprPlateCandidate | null;
   candidates: LprPlateCandidate[];
   samples: LprFrameSample[];
+  review?: LprReviewState | null;
+  provenance?: LprAnalysisProvenance | null;
 }
 
 export interface LprEvidenceExportResponse {
