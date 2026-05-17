@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -21,7 +21,7 @@ DEFAULT_OCR_MODEL_NAMES = [
 
 @dataclass(slots=True)
 class AnalysisOptions:
-    analysis_profile_id: str = 'balanced'
+    analysis_profile_id: str = 'precision'
     enable_developer_diagnostics: bool = False
     persist_artifacts: bool = False
     artifact_dir: str | None = None
@@ -94,6 +94,16 @@ class AnalysisOptions:
 
     def ocr_models(self) -> list[str]:
         return self.ocr_model_names if self.enable_recognizer_comparison else self.ocr_model_names[:1]
+
+    def for_interval_sample(self, sample_count_hint: int | None = None) -> 'AnalysisOptions':
+        restoration_mode = self.restoration_mode
+        if sample_count_hint is not None and sample_count_hint >= 8:
+            restoration_mode = 'off'
+        return replace(
+            self,
+            enable_recognizer_comparison=False,
+            restoration_mode=restoration_mode,
+        )
 
     def to_payload(self) -> dict[str, Any]:
         return {

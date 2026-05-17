@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "defaultProfileId": "balanced",
+  "defaultProfileId": "precision",
   "developerDiagnosticsOptions": {
     "persistArtifacts": true,
     "debugTag": "developer-diagnostics",
@@ -10,7 +10,7 @@
     {
       "id": "balanced",
       "label": "Balanced",
-      "description": "Default profile for routine plate analysis and review.",
+      "description": "Baseline profile for routine plate analysis and comparison.",
       "options": {
         "trackerMode": "botsort",
         "fusionMode": "aligned-char",
@@ -32,7 +32,7 @@
     {
       "id": "precision",
       "label": "Precision",
-      "description": "Stricter reliability gating for final review and benchmark sign-off.",
+      "description": "Default profile for final review and benchmark sign-off.",
       "options": {
         "maxPlateCandidates": 3,
         "trackerHighConfidence": 0.4,

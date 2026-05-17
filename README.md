@@ -41,9 +41,13 @@ The benchmark workflow now has its own repo-level entrance and does not live ins
 npm run benchmark -- init-workspace
 npm run benchmark -- validate --suite .runtime/benchmark-tool/suites/sample-template.json
 npm run benchmark -- doctor --suite .runtime/benchmark-tool/suites/sample-template.json
+npm run benchmark -- run --suite .runtime/benchmark-tool/suites/smoke-one.json --run-id smoke-gate --min-exact-rate 1.0 --min-top3-rate 1.0 --max-mean-cer 0.0 --min-plate-iou 1.0 --max-p95-latency-ms 60000
+npm run benchmark -- profile-sweep --suite .runtime/benchmark-tool/suites/smoke-one.json --profiles balanced precision recovery
 npm run benchmark -- validate-profile-catalog --file src/shared/config/lpr-analysis-profiles.json
 npm run benchmark:test
 ```
+
+Longer benchmark runs now emit resumable `progress.json` / `checkpoint.json` artifacts and can enforce benchmark gates directly from the CLI. Runtime-backed reports also include `analysis.json` / `analysis.md` so AOLP and UFPR results can be read by dataset, split, category, and broad failure source instead of only by merged averages.
 
 Shared benchmark and LPR profile schemas now live under `schemas/` so the benchmark tool and runtime-facing JSON assets can evolve from one repo-level source of truth.
 

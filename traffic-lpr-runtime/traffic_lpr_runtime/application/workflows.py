@@ -159,6 +159,7 @@ class IntervalAnalysisWorkflow:
             int(payload['anchorTimeMs']),
             selected_target_box,
         )
+        sample_options = options.for_interval_sample(sample_count_hint=len(tracked_frames))
 
         samples: list[FrameSample] = []
         observations: list[PlateObservation] = []
@@ -171,7 +172,7 @@ class IntervalAnalysisWorkflow:
                 None,
                 analysis_target_box,
                 payload.get('countryHints') or [],
-                options,
+                sample_options,
                 artifact_root / f'sample-{tracked_frame.time_ms}' if artifact_root else None,
             )
             calibrated_target_box = calibrated_target_boxes.get(tracked_frame.time_ms)

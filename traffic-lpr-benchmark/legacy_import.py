@@ -19,7 +19,7 @@ def import_legacy_manifest(
     manifest_path: Path,
     suite_id: str,
     title: str | None = None,
-    analysis_profile_id: str = 'balanced',
+    analysis_profile_id: str = 'precision',
     limit: int | None = None,
 ) -> dict[str, Any]:
     legacy_payload = load_json(manifest_path)

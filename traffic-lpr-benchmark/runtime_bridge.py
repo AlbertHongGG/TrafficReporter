@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import json
 import subprocess
+import tempfile
+import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -16,24 +19,57 @@ def run_benchmark_suite(
     suite_payload: dict[str, Any],
     runtime_root: Path | None = None,
     python_executable: str | None = None,
+    progress_path: Path | None = None,
+    checkpoint_path: Path | None = None,
+    resume_from_checkpoint: bool = False,
+    progress_reporter: Callable[[dict[str, Any]], None] | None = None,
+    poll_interval_seconds: float = 1.0,
 ) -> dict[str, Any]:
     resolved_runtime_root = (runtime_root or default_runtime_root()).resolve()
     resolved_python = python_executable or discover_python(resolved_runtime_root)
     request_payload = {
         'cases': suite_payload.get('cases') or [],
     }
+    resolved_progress_path = progress_path.resolve() if progress_path is not None else None
+    resolved_checkpoint_path = checkpoint_path.resolve() if checkpoint_path is not None else None
+    if resolved_progress_path is not None:
+        request_payload['progressPath'] = str(resolved_progress_path)
+    if resolved_checkpoint_path is not None:
+        request_payload['checkpointPath'] = str(resolved_checkpoint_path)
+    if resume_from_checkpoint:
+        request_payload['resumeFromCheckpoint'] = True
 
-    completed = subprocess.run(
-        [resolved_python, '-m', 'traffic_lpr_runtime', 'benchmark-run'],
-        cwd=resolved_runtime_root,
-        input=json.dumps(request_payload),
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    with tempfile.TemporaryFile(mode='w+t', encoding='utf-8') as stdout_file, tempfile.TemporaryFile(mode='w+t', encoding='utf-8') as stderr_file:
+        completed = subprocess.Popen(
+            [resolved_python, '-m', 'traffic_lpr_runtime', 'benchmark-run'],
+            cwd=resolved_runtime_root,
+            stdin=subprocess.PIPE,
+            stdout=stdout_file,
+            stderr=stderr_file,
+            text=True,
+        )
+
+        if completed.stdin is None:
+            raise RuntimeInvokeError('Runtime bridge could not open stdin for benchmark execution.')
+        completed.stdin.write(json.dumps(request_payload))
+        completed.stdin.close()
+
+        last_progress_signature: tuple[Any, ...] | None = None
+        while completed.poll() is None:
+            if progress_reporter is not None and resolved_progress_path is not None:
+                last_progress_signature = _emit_progress_update(resolved_progress_path, progress_reporter, last_progress_signature)
+            time.sleep(max(poll_interval_seconds, 0.1))
+
+        if progress_reporter is not None and resolved_progress_path is not None:
+            _emit_progress_update(resolved_progress_path, progress_reporter, last_progress_signature)
+
+        stdout_file.seek(0)
+        stderr_file.seek(0)
+        stdout = stdout_file.read()
+        stderr = stderr_file.read()
 
     if completed.returncode != 0:
-        detail = completed.stderr.strip() or completed.stdout.strip() or 'Unknown benchmark runtime failure.'
+        detail = stderr.strip() or stdout.strip() or 'Unknown benchmark runtime failure.'
         try:
             parsed = json.loads(detail)
             if isinstance(parsed, dict):
@@ -43,10 +79,38 @@ def run_benchmark_suite(
         raise RuntimeInvokeError(detail)
 
     try:
-        result = json.loads(completed.stdout)
+        result = json.loads(stdout)
     except json.JSONDecodeError as error:
         raise RuntimeInvokeError(f'Runtime returned invalid JSON: {error}') from error
 
     if not isinstance(result, dict):
         raise RuntimeInvokeError('Runtime returned a non-object benchmark result.')
     return result
+
+
+def _emit_progress_update(
+    progress_path: Path,
+    progress_reporter: Callable[[dict[str, Any]], None],
+    last_progress_signature: tuple[Any, ...] | None,
+) -> tuple[Any, ...] | None:
+    if not progress_path.exists():
+        return last_progress_signature
+
+    try:
+        payload = json.loads(progress_path.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError):
+        return last_progress_signature
+    if not isinstance(payload, dict):
+        return last_progress_signature
+
+    signature = (
+        payload.get('completedCaseCount'),
+        payload.get('currentCaseId'),
+        payload.get('updatedAt'),
+        payload.get('completed'),
+    )
+    if signature == last_progress_signature:
+        return last_progress_signature
+
+    progress_reporter(payload)
+    return signature

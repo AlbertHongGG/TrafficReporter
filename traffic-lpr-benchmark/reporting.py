@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from analysis import build_analysis_markdown, build_run_analysis
 from models import BenchmarkRunBundle, BenchmarkSuite
 from validation import validate_run_bundle_payload
 from workspace import default_report_root, default_run_root
@@ -57,11 +58,16 @@ def write_run_artifacts(
 
     result_path = resolved_run_root / 'result.json'
     summary_path = resolved_run_root / 'summary.md'
+    analysis_json_path = resolved_run_root / 'analysis.json'
+    analysis_markdown_path = resolved_run_root / 'analysis.md'
     report_path = resolved_run_root / 'report.html'
     latest_report_path = resolved_report_root / f'{suite_payload.get("suiteId") or "benchmark"}-latest.html'
+    analysis_payload = build_run_analysis(bundle)
 
     result_path.write_text(json.dumps(bundle, indent=2), encoding='utf-8')
     summary_path.write_text(build_summary_markdown(bundle), encoding='utf-8')
+    analysis_json_path.write_text(json.dumps(analysis_payload, indent=2), encoding='utf-8')
+    analysis_markdown_path.write_text(build_analysis_markdown(bundle, analysis_payload), encoding='utf-8')
     report_html = build_report_html(bundle)
     report_path.write_text(report_html, encoding='utf-8')
     latest_report_path.write_text(report_html, encoding='utf-8')
@@ -70,6 +76,8 @@ def write_run_artifacts(
         'runDir': str(resolved_run_root),
         'resultJson': str(result_path),
         'summaryMarkdown': str(summary_path),
+      'analysisJson': str(analysis_json_path),
+      'analysisMarkdown': str(analysis_markdown_path),
         'reportHtml': str(report_path),
         'latestReportHtml': str(latest_report_path),
     }

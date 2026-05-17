@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable
 
@@ -26,38 +27,54 @@ class BenchmarkRunWorkflow:
         self._ensure_ready()
         cases = list(payload.get('cases') or [])
         manifest_path = payload.get('manifestPath')
+        progress_path = _resolve_optional_path(payload.get('progressPath'))
+        checkpoint_path = _resolve_optional_path(payload.get('checkpointPath'))
+        resume_from_checkpoint = bool(payload.get('resumeFromCheckpoint'))
         if manifest_path:
             manifest_payload = json.loads(Path(str(manifest_path)).read_text(encoding='utf-8'))
             cases.extend(manifest_payload.get('cases') or [])
 
+        runtime_status = self._status()
         if not cases:
-            return {
-                'summary': 'No benchmark cases were provided.',
-                'cases': [],
-                'metrics': {
-                    'totalCases': 0,
-                    'exactMatchRate': 0.0,
-                    'top3MatchRate': 0.0,
-                    'meanCharacterErrorRate': 0.0,
-                },
-                'runtime': self._status(),
-            }
+            result = summarize_benchmark_results([], runtime_status)
+            _write_execution_state(
+                suite_cases=[],
+                benchmark_results=[],
+                started_at=datetime.now(UTC).isoformat(),
+                runtime_status=runtime_status,
+                progress_path=progress_path,
+                checkpoint_path=checkpoint_path,
+                completed=True,
+            )
+            return result
 
-        benchmark_results: list[dict[str, Any]] = []
-        exact_matches = 0
-        top3_matches = 0
-        total_character_error_rate = 0.0
-        source_wins: dict[str, int] = {}
-        tag_metrics: dict[str, dict[str, float]] = {}
-        dataset_metrics: dict[str, dict[str, float]] = {}
-        split_metrics: dict[str, dict[str, float]] = {}
-        latency_values_ms: list[float] = []
-        calibration_points: list[tuple[float, bool]] = []
-        failure_counts: dict[str, int] = {}
+        valid_case_ids = {
+            str(case_payload.get('id') or f'case-{index + 1}')
+            for index, case_payload in enumerate(cases)
+        }
+        benchmark_results, started_at = _load_checkpoint_results(checkpoint_path, valid_case_ids) if resume_from_checkpoint else ([], None)
+        started_at = started_at or datetime.now(UTC).isoformat()
+        completed_case_ids = {
+            str(result.get('id') or '')
+            for result in benchmark_results
+            if isinstance(result, dict) and result.get('id')
+        }
+
+        _write_execution_state(
+            suite_cases=cases,
+            benchmark_results=benchmark_results,
+            started_at=started_at,
+            runtime_status=runtime_status,
+            progress_path=progress_path,
+            checkpoint_path=checkpoint_path,
+            completed=False,
+        )
 
         for index, case_payload in enumerate(cases):
             mode = str(case_payload.get('mode') or 'interval')
             case_id = str(case_payload.get('id') or f'case-{index + 1}')
+            if case_id in completed_case_ids:
+                continue
             expected_text = normalize_plate_text(case_payload.get('expectedText'))
             case_metadata = dict(case_payload.get('metadata') or {})
             timer_started = time.perf_counter()
@@ -70,7 +87,6 @@ class BenchmarkRunWorkflow:
                 candidates = response.get('candidates') or []
 
             latency_ms = max(0.0, (time.perf_counter() - timer_started) * 1000.0)
-            latency_values_ms.append(latency_ms)
 
             ranked_texts = [normalize_plate_text(candidate.get('text')) for candidate in candidates if candidate.get('text')]
             ranked_sources = [str(candidate.get('source') or '') for candidate in candidates if candidate.get('text')]
@@ -91,38 +107,6 @@ class BenchmarkRunWorkflow:
                 track_metrics_case,
                 response,
             )
-
-            exact_matches += 1 if exact_match else 0
-            top3_matches += 1 if top3_match else 0
-            total_character_error_rate += case_character_error_rate
-            calibration_points.append((best_confidence, exact_match))
-            failure_counts[failure_reason] = failure_counts.get(failure_reason, 0) + 1
-            if best_source:
-                source_wins[best_source] = source_wins.get(best_source, 0) + 1
-
-            case_metrics = {
-                'exactMatch': exact_match,
-                'top3Match': top3_match,
-                'characterErrorRate': case_character_error_rate,
-                'latencyMs': latency_ms,
-                'acceptedMargin': accepted_margin,
-                'plateIoU': localization.get('plateMeanIoU'),
-                'plateLocalizationRecall': localization.get('plateRecall'),
-                'targetIoU': localization.get('targetMeanIoU'),
-                'targetLocalizationRecall': localization.get('targetRecall'),
-                'trackMajorityExactMatch': (track_metrics_case or {}).get('majorityExactMatch'),
-                'predictionSwitchCount': (track_metrics_case or {}).get('predictionSwitchCount'),
-                'sampleExactMatchRate': (track_metrics_case or {}).get('sampleExactMatchRate'),
-                'timeToFirstCorrectMs': (track_metrics_case or {}).get('timeToFirstCorrectMs'),
-            }
-
-            for tag in list(case_payload.get('tags') or []):
-                _update_metric_bucket(tag_metrics.setdefault(str(tag), _new_metric_bucket()), case_metrics)
-
-            dataset_name = str(case_metadata.get('dataset') or 'unknown')
-            split_name = str(case_metadata.get('split') or case_payload.get('split') or 'unknown')
-            _update_metric_bucket(dataset_metrics.setdefault(dataset_name, _new_metric_bucket()), case_metrics)
-            _update_metric_bucket(split_metrics.setdefault(split_name, _new_metric_bucket()), case_metrics)
 
             benchmark_results.append(
                 {
@@ -147,47 +131,239 @@ class BenchmarkRunWorkflow:
                     'metadata': case_metadata,
                 }
             )
+            completed_case_ids.add(case_id)
 
-        total_cases = len(benchmark_results)
-        metrics = {
-            'totalCases': total_cases,
-            'exactMatchRate': exact_matches / total_cases,
-            'top3MatchRate': top3_matches / total_cases,
-            'meanCharacterErrorRate': total_character_error_rate / total_cases,
-            'sourceWinCounts': source_wins,
-            'meanAcceptedMargin': sum(float(result.get('acceptedMargin') or 0.0) for result in benchmark_results) / total_cases,
-            'latencyMs': {
-                'mean': sum(latency_values_ms) / total_cases if latency_values_ms else 0.0,
-                'p50': _percentile(latency_values_ms, 0.50),
-                'p95': _percentile(latency_values_ms, 0.95),
-            },
-            'confidenceCalibration': _build_confidence_calibration(calibration_points),
-            'failureBreakdown': failure_counts,
-            'tagBreakdown': {
-                tag: _finalize_metric_bucket(values)
-                for tag, values in sorted(tag_metrics.items())
-            },
-            'datasetBreakdown': {
-                dataset: _finalize_metric_bucket(values)
-                for dataset, values in sorted(dataset_metrics.items())
-            },
-            'splitBreakdown': {
-                split: _finalize_metric_bucket(values)
-                for split, values in sorted(split_metrics.items())
-            },
-        }
-        summary = (
-            f"{total_cases} cases, exact={metrics['exactMatchRate']:.1%}, "
-            f"top3={metrics['top3MatchRate']:.1%}, cer={metrics['meanCharacterErrorRate']:.3f}, "
-            f"plateIoU={_safe_metric_average(benchmark_results, 'localization', 'plateMeanIoU'):.3f}, "
-            f"p95={metrics['latencyMs']['p95']:.1f}ms"
+            _write_execution_state(
+                suite_cases=cases,
+                benchmark_results=benchmark_results,
+                started_at=started_at,
+                runtime_status=runtime_status,
+                progress_path=progress_path,
+                checkpoint_path=checkpoint_path,
+                current_case_id=case_id,
+                completed=False,
+            )
+
+        runtime_status = self._status()
+        result = summarize_benchmark_results(benchmark_results, runtime_status)
+        _write_execution_state(
+            suite_cases=cases,
+            benchmark_results=benchmark_results,
+            started_at=started_at,
+            runtime_status=runtime_status,
+            progress_path=progress_path,
+            checkpoint_path=checkpoint_path,
+            completed=True,
         )
+        return result
+
+
+def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime_status: dict[str, Any]) -> dict[str, Any]:
+    if not benchmark_results:
         return {
-            'summary': summary,
-            'cases': benchmark_results,
-            'metrics': metrics,
-            'runtime': self._status(),
+            'summary': 'No benchmark cases were provided.',
+            'cases': [],
+            'metrics': {
+                'totalCases': 0,
+                'exactMatchRate': 0.0,
+                'top3MatchRate': 0.0,
+                'meanCharacterErrorRate': 0.0,
+                'sourceWinCounts': {},
+                'meanAcceptedMargin': 0.0,
+                'latencyMs': {
+                    'mean': 0.0,
+                    'p50': 0.0,
+                    'p95': 0.0,
+                },
+                'confidenceCalibration': {'expectedCalibrationError': 0.0, 'bins': []},
+                'failureBreakdown': {},
+                'tagBreakdown': {},
+                'datasetBreakdown': {},
+                'splitBreakdown': {},
+            },
+            'runtime': runtime_status,
         }
+
+    exact_matches = 0
+    top3_matches = 0
+    total_character_error_rate = 0.0
+    source_wins: dict[str, int] = {}
+    tag_metrics: dict[str, dict[str, float]] = {}
+    dataset_metrics: dict[str, dict[str, float]] = {}
+    split_metrics: dict[str, dict[str, float]] = {}
+    latency_values_ms: list[float] = []
+    calibration_points: list[tuple[float, bool]] = []
+    failure_counts: dict[str, int] = {}
+
+    for result in benchmark_results:
+        exact_match = bool(result.get('exactMatch'))
+        top3_match = bool(result.get('top3Match'))
+        character_error_rate_value = float(result.get('characterErrorRate') or 0.0)
+        accepted_confidence = float(result.get('acceptedConfidence') or 0.0)
+        accepted_margin = float(result.get('acceptedMargin') or 0.0)
+        latency_ms = float(result.get('latencyMs') or 0.0)
+        failure_reason = str(result.get('failureReason') or 'unknown')
+        best_source = str(result.get('bestSource') or '')
+        localization = dict(result.get('localization') or {})
+        track_metrics_case = dict(result.get('trackMetrics') or {}) if isinstance(result.get('trackMetrics'), dict) else None
+        metadata = dict(result.get('metadata') or {})
+
+        exact_matches += 1 if exact_match else 0
+        top3_matches += 1 if top3_match else 0
+        total_character_error_rate += character_error_rate_value
+        latency_values_ms.append(latency_ms)
+        calibration_points.append((accepted_confidence, exact_match))
+        failure_counts[failure_reason] = failure_counts.get(failure_reason, 0) + 1
+        if best_source:
+            source_wins[best_source] = source_wins.get(best_source, 0) + 1
+
+        case_metrics = {
+            'exactMatch': exact_match,
+            'top3Match': top3_match,
+            'characterErrorRate': character_error_rate_value,
+            'latencyMs': latency_ms,
+            'acceptedMargin': accepted_margin,
+            'plateIoU': localization.get('plateMeanIoU'),
+            'plateLocalizationRecall': localization.get('plateRecall'),
+            'targetIoU': localization.get('targetMeanIoU'),
+            'targetLocalizationRecall': localization.get('targetRecall'),
+            'trackMajorityExactMatch': (track_metrics_case or {}).get('majorityExactMatch'),
+            'predictionSwitchCount': (track_metrics_case or {}).get('predictionSwitchCount'),
+            'sampleExactMatchRate': (track_metrics_case or {}).get('sampleExactMatchRate'),
+            'timeToFirstCorrectMs': (track_metrics_case or {}).get('timeToFirstCorrectMs'),
+        }
+
+        for tag in list(result.get('tags') or []):
+            _update_metric_bucket(tag_metrics.setdefault(str(tag), _new_metric_bucket()), case_metrics)
+
+        dataset_name = str(metadata.get('dataset') or 'unknown')
+        split_name = str(metadata.get('split') or 'unknown')
+        _update_metric_bucket(dataset_metrics.setdefault(dataset_name, _new_metric_bucket()), case_metrics)
+        _update_metric_bucket(split_metrics.setdefault(split_name, _new_metric_bucket()), case_metrics)
+
+    total_cases = len(benchmark_results)
+    metrics = {
+        'totalCases': total_cases,
+        'exactMatchRate': exact_matches / total_cases,
+        'top3MatchRate': top3_matches / total_cases,
+        'meanCharacterErrorRate': total_character_error_rate / total_cases,
+        'sourceWinCounts': source_wins,
+        'meanAcceptedMargin': sum(float(result.get('acceptedMargin') or 0.0) for result in benchmark_results) / total_cases,
+        'latencyMs': {
+            'mean': sum(latency_values_ms) / total_cases if latency_values_ms else 0.0,
+            'p50': _percentile(latency_values_ms, 0.50),
+            'p95': _percentile(latency_values_ms, 0.95),
+        },
+        'confidenceCalibration': _build_confidence_calibration(calibration_points),
+        'failureBreakdown': failure_counts,
+        'tagBreakdown': {
+            tag: _finalize_metric_bucket(values)
+            for tag, values in sorted(tag_metrics.items())
+        },
+        'datasetBreakdown': {
+            dataset: _finalize_metric_bucket(values)
+            for dataset, values in sorted(dataset_metrics.items())
+        },
+        'splitBreakdown': {
+            split: _finalize_metric_bucket(values)
+            for split, values in sorted(split_metrics.items())
+        },
+    }
+    summary = (
+        f"{total_cases} cases, exact={metrics['exactMatchRate']:.1%}, "
+        f"top3={metrics['top3MatchRate']:.1%}, cer={metrics['meanCharacterErrorRate']:.3f}, "
+        f"plateIoU={_safe_metric_average(benchmark_results, 'localization', 'plateMeanIoU'):.3f}, "
+        f"p95={metrics['latencyMs']['p95']:.1f}ms"
+    )
+    return {
+        'summary': summary,
+        'cases': benchmark_results,
+        'metrics': metrics,
+        'runtime': runtime_status,
+    }
+
+
+def _resolve_optional_path(value: Any) -> Path | None:
+    if value in (None, ''):
+        return None
+    return Path(str(value)).resolve()
+
+
+def _load_checkpoint_results(checkpoint_path: Path | None, valid_case_ids: set[str]) -> tuple[list[dict[str, Any]], str | None]:
+    if checkpoint_path is None or not checkpoint_path.exists():
+        return [], None
+
+    payload = json.loads(checkpoint_path.read_text(encoding='utf-8'))
+    started_at = str(payload.get('startedAt')) if isinstance(payload.get('startedAt'), str) else None
+    stored_cases = payload.get('cases')
+    if not isinstance(stored_cases, list):
+        return [], started_at
+
+    restored: list[dict[str, Any]] = []
+    seen_case_ids: set[str] = set()
+    for entry in stored_cases:
+        if not isinstance(entry, dict):
+            continue
+        case_id = str(entry.get('id') or '')
+        if not case_id or case_id in seen_case_ids or case_id not in valid_case_ids:
+            continue
+        restored.append(entry)
+        seen_case_ids.add(case_id)
+    return restored, started_at
+
+
+def _write_execution_state(
+    suite_cases: list[dict[str, Any]],
+    benchmark_results: list[dict[str, Any]],
+    started_at: str,
+    runtime_status: dict[str, Any],
+    progress_path: Path | None = None,
+    checkpoint_path: Path | None = None,
+    current_case_id: str | None = None,
+    completed: bool = False,
+) -> None:
+    if progress_path is None and checkpoint_path is None:
+        return
+
+    partial_result = summarize_benchmark_results(benchmark_results, runtime_status)
+    total_cases = len(suite_cases)
+    completed_count = len(benchmark_results)
+    updated_at = datetime.now(UTC).isoformat()
+    latest_case = benchmark_results[-1] if benchmark_results else None
+
+    progress_payload: dict[str, Any] = {
+        'schemaVersion': 1,
+        'startedAt': started_at,
+        'updatedAt': updated_at,
+        'totalCases': total_cases,
+        'completedCaseCount': completed_count,
+        'remainingCaseCount': max(total_cases - completed_count, 0),
+        'completed': completed,
+        'currentCaseId': None if completed else current_case_id,
+        'latestCase': {
+            'id': latest_case.get('id'),
+            'failureReason': latest_case.get('failureReason'),
+            'latencyMs': latest_case.get('latencyMs'),
+        } if isinstance(latest_case, dict) else None,
+        'summary': partial_result.get('summary'),
+        'metrics': partial_result.get('metrics'),
+    }
+
+    if progress_path is not None:
+        progress_path.parent.mkdir(parents=True, exist_ok=True)
+        progress_path.write_text(json.dumps(progress_payload, indent=2), encoding='utf-8')
+
+    if checkpoint_path is not None:
+        checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+        checkpoint_payload = {
+            **progress_payload,
+            'suiteCaseIds': [
+                str(case_payload.get('id') or f'case-{index + 1}')
+                for index, case_payload in enumerate(suite_cases)
+            ],
+            'cases': benchmark_results,
+        }
+        checkpoint_path.write_text(json.dumps(checkpoint_payload, indent=2), encoding='utf-8')
 
 
 def _candidate_confidence(candidate: dict[str, Any] | None) -> float:

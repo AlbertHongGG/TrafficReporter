@@ -14,7 +14,7 @@ def _catalog_path() -> Path:
 def load_analysis_profile_catalog() -> dict[str, Any]:
     fallback = {
         'version': 1,
-        'defaultProfileId': 'balanced',
+        'defaultProfileId': 'precision',
         'developerDiagnosticsOptions': {},
         'profiles': [],
     }
@@ -39,7 +39,7 @@ def resolve_analysis_profile_options(
         for profile in catalog.get('profiles') or []
         if isinstance(profile, dict) and isinstance(profile.get('id'), str)
     }
-    default_profile_id = str(catalog.get('defaultProfileId') or 'balanced')
+    default_profile_id = str(catalog.get('defaultProfileId') or 'precision')
     resolved_profile_id = profile_id if profile_id in profiles else default_profile_id
     base_options = dict((profiles.get(resolved_profile_id) or {}).get('options') or {})
     if enable_developer_diagnostics:
