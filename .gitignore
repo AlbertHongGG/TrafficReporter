@@ -44,7 +44,6 @@ traffic-lpr-runtime/**/__pycache__/
 *.mp4
 *.pt
 
-
-UFPR-ALPR*
-AOLP*
+datasets/*
+!datasets/README.md
 __pycache__/

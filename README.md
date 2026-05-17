@@ -40,6 +40,7 @@ The benchmark workflow now has its own repo-level entrance and does not live ins
 ```bash
 npm run benchmark -- init-workspace
 npm run benchmark -- validate --suite .runtime/benchmark-tool/suites/sample-template.json
+npm run benchmark -- doctor --suite .runtime/benchmark-tool/suites/sample-template.json
 npm run benchmark -- validate-profile-catalog --file src/shared/config/lpr-analysis-profiles.json
 npm run benchmark:test
 ```
@@ -54,6 +55,19 @@ npm run check:lpr-contracts
 ```
 
 `npm run dev`, `npm run build`, and `npm test` now refresh those generated contracts automatically before running. `npm run check:lpr-contracts` is the non-mutating drift check for CI or pre-merge verification.
+
+### Local Data Layout
+
+Local datasets and local evaluation media now belong under `datasets/` instead of the repository root:
+
+```text
+datasets/
+    aolp/
+    ufpr-alpr/
+    dev-videos/
+```
+
+`schemas/` stays at the repo root because it is shared by the frontend, Rust host, Python runtime, and benchmark tool. The old root-level `scripts/` folder is not needed for a single LPR contract generator, so that generator lives next to its owning LPR schema files instead.
 
 ---
 

@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const repoRoot = path.resolve(__dirname, '..');
+const repoRoot = path.resolve(__dirname, '..', '..');
 const specPath = path.join(repoRoot, 'schemas', 'lpr', 'lpr-contracts.json');
 const tsOutPath = path.join(repoRoot, 'src', 'shared', 'contracts', 'lpr.generated.ts');
 const rustOutPath = path.join(repoRoot, 'src-tauri', 'src', 'contracts', 'lpr_generated.rs');

@@ -4,8 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "generate:lpr-contracts": "node scripts/generate-lpr-contracts.mjs",
-    "check:lpr-contracts": "node scripts/generate-lpr-contracts.mjs --check",
+    "generate:lpr-contracts": "node schemas/lpr/generate-contracts.mjs",
+    "check:lpr-contracts": "node schemas/lpr/generate-contracts.mjs --check",
     "dev": "npm run generate:lpr-contracts && vite",
     "build": "npm run generate:lpr-contracts && tsc -b && vite build",
     "lint": "eslint .",

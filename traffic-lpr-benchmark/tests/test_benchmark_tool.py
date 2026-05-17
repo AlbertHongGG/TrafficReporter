@@ -11,8 +11,9 @@ TOOL_ROOT = Path(__file__).resolve().parents[1]
 if str(TOOL_ROOT) not in sys.path:
     sys.path.insert(0, str(TOOL_ROOT))
 
+from legacy_import import import_legacy_manifest
 from reporting import write_run_artifacts
-from validation import ValidationError, validate_profile_catalog_file, validate_suite_payload
+from validation import ValidationError, inspect_suite_payload, validate_profile_catalog_file, validate_suite_payload
 
 
 class BenchmarkToolTests(unittest.TestCase):
@@ -93,6 +94,72 @@ class BenchmarkToolTests(unittest.TestCase):
             payload = json.loads(result_json.read_text(encoding='utf-8'))
             self.assertEqual(payload['runId'], 'run-001')
             self.assertEqual(payload['suite']['suiteId'], 'bundle-suite')
+
+    def test_inspect_suite_payload_reports_missing_sources_and_datasets(self) -> None:
+        payload = {
+            'schemaVersion': 1,
+            'suiteId': 'doctor-suite',
+            'title': 'Doctor Suite',
+            'cases': [
+                {
+                    'id': 'case-001',
+                    'mode': 'frame',
+                    'sourcePath': 'C:/tmp/existing.jpg',
+                    'timeMs': 100,
+                    'expectedText': 'AAA1111',
+                    'tags': ['local-dataset', 'aolp'],
+                    'metadata': {'dataset': 'AOLP', 'category': 'blur'},
+                },
+                {
+                    'id': 'case-002',
+                    'mode': 'frame',
+                    'sourcePath': 'C:/tmp/missing.jpg',
+                    'timeMs': 200,
+                    'expectedText': 'BBB2222',
+                    'tags': ['local-dataset', 'ufpr-alpr'],
+                    'metadata': {'dataset': 'UFPR-ALPR', 'category': 'tracking'},
+                },
+            ],
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            existing = root / 'existing.jpg'
+            existing.write_bytes(b'test')
+            payload['cases'][0]['sourcePath'] = str(existing)
+            payload['cases'][1]['sourcePath'] = str(root / 'missing.jpg')
+
+            summary = inspect_suite_payload(payload)
+
+        self.assertEqual(summary['datasets'], {'AOLP': 1, 'UFPR-ALPR': 1})
+        self.assertEqual(summary['categories'], {'blur': 1, 'tracking': 1})
+        self.assertEqual(summary['missingSourcePathCount'], 1)
+        self.assertFalse(summary['readyToRun'])
+
+    def test_import_legacy_manifest_promotes_dominant_category(self) -> None:
+        legacy_payload = {
+            'cases': [
+                {
+                    'id': 'case-001',
+                    'mode': 'frame',
+                    'sourcePath': 'C:/tmp/frame.jpg',
+                    'timeMs': 0,
+                    'expectedText': 'ABC1234',
+                    'metadata': {
+                        'dataset': 'AOLP',
+                        'dominantCategory': 'blur',
+                    },
+                }
+            ]
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manifest_path = Path(temp_dir) / 'legacy.json'
+            manifest_path.write_text(json.dumps(legacy_payload), encoding='utf-8')
+
+            suite_payload = import_legacy_manifest(manifest_path, 'legacy-suite')
+
+        self.assertEqual(suite_payload['cases'][0]['metadata']['category'], 'blur')
 
 
 if __name__ == '__main__':

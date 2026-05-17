@@ -59,8 +59,9 @@ def main() -> int:
     output_manifest = (args.output_manifest or (default_manifest_root / 'all.json')).resolve()
     output_images = (args.output_images or (paths.dataset_root / ('local-multisource' if contains_local_datasets else 'multisource-hardcases'))).resolve()
     split_output_dir = (args.split_output_dir or default_manifest_root).resolve()
-    aolp_root = (args.aolp_root or (runtime_root.parent / 'AOLP')).resolve()
-    ufpr_root = (args.ufpr_root or (runtime_root.parent / 'UFPR-ALPR dataset')).resolve()
+    dataset_root = runtime_root.parent / 'datasets'
+    aolp_root = (args.aolp_root or (dataset_root / 'aolp')).resolve()
+    ufpr_root = (args.ufpr_root or (dataset_root / 'ufpr-alpr')).resolve()
 
     archive_sources: dict[str, ArchiveSource] = {}
     all_samples: list[BenchmarkSourceSample] = []

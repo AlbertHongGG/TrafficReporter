@@ -18,6 +18,7 @@ This folder is the independent benchmark system for the repository. It is intent
 python traffic-lpr-benchmark/cli.py init-workspace
 python traffic-lpr-benchmark/cli.py import-legacy-manifest --manifest traffic-lpr-runtime/benchmarks/manifests/templates/sample-manifest.json --suite-id sample-template --output .runtime/benchmark-tool/suites/sample-template.json
 python traffic-lpr-benchmark/cli.py validate --suite .runtime/benchmark-tool/suites/sample-template.json
+python traffic-lpr-benchmark/cli.py doctor --suite .runtime/benchmark-tool/suites/sample-template.json
 python traffic-lpr-benchmark/cli.py print-summary --suite .runtime/benchmark-tool/suites/sample-template.json
 python traffic-lpr-benchmark/cli.py import-legacy-manifest --manifest traffic-lpr-runtime/.runtime/benchmarks/manifests/local/smoke/all.json --suite-id smoke-one --limit 1 --output .runtime/benchmark-tool/suites/smoke-one.json
 python traffic-lpr-benchmark/cli.py run --suite .runtime/benchmark-tool/suites/smoke-one.json
@@ -27,15 +28,28 @@ From the repo root you can also use the dedicated entrypoint:
 
 ```powershell
 npm run benchmark -- validate --suite .runtime/benchmark-tool/suites/sample-template.json
+npm run benchmark -- doctor --suite .runtime/benchmark-tool/suites/sample-template.json
 npm run benchmark -- run --suite .runtime/benchmark-tool/suites/smoke-one.json
 npm run benchmark:test
 ```
 
 ## Layout
 
-- `schemas/`: repo-level source-of-truth schemas for benchmark suites, run bundles, and shared LPR profile catalogs
+- `../schemas/`: repo-level source-of-truth schemas for benchmark suites, run bundles, and shared LPR profile catalogs
 - `traffic-lpr-benchmark/`: independent tool code
 - `.runtime/benchmark-tool/suites/`: validated suite definitions
 - `.runtime/benchmark-tool/runs/`: benchmark run outputs
 - `.runtime/benchmark-tool/reports/`: generated reports
 - `.runtime/benchmark-tool/imports/`: imported or intermediate artifacts
+
+## Why `doctor` exists
+
+`validate` answers only one question: does the suite match the schema and rule set.
+
+`doctor` answers the operational questions before a real run:
+
+- do all `sourcePath` files actually exist
+- what is the case mix by mode / dataset / category
+- is the suite mostly local data, public data, or a mix
+
+That keeps benchmark diagnosis inside the same tool boundary instead of pushing more ad hoc shell checks into the repo.

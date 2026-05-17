@@ -10,7 +10,7 @@ from legacy_import import import_legacy_manifest
 from models import BenchmarkSuite
 from reporting import create_run_id, write_run_artifacts
 from runtime_bridge import RuntimeInvokeError, run_benchmark_suite
-from validation import ValidationError, validate_profile_catalog_file, validate_suite_file, validate_suite_payload
+from validation import ValidationError, inspect_suite_payload, validate_profile_catalog_file, validate_suite_file, validate_suite_payload
 from workspace import default_runtime_root, default_workspace_root, ensure_workspace
 
 
@@ -34,6 +34,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     validate_parser = subparsers.add_parser('validate', help='Validate a benchmark suite JSON file.')
     validate_parser.add_argument('--suite', type=Path, required=True)
+
+    doctor_parser = subparsers.add_parser('doctor', help='Inspect a validated suite for missing source files and case-mix coverage.')
+    doctor_parser.add_argument('--suite', type=Path, required=True)
 
     validate_profiles_parser = subparsers.add_parser('validate-profile-catalog', help='Validate the shared LPR analysis profile catalog.')
     validate_profiles_parser.add_argument('--file', type=Path, required=True)
@@ -74,6 +77,13 @@ def command_validate(args: argparse.Namespace) -> int:
     payload = validate_suite_file(args.suite)
     print(json.dumps({'suiteId': payload['suiteId'], 'cases': len(payload['cases']), 'valid': True}, indent=2))
     return 0
+
+
+def command_doctor(args: argparse.Namespace) -> int:
+    payload = validate_suite_file(args.suite)
+    summary = inspect_suite_payload(payload, base_dir=args.suite.parent)
+    print(json.dumps(summary, indent=2))
+    return 0 if summary['readyToRun'] else 1
 
 
 def command_validate_profile_catalog(args: argparse.Namespace) -> int:
@@ -124,6 +134,8 @@ def main(argv: list[str] | None = None) -> int:
             return command_import_legacy_manifest(args)
         if args.command == 'validate':
             return command_validate(args)
+        if args.command == 'doctor':
+            return command_doctor(args)
         if args.command == 'validate-profile-catalog':
             return command_validate_profile_catalog(args)
         if args.command == 'print-summary':

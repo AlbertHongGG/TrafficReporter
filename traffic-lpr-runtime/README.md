@@ -88,7 +88,7 @@ If you want a public benchmark set that does not depend on your own clips, see [
 
 The UC3M-LP path uses HTTP range reads against the published Zenodo archive, so the generator can sample real cases without forcing a full archive download before manifest creation.
 
-If you already have local AOLP and UFPR-ALPR datasets in the workspace root, you can fold them into the same generator:
+If you already have local AOLP and UFPR-ALPR datasets under `../datasets/aolp/` and `../datasets/ufpr-alpr/`, you can fold them into the same generator:
 
 ```powershell
 cd traffic-lpr-runtime

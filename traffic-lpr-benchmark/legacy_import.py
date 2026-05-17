@@ -7,6 +7,14 @@ from models import BenchmarkCase, BenchmarkSuite
 from validation import ValidationError, load_json
 
 
+def _resolve_case_category(metadata: dict[str, Any]) -> str | None:
+    for key in ('category', 'dominantCategory'):
+        value = metadata.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
 def import_legacy_manifest(
     manifest_path: Path,
     suite_id: str,
@@ -27,10 +35,13 @@ def import_legacy_manifest(
         migrated_case = dict(case)
         migrated_case.setdefault('metadata', {})
         if isinstance(migrated_case['metadata'], dict):
+            resolved_category = _resolve_case_category(migrated_case['metadata'])
             migrated_case['metadata'] = {
                 **migrated_case['metadata'],
                 'legacyManifestPath': str(manifest_path.resolve()),
             }
+            if resolved_category and not migrated_case['metadata'].get('category'):
+                migrated_case['metadata']['category'] = resolved_category
         migrated_case.setdefault('analysisProfileId', analysis_profile_id)
         migrated_cases.append(BenchmarkCase.from_payload(migrated_case))
 

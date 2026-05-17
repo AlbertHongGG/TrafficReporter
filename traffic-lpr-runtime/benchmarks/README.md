@@ -106,7 +106,7 @@ cd traffic-lpr-runtime
 
 ## Local AOLP + UFPR Workflow
 
-When the full local datasets already exist in the workspace root under `AOLP/` and `UFPR-ALPR dataset/`, generate a mixed local benchmark with:
+When the full local datasets already exist under `datasets/aolp/` and `datasets/ufpr-alpr/`, generate a mixed local benchmark with:
 
 ```powershell
 cd traffic-lpr-runtime
@@ -133,3 +133,5 @@ Recommended usage:
 - treat AOLP as the Taiwan-primary OCR / localization gate
 - treat UFPR-ALPR as the moving-camera tracking / fusion reliability gate
 - compare `development`, `holdout`, and `challenge` manifests separately instead of only watching the merged average
+
+The split manifests are stratified per dataset-and-category group, so they are not expected to be equal-sized thirds. `development` is usually the largest slice, while `challenge` keeps the hardest examples from each group.
