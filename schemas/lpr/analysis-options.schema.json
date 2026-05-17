@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "traffic/schemas/lpr/analysis-options.schema.json",
+  "title": "Traffic LPR Analysis Options",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "persistArtifacts": { "type": "boolean" },
+    "artifactDir": { "type": ["string", "null"] },
+    "trackerMode": { "type": "string" },
+    "fusionMode": { "type": "string" },
+    "restorationMode": { "type": "string" },
+    "enableRectification": { "type": "boolean" },
+    "enableEnhancement": { "type": "boolean" },
+    "enableRecognizerComparison": { "type": "boolean" },
+    "debugTag": { "type": ["string", "null"] },
+    "ocrModelNames": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "maxPlateCandidates": { "type": "integer", "minimum": 1 },
+    "trackerHighConfidence": { "type": "number" },
+    "trackerLowConfidence": { "type": "number" },
+    "maxTrackingGap": { "type": "integer", "minimum": 1 },
+    "minAlignmentScore": { "type": "number" },
+    "enableReliabilityGates": { "type": "boolean" },
+    "minAcceptedConfidence": { "type": "number" },
+    "minCandidateMargin": { "type": "number" },
+    "minIntervalSupportFrames": { "type": "integer", "minimum": 1 }
+  }
+}

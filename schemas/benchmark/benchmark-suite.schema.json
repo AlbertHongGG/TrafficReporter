@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "traffic/schemas/benchmark/benchmark-suite.schema.json",
+  "title": "Traffic Benchmark Suite",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "suiteId", "cases"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "suiteId": { "type": "string", "minLength": 1 },
+    "title": { "type": ["string", "null"] },
+    "analysisProfileId": { "type": ["string", "null"] },
+    "source": { "type": ["object", "null"] },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["id", "mode", "sourcePath", "expectedText"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "mode": { "enum": ["frame", "interval"] },
+          "sourcePath": { "type": "string", "minLength": 1 },
+          "expectedText": { "type": "string", "minLength": 1 },
+          "timeMs": { "type": ["integer", "number", "null"] },
+          "anchorTimeMs": { "type": ["integer", "number", "null"] },
+          "sampleEveryMs": { "type": ["integer", "number", "null"] },
+          "maxSamples": { "type": ["integer", "number", "null"] },
+          "targetVehicleKind": { "type": ["string", "null"] },
+          "countryHints": {
+            "type": ["array", "null"],
+            "items": { "type": "string" }
+          },
+          "tags": {
+            "type": ["array", "null"],
+            "items": { "type": "string" }
+          },
+          "interval": {
+            "type": ["object", "null"],
+            "additionalProperties": false,
+            "required": ["startMs", "endMs"],
+            "properties": {
+              "startMs": { "type": ["integer", "number"] },
+              "endMs": { "type": ["integer", "number"] }
+            }
+          },
+          "selectedTargetBox": {
+            "type": ["object", "null"],
+            "additionalProperties": false,
+            "required": ["x", "y", "width", "height"],
+            "properties": {
+              "x": { "type": "number" },
+              "y": { "type": "number" },
+              "width": { "type": "number" },
+              "height": { "type": "number" }
+            }
+          },
+          "analysisOptions": { "type": ["object", "null"] },
+          "metadata": { "type": ["object", "null"] }
+        }
+      }
+    }
+  }
+}

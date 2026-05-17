@@ -33,6 +33,28 @@ npm install
 npm run tauri dev
 ```
 
+### Independent Benchmark Tool
+
+The benchmark workflow now has its own repo-level entrance and does not live inside the desktop app UI:
+
+```bash
+npm run benchmark -- init-workspace
+npm run benchmark -- validate --suite .runtime/benchmark-tool/suites/sample-template.json
+npm run benchmark -- validate-profile-catalog --file src/shared/config/lpr-analysis-profiles.json
+npm run benchmark:test
+```
+
+Shared benchmark and LPR profile schemas now live under `schemas/` so the benchmark tool and runtime-facing JSON assets can evolve from one repo-level source of truth.
+
+The LPR request/response contract is now generated from `schemas/lpr/lpr-contracts.json`. Regenerate the checked-in TypeScript and Rust payload definitions with:
+
+```bash
+npm run generate:lpr-contracts
+npm run check:lpr-contracts
+```
+
+`npm run dev`, `npm run build`, and `npm test` now refresh those generated contracts automatically before running. `npm run check:lpr-contracts` is the non-mutating drift check for CI or pre-merge verification.
+
 ---
 
 ## Build & Distribution

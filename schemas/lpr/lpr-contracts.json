@@ -1,0 +1,382 @@
+{
+  "ts": {
+    "imports": [
+      { "name": "VideoMarkerRect", "from": "./editor" }
+    ]
+  },
+  "runtimeCommands": {
+    "scan-targets": {
+      "request": "LprTargetScanRequest",
+      "response": "LprTargetScanResponse"
+    },
+    "analyze-frame": {
+      "request": "LprFrameAnalysisRequest",
+      "response": "LprFrameAnalysisResponse"
+    },
+    "analyze-interval": {
+      "request": "LprIntervalAnalysisRequest",
+      "response": "LprIntervalAnalysisResponse"
+    }
+  },
+  "externals": {
+    "VideoMarkerRect": {
+      "kind": "object",
+      "fields": [
+        { "name": "x", "type": "number" },
+        { "name": "y", "type": "number" },
+        { "name": "width", "type": "number" },
+        { "name": "height", "type": "number" }
+      ]
+    }
+  },
+  "definitions": [
+    {
+      "name": "LprWorkflowMode",
+      "kind": "stringUnion",
+      "targets": ["ts"],
+      "values": ["idle", "range", "target", "review"]
+    },
+    {
+      "name": "LprJobStatus",
+      "kind": "stringUnion",
+      "targets": ["ts"],
+      "values": ["idle", "queued", "running", "completed", "failed", "cancelled"]
+    },
+    {
+      "name": "LprVehicleKind",
+      "kind": "stringUnion",
+      "values": ["any", "vehicle", "motorcycle", "car", "truck", "bus"]
+    },
+    {
+      "name": "LprLegibilityLevel",
+      "kind": "stringUnion",
+      "values": ["perfect", "good", "poor", "illegible", "unknown"]
+    },
+    {
+      "name": "LprAnalysisProfileId",
+      "kind": "alias",
+      "tsType": "string",
+      "rustType": "String",
+      "validatorType": "string"
+    },
+    {
+      "name": "LprRecognitionSource",
+      "kind": "alias",
+      "tsType": "'baseline' | 'fused' | 'legacy-vote' | 'fused-char' | `ocr:${string}` | `fused-image:${string}`",
+      "rustType": "String",
+      "validatorType": "string"
+    },
+    {
+      "name": "LprDiagnostics",
+      "kind": "alias",
+      "tsType": "Record<string, unknown>",
+      "rustType": "Value",
+      "validatorType": "json"
+    },
+    {
+      "name": "LprAnalysisOptions",
+      "kind": "object",
+      "rustName": "LprAnalysisOptionsPayload",
+      "fields": [
+        { "name": "persistArtifacts", "type": "boolean", "optional": true },
+        { "name": "artifactDir", "type": "string", "optional": true, "nullable": true },
+        { "name": "trackerMode", "type": "string", "optional": true },
+        { "name": "fusionMode", "type": "string", "optional": true },
+        { "name": "restorationMode", "type": "string", "optional": true },
+        { "name": "enableRectification", "type": "boolean", "optional": true },
+        { "name": "enableEnhancement", "type": "boolean", "optional": true },
+        { "name": "enableRecognizerComparison", "type": "boolean", "optional": true },
+        { "name": "debugTag", "type": "string", "optional": true, "nullable": true },
+        { "name": "ocrModelNames", "type": "array", "items": "string", "optional": true },
+        { "name": "maxPlateCandidates", "type": "number", "rustType": "u32", "optional": true },
+        { "name": "trackerHighConfidence", "type": "number", "optional": true },
+        { "name": "trackerLowConfidence", "type": "number", "optional": true },
+        { "name": "maxTrackingGap", "type": "number", "rustType": "u32", "optional": true },
+        { "name": "minAlignmentScore", "type": "number", "optional": true },
+        { "name": "enableReliabilityGates", "type": "boolean", "optional": true },
+        { "name": "minAcceptedConfidence", "type": "number", "optional": true },
+        { "name": "minCandidateMargin", "type": "number", "optional": true },
+        { "name": "minIntervalSupportFrames", "type": "number", "rustType": "u32", "optional": true }
+      ]
+    },
+    {
+      "name": "LprAnalysisProfileDefinition",
+      "kind": "object",
+      "targets": ["ts"],
+      "fields": [
+        { "name": "id", "type": "LprAnalysisProfileId" },
+        { "name": "label", "type": "string" },
+        { "name": "description", "type": "string" },
+        { "name": "options", "type": "LprAnalysisOptions" }
+      ]
+    },
+    {
+      "name": "LprAnalysisProfileCatalog",
+      "kind": "object",
+      "targets": ["ts"],
+      "fields": [
+        { "name": "version", "type": "number" },
+        { "name": "defaultProfileId", "type": "LprAnalysisProfileId" },
+        { "name": "developerDiagnosticsOptions", "type": "LprAnalysisOptions", "optional": true, "nullable": true },
+        { "name": "profiles", "type": "array", "items": "LprAnalysisProfileDefinition" }
+      ]
+    },
+    {
+      "name": "TimelineIntervalSelection",
+      "kind": "object",
+      "rustName": "TimelineIntervalSelectionPayload",
+      "fields": [
+        { "name": "startMs", "type": "number", "rustType": "u64" },
+        { "name": "endMs", "type": "number", "rustType": "u64" }
+      ]
+    },
+    {
+      "name": "LprQualityMetrics",
+      "kind": "object",
+      "rustName": "LprQualityMetricsPayload",
+      "fields": [
+        { "name": "sharpness", "type": "number" },
+        { "name": "contrast", "type": "number" },
+        { "name": "plateArea", "type": "number" },
+        { "name": "angleScore", "type": "number" },
+        { "name": "occlusionScore", "type": "number" },
+        { "name": "glareScore", "type": "number" },
+        { "name": "legibilityScore", "type": "number" },
+        { "name": "overallScore", "type": "number" },
+        { "name": "legibilityLevel", "type": "LprLegibilityLevel" }
+      ]
+    },
+    {
+      "name": "LprTrackedRegion",
+      "kind": "object",
+      "rustName": "LprTrackedRegionPayload",
+      "fields": [
+        { "name": "id", "type": "string" },
+        { "name": "timeMs", "type": "number", "rustType": "u64" },
+        { "name": "box", "type": "VideoMarkerRect" },
+        { "name": "confidence", "type": "number" },
+        { "name": "className", "type": "string" },
+        { "name": "diagnostics", "type": "LprDiagnostics", "optional": true, "nullable": true }
+      ]
+    },
+    {
+      "name": "LprTargetTrack",
+      "kind": "object",
+      "rustName": "LprTargetTrackPayload",
+      "fields": [
+        { "name": "id", "type": "string" },
+        { "name": "className", "type": "string" },
+        { "name": "label", "type": "string" },
+        { "name": "confidence", "type": "number" },
+        { "name": "frames", "type": "array", "items": "LprTrackedRegion" },
+        { "name": "diagnostics", "type": "LprDiagnostics", "optional": true, "nullable": true }
+      ]
+    },
+    {
+      "name": "LprPlateCandidate",
+      "kind": "object",
+      "rustName": "LprPlateCandidatePayload",
+      "fields": [
+        { "name": "id", "type": "string" },
+        { "name": "text", "type": "string" },
+        { "name": "confidence", "type": "number" },
+        { "name": "source", "type": "LprRecognitionSource" },
+        { "name": "frameTimeMs", "type": "number", "rustType": "u64", "nullable": true },
+        { "name": "countryCode", "type": "string", "nullable": true },
+        { "name": "box", "type": "VideoMarkerRect", "nullable": true },
+        { "name": "quality", "type": "LprQualityMetrics", "nullable": true },
+        { "name": "diagnostics", "type": "LprDiagnostics", "optional": true, "nullable": true }
+      ]
+    },
+    {
+      "name": "LprFrameSample",
+      "kind": "object",
+      "rustName": "LprFrameSamplePayload",
+      "fields": [
+        { "name": "id", "type": "string" },
+        { "name": "timeMs", "type": "number", "rustType": "u64" },
+        { "name": "targetBox", "type": "VideoMarkerRect", "nullable": true },
+        { "name": "plateBox", "type": "VideoMarkerRect", "nullable": true },
+        { "name": "quality", "type": "LprQualityMetrics", "nullable": true },
+        { "name": "candidates", "type": "array", "items": "LprPlateCandidate" },
+        { "name": "imagePath", "type": "string", "nullable": true },
+        { "name": "diagnostics", "type": "LprDiagnostics", "optional": true, "nullable": true }
+      ]
+    },
+    {
+      "name": "LprJobState",
+      "kind": "object",
+      "targets": ["ts"],
+      "fields": [
+        { "name": "status", "type": "LprJobStatus" },
+        { "name": "progress", "type": "number" },
+        { "name": "stage", "type": "string" },
+        { "name": "detail", "type": "string" },
+        { "name": "requestId", "type": "string", "nullable": true },
+        { "name": "error", "type": "string", "nullable": true },
+        { "name": "startedAt", "type": "string", "nullable": true },
+        { "name": "updatedAt", "type": "string", "nullable": true }
+      ]
+    },
+    {
+      "name": "LprResultHistoryEntry",
+      "kind": "object",
+      "targets": ["ts"],
+      "fields": [
+        { "name": "id", "type": "string" },
+        { "name": "createdAt", "type": "string" },
+        { "name": "interval", "type": "TimelineIntervalSelection", "nullable": true },
+        { "name": "targetTrackId", "type": "string", "nullable": true },
+        { "name": "acceptedCandidateId", "type": "string", "nullable": true },
+        { "name": "analysisProfileId", "type": "LprAnalysisProfileId", "nullable": true },
+        { "name": "developerDiagnosticsEnabled", "type": "boolean" },
+        { "name": "candidates", "type": "array", "items": "LprPlateCandidate" },
+        { "name": "summary", "type": "string" }
+      ]
+    },
+    {
+      "name": "LprSessionState",
+      "kind": "object",
+      "targets": ["ts"],
+      "fields": [
+        { "name": "workflowMode", "type": "LprWorkflowMode" },
+        { "name": "interval", "type": "TimelineIntervalSelection", "nullable": true },
+        { "name": "selectedAnalysisProfileId", "type": "LprAnalysisProfileId" },
+        { "name": "showDeveloperDiagnostics", "type": "boolean" },
+        { "name": "targetVehicleKind", "type": "LprVehicleKind" },
+        { "name": "useDenseSampling", "type": "boolean" },
+        { "name": "countryHints", "type": "array", "items": "string" },
+        { "name": "job", "type": "LprJobState" },
+        { "name": "targetTracks", "type": "array", "items": "LprTargetTrack" },
+        { "name": "selectedTargetTrackId", "type": "string", "nullable": true },
+        { "name": "samples", "type": "array", "items": "LprFrameSample" },
+        { "name": "candidates", "type": "array", "items": "LprPlateCandidate" },
+        { "name": "acceptedCandidateId", "type": "string", "nullable": true },
+        { "name": "history", "type": "array", "items": "LprResultHistoryEntry" }
+      ]
+    },
+    {
+      "name": "LprRuntimeStatus",
+      "kind": "object",
+      "rustName": "LprRuntimeStatusPayload",
+      "fields": [
+        { "name": "available", "type": "boolean" },
+        { "name": "pythonExecutable", "type": "string", "nullable": true },
+        { "name": "runtimeScript", "type": "string", "nullable": true },
+        { "name": "version", "type": "string", "nullable": true },
+        { "name": "missingPackages", "type": "array", "items": "string" },
+        { "name": "installedPackages", "type": "array", "items": "string" },
+        { "name": "detail", "type": "string" }
+      ]
+    },
+    {
+      "name": "LprTargetScanRequest",
+      "kind": "object",
+      "rustName": "LprTargetScanRequestPayload",
+      "fields": [
+        { "name": "sourcePath", "type": "string" },
+        { "name": "timeMs", "type": "number", "rustType": "u64" },
+        { "name": "markerRect", "type": "VideoMarkerRect", "nullable": true },
+        { "name": "targetVehicleKind", "type": "LprVehicleKind" }
+      ]
+    },
+    {
+      "name": "LprTargetScanResponse",
+      "kind": "object",
+      "rustName": "LprTargetScanResponsePayload",
+      "fields": [
+        { "name": "detections", "type": "array", "items": "LprTrackedRegion" },
+        { "name": "runtime", "type": "LprRuntimeStatus" }
+      ]
+    },
+    {
+      "name": "LprFrameAnalysisRequest",
+      "kind": "object",
+      "rustName": "LprFrameAnalysisRequestPayload",
+      "fields": [
+        { "name": "sourcePath", "type": "string" },
+        { "name": "timeMs", "type": "number", "rustType": "u64" },
+        { "name": "markerRect", "type": "VideoMarkerRect", "nullable": true },
+        { "name": "targetVehicleKind", "type": "LprVehicleKind" },
+        { "name": "selectedTargetBox", "type": "VideoMarkerRect", "nullable": true },
+        { "name": "countryHints", "type": "array", "items": "string" },
+        { "name": "analysisProfileId", "type": "LprAnalysisProfileId", "optional": true, "nullable": true },
+        { "name": "enableDeveloperDiagnostics", "type": "boolean", "optional": true },
+        { "name": "analysisOptions", "type": "LprAnalysisOptions", "optional": true, "nullable": true }
+      ]
+    },
+    {
+      "name": "LprFrameAnalysisResponse",
+      "kind": "object",
+      "rustName": "LprFrameAnalysisResponsePayload",
+      "fields": [
+        { "name": "detections", "type": "array", "items": "LprTrackedRegion" },
+        { "name": "sample", "type": "LprFrameSample", "nullable": true },
+        { "name": "candidates", "type": "array", "items": "LprPlateCandidate" },
+        { "name": "acceptedCandidateId", "type": "string", "nullable": true },
+        { "name": "runtime", "type": "LprRuntimeStatus" },
+        { "name": "diagnostics", "type": "LprDiagnostics", "optional": true, "nullable": true }
+      ]
+    },
+    {
+      "name": "LprIntervalAnalysisRequest",
+      "kind": "object",
+      "rustName": "LprIntervalAnalysisRequestPayload",
+      "fields": [
+        { "name": "sourcePath", "type": "string" },
+        { "name": "interval", "type": "TimelineIntervalSelection" },
+        { "name": "anchorTimeMs", "type": "number", "rustType": "u64" },
+        { "name": "targetVehicleKind", "type": "LprVehicleKind" },
+        { "name": "selectedTargetBox", "type": "VideoMarkerRect", "nullable": true },
+        { "name": "countryHints", "type": "array", "items": "string" },
+        { "name": "sampleEveryMs", "type": "number", "rustType": "u64", "optional": true },
+        { "name": "maxSamples", "type": "number", "rustType": "u32", "optional": true },
+        { "name": "analysisProfileId", "type": "LprAnalysisProfileId", "optional": true, "nullable": true },
+        { "name": "enableDeveloperDiagnostics", "type": "boolean", "optional": true },
+        { "name": "analysisOptions", "type": "LprAnalysisOptions", "optional": true, "nullable": true }
+      ]
+    },
+    {
+      "name": "LprIntervalAnalysisResponse",
+      "kind": "object",
+      "rustName": "LprIntervalAnalysisResponsePayload",
+      "fields": [
+        { "name": "targetTracks", "type": "array", "items": "LprTargetTrack" },
+        { "name": "samples", "type": "array", "items": "LprFrameSample" },
+        { "name": "candidates", "type": "array", "items": "LprPlateCandidate" },
+        { "name": "acceptedCandidateId", "type": "string", "nullable": true },
+        { "name": "summary", "type": "string" },
+        { "name": "runtime", "type": "LprRuntimeStatus" },
+        { "name": "diagnostics", "type": "LprDiagnostics", "optional": true, "nullable": true }
+      ]
+    },
+    {
+      "name": "LprEvidenceExportRequest",
+      "kind": "object",
+      "rustName": "LprEvidenceExportRequestPayload",
+      "fields": [
+        { "name": "outputPath", "type": "string" },
+        { "name": "sourcePath", "type": "string" },
+        { "name": "timeMs", "type": "number", "rustType": "u64" },
+        { "name": "markerRect", "type": "VideoMarkerRect", "nullable": true },
+        { "name": "interval", "type": "TimelineIntervalSelection", "nullable": true },
+        { "name": "targetTrack", "type": "LprTargetTrack", "nullable": true },
+        { "name": "acceptedCandidate", "type": "LprPlateCandidate", "nullable": true },
+        { "name": "candidates", "type": "array", "items": "LprPlateCandidate" },
+        { "name": "samples", "type": "array", "items": "LprFrameSample" }
+      ]
+    },
+    {
+      "name": "LprEvidenceExportResponse",
+      "kind": "object",
+      "rustName": "LprEvidenceExportResponsePayload",
+      "fields": [
+        { "name": "jsonPath", "type": "string" },
+        { "name": "imagePath", "type": "string" },
+        { "name": "bundleDir", "type": "string" },
+        { "name": "exportedFileCount", "type": "number", "rustType": "usize" },
+        { "name": "decisionFrameCount", "type": "number", "rustType": "usize" }
+      ]
+    }
+  ]
+}

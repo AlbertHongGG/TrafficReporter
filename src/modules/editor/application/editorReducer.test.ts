@@ -86,6 +86,8 @@ describe('editorReducer LPR workflow', () => {
         interval: { startMs: 1000, endMs: 2400 },
         targetTrackId: null,
         acceptedCandidateId: candidate.id,
+        analysisProfileId: 'balanced',
+        developerDiagnosticsEnabled: false,
         candidates: [candidate],
         summary: 'Best candidate ABC1234',
       },

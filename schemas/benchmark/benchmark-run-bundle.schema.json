@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "traffic/schemas/benchmark/benchmark-run-bundle.schema.json",
+  "title": "Traffic Benchmark Run Bundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["runId", "generatedAt", "suite", "result"],
+  "properties": {
+    "runId": { "type": "string", "minLength": 1 },
+    "generatedAt": { "type": "string", "minLength": 1 },
+    "suite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["suiteId", "caseCount"],
+      "properties": {
+        "suiteId": { "type": "string", "minLength": 1 },
+        "title": { "type": ["string", "null"] },
+        "caseCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["summary", "cases", "metrics"],
+      "properties": {
+        "summary": { "type": "string" },
+        "cases": { "type": "array" },
+        "metrics": { "type": "object" },
+        "runtime": { "type": ["object", "null"] }
+      }
+    }
+  }
+}

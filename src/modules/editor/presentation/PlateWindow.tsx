@@ -27,8 +27,10 @@ import {
   type PlateWindowSessionSnapshot,
 } from '../application/plateWindow';
 import { requestPlateWindowSession, sendPlateWindowAction } from '../infrastructure/plateWindowApi';
-import { buildDefaultLprState, clamp, formatRulerLabel, formatTransportTime } from '../domain/model';
+import { clamp, formatRulerLabel, formatTransportTime } from '../domain/model';
+import { buildDefaultLprState } from '../domain/lprState';
 import type { LprFrameSample, LprPlateCandidate, TimelineIntervalSelection } from '../../../shared/contracts';
+import { getLprAnalysisProfileLabel, getLprAnalysisProfiles } from '../../../shared/lprAnalysisProfiles';
 import { createLogger, getErrorSummary, serializeError } from '../../../utils/logger';
 import styles from './PlateWindow.module.css';
 
@@ -47,6 +49,14 @@ function formatIntervalLabel(interval: TimelineIntervalSelection | null) {
 
 function formatSampleTimestamp(milliseconds: number) {
   return formatRulerLabel(milliseconds);
+}
+
+function formatHistoryLabel(interval: TimelineIntervalSelection | null, analysisProfileId: string | null, developerDiagnosticsEnabled: boolean) {
+  return [
+    interval ? formatIntervalLabel(interval) : 'frame',
+    getLprAnalysisProfileLabel(analysisProfileId),
+    developerDiagnosticsEnabled ? 'dev' : null,
+  ].filter(Boolean).join(' · ');
 }
 
 type TabType = 'candidates' | 'targets' | 'evidence' | 'samples' | 'history';
@@ -232,6 +242,7 @@ export const PlateWindow: React.FC = () => {
   const lprState = snapshot?.lpr ?? buildDefaultLprState();
   const runtimeStatus = snapshot?.runtimeStatus ?? null;
   const topCandidate = snapshot?.topCandidate ?? lprState.candidates[0] ?? null;
+  const analysisProfiles = getLprAnalysisProfiles();
   const isBusy = lprState.job.status === 'queued' || lprState.job.status === 'running';
   const currentPlayheadMs = snapshot?.playheadMs ?? 0;
   const evidenceSamples = React.useMemo(() => buildEvidenceSamples(lprState.samples, topCandidate), [lprState.samples, topCandidate]);
@@ -392,6 +403,9 @@ export const PlateWindow: React.FC = () => {
               </div>
 
               <div className={styles.utilityActions}>
+                <motion.button whileTap={{ scale: 0.95 }} type="button" className={`${styles.actionBtnUtility} ${lprState.showDeveloperDiagnostics ? styles.utilityActive : ''}`} onClick={() => void sendAction({ type: 'toggle-developer-diagnostics' })} title="Toggle Developer Diagnostics">
+                  <Zap size={15} />
+                </motion.button>
                 <motion.button whileTap={{ scale: 0.95 }} type="button" className={`${styles.actionBtnUtility} ${lprState.useDenseSampling ? styles.utilityActive : ''}`} onClick={() => void sendAction({ type: 'toggle-dense-sampling' })} title="Toggle Dense Sampling">
                   <Database size={15} />
                 </motion.button>
@@ -414,6 +428,18 @@ export const PlateWindow: React.FC = () => {
                 <button type="button" onClick={() => void sendAction({ type: 'set-interval-boundary', boundary: 'end' })}>Out</button>
                 <div className={styles.segmentDivider} />
                 <button type="button" onClick={() => void sendAction({ type: 'clear-interval' })} disabled={!snapshot.explicitInterval}>Clear</button>
+              </div>
+              <div className={styles.selectWrapper}>
+                <select
+                  className={styles.select}
+                  value={lprState.selectedAnalysisProfileId}
+                  onChange={(event) => void sendAction({ type: 'set-analysis-profile', analysisProfileId: event.target.value })}
+                  title="Analysis Profile"
+                >
+                  {analysisProfiles.map((profile) => (
+                    <option key={profile.id} value={profile.id}>{profile.label}</option>
+                  ))}
+                </select>
               </div>
               <div className={styles.intervalBadge}>
                 <Clock size={12} className={styles.mutedIcon} />
@@ -572,30 +598,32 @@ export const PlateWindow: React.FC = () => {
                               ))}
                             </div>
 
-                            <div className={styles.evidenceMetaGrid}>
-                              <div className={styles.evidenceMetaSection}>
-                                <div className={styles.evidenceMetaTitle}>Quality</div>
-                                <div className={styles.evidenceMetricList}>
-                                  {qualityMetrics(activeEvidenceSample.sample).map(([label, value]) => (
-                                    <div key={label} className={styles.evidenceMetricRow}>
-                                      <span>{label}</span>
-                                      <strong>{formatMetric(value)}</strong>
-                                    </div>
-                                  ))}
+                            {lprState.showDeveloperDiagnostics && (
+                              <div className={styles.evidenceMetaGrid}>
+                                <div className={styles.evidenceMetaSection}>
+                                  <div className={styles.evidenceMetaTitle}>Quality</div>
+                                  <div className={styles.evidenceMetricList}>
+                                    {qualityMetrics(activeEvidenceSample.sample).map(([label, value]) => (
+                                      <div key={label} className={styles.evidenceMetricRow}>
+                                        <span>{label}</span>
+                                        <strong>{formatMetric(value)}</strong>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div className={styles.evidenceMetaSection}>
+                                  <div className={styles.evidenceMetaTitle}>Top OCR Outputs</div>
+                                  <div className={styles.evidenceCandidateList}>
+                                    {evidenceCandidates(activeEvidenceSample.sample).map((candidate) => (
+                                      <div key={candidate.id} className={styles.evidenceCandidateRow}>
+                                        <span>{candidate.text}</span>
+                                        <strong>{formatConfidence(candidate.confidence)}</strong>
+                                      </div>
+                                    ))}
+                                  </div>
                                 </div>
                               </div>
-                              <div className={styles.evidenceMetaSection}>
-                                <div className={styles.evidenceMetaTitle}>Top OCR Outputs</div>
-                                <div className={styles.evidenceCandidateList}>
-                                  {evidenceCandidates(activeEvidenceSample.sample).map((candidate) => (
-                                    <div key={candidate.id} className={styles.evidenceCandidateRow}>
-                                      <span>{candidate.text}</span>
-                                      <strong>{formatConfidence(candidate.confidence)}</strong>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            </div>
+                            )}
                           </div>
                         </>
                       )}
@@ -639,7 +667,7 @@ export const PlateWindow: React.FC = () => {
                       {lprState.history.slice().reverse().map((entry) => (
                         <motion.div layout variants={listItemVariants} key={entry.id} className={styles.infoItemRow}>
                           <span className={styles.infoItemText}>{entry.summary}</span>
-                          <span className={styles.infoItemPill}>{entry.interval ? formatIntervalLabel(entry.interval) : 'frame'}</span>
+                          <span className={styles.infoItemPill}>{formatHistoryLabel(entry.interval, entry.analysisProfileId, entry.developerDiagnosticsEnabled)}</span>
                         </motion.div>
                       ))}
                     </motion.div>

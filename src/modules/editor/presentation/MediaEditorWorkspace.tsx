@@ -24,7 +24,6 @@ import {
 } from 'lucide-react';
 import { editorReducer, initialEditorState } from '../application/editorReducer';
 import {
-  buildDefaultLprState,
   clamp,
   clipDurationMs,
   createId,
@@ -46,6 +45,7 @@ import {
   type TimelineClip,
   type VideoMarkerRect,
 } from '../domain/model';
+import { buildDefaultLprState } from '../domain/lprState';
 import {
   buildEditorAsset,
   exportFrameImage,
@@ -1258,6 +1258,8 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         targetVehicleKind: lprState.targetVehicleKind,
         selectedTargetBox: lprSelectedTrackFrame?.box ?? null,
         countryHints,
+        analysisProfileId: lprState.selectedAnalysisProfileId,
+        enableDeveloperDiagnostics: lprState.showDeveloperDiagnostics,
       });
 
       setLprRuntimeStatus(response.runtime);
@@ -1275,6 +1277,8 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
             interval: null,
             targetTrackId: response.detections[0]?.id ?? null,
             acceptedCandidateId: response.acceptedCandidateId ?? null,
+            analysisProfileId: lprState.selectedAnalysisProfileId,
+            developerDiagnosticsEnabled: lprState.showDeveloperDiagnostics,
             candidates: response.candidates,
             summary: completionDetail,
           },
@@ -1356,6 +1360,8 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         countryHints,
         sampleEveryMs,
         maxSamples: lprState.useDenseSampling ? 18 : 8,
+        analysisProfileId: lprState.selectedAnalysisProfileId,
+        enableDeveloperDiagnostics: lprState.showDeveloperDiagnostics,
       });
 
       setLprRuntimeStatus(response.runtime);
@@ -1373,6 +1379,8 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
           interval,
           targetTrackId: response.targetTracks[0]?.id ?? null,
           acceptedCandidateId: response.acceptedCandidateId ?? null,
+          analysisProfileId: lprState.selectedAnalysisProfileId,
+          developerDiagnosticsEnabled: lprState.showDeveloperDiagnostics,
           candidates: response.candidates,
           summary: intervalDetail,
         },
@@ -1457,6 +1465,9 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       case 'clear-interval':
         dispatch({ type: 'clear-lpr-interval' });
         break;
+      case 'set-analysis-profile':
+        dispatch({ type: 'set-lpr-analysis-profile', analysisProfileId: action.analysisProfileId });
+        break;
       case 'set-country-hints':
         latestCountryHintDraftRef.current = action.value;
         applyCountryHints(action.value);
@@ -1472,6 +1483,9 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         break;
       case 'toggle-dense-sampling':
         dispatch({ type: 'set-lpr-toggles', toggles: { useDenseSampling: !lprState.useDenseSampling } });
+        break;
+      case 'toggle-developer-diagnostics':
+        dispatch({ type: 'set-lpr-toggles', toggles: { showDeveloperDiagnostics: !lprState.showDeveloperDiagnostics } });
         break;
       case 'export-evidence':
         await handleExportLprEvidence();

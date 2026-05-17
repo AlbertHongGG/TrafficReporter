@@ -32,11 +32,13 @@ export type PlateWindowAction =
   | { type: 'use-clip-interval' }
   | { type: 'set-interval-boundary'; boundary: 'start' | 'end' }
   | { type: 'clear-interval' }
+  | { type: 'set-analysis-profile'; analysisProfileId: string }
   | { type: 'set-country-hints'; value: string }
   | { type: 'scan-targets' }
   | { type: 'analyze-frame' }
   | { type: 'analyze-range' }
   | { type: 'toggle-dense-sampling' }
+  | { type: 'toggle-developer-diagnostics' }
   | { type: 'export-evidence' }
   | { type: 'clear-results' }
   | { type: 'select-target-track'; targetTrackId: string }

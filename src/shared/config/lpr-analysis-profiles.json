@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "defaultProfileId": "balanced",
+  "developerDiagnosticsOptions": {
+    "persistArtifacts": true,
+    "debugTag": "developer-diagnostics",
+    "maxPlateCandidates": 5
+  },
+  "profiles": [
+    {
+      "id": "balanced",
+      "label": "Balanced",
+      "description": "Default profile for routine plate analysis and review.",
+      "options": {
+        "trackerMode": "botsort",
+        "fusionMode": "aligned-char",
+        "restorationMode": "mambairv2",
+        "enableRectification": true,
+        "enableEnhancement": true,
+        "enableRecognizerComparison": true,
+        "maxPlateCandidates": 3,
+        "trackerHighConfidence": 0.35,
+        "trackerLowConfidence": 0.15,
+        "maxTrackingGap": 3,
+        "minAlignmentScore": 0.05,
+        "enableReliabilityGates": true,
+        "minAcceptedConfidence": 0.62,
+        "minCandidateMargin": 0.08,
+        "minIntervalSupportFrames": 2
+      }
+    },
+    {
+      "id": "precision",
+      "label": "Precision",
+      "description": "Stricter reliability gating for final review and benchmark sign-off.",
+      "options": {
+        "maxPlateCandidates": 3,
+        "trackerHighConfidence": 0.4,
+        "trackerLowConfidence": 0.18,
+        "minAcceptedConfidence": 0.72,
+        "minCandidateMargin": 0.12,
+        "minIntervalSupportFrames": 3
+      }
+    },
+    {
+      "id": "recovery",
+      "label": "Recovery",
+      "description": "Looser gates for glare, blur, low-light, and small-plate recovery passes.",
+      "options": {
+        "maxPlateCandidates": 4,
+        "trackerLowConfidence": 0.12,
+        "maxTrackingGap": 4,
+        "minAcceptedConfidence": 0.52,
+        "minCandidateMargin": 0.03,
+        "minIntervalSupportFrames": 1
+      }
+    }
+  ]
+}

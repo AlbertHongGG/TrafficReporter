@@ -23,6 +23,7 @@ src-tauri/gen
 
 # Local references and runtime assets
 reference/
+.runtime/
 .venv/
 traffic-lpr-runtime/.venv/
 traffic-lpr-runtime/.runtime/
@@ -46,3 +47,4 @@ traffic-lpr-runtime/**/__pycache__/
 
 UFPR-ALPR*
 AOLP*
+__pycache__/
