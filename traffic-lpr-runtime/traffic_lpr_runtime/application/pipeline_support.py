@@ -267,20 +267,29 @@ class TargetCentricTracker:
         tracker = self._build_ultralytics_tracker(options, frame_rate)
 
         tracked_by_time: dict[int, list[TrackedRegion]] = {}
+        detections_by_time: dict[int, list[TrackedRegion]] = {}
         anchor_track_id: str | None = None
         anchor_region: TrackedRegion | None = None
+        anchor_detection: TrackedRegion | None = None
+        anchor_box = selected_target_box
+        anchor_class_name: str | None = None
 
         for time_ms in traversal_times:
             frame = self._frame_reader.read_frame(source_path, time_ms)
             detections = self._target_detector.detect_targets(frame, time_ms, vehicle_kind, None)
+            detections_by_time[time_ms] = detections
             tracked_regions = self._update_ultralytics_tracker(tracker, frame, detections, time_ms)
             tracked_by_time[time_ms] = tracked_regions
 
             if time_ms == anchor_time_ms:
-                anchor_region = _select_best_anchor(tracked_regions, selected_target_box)
-                anchor_track_id = anchor_region.id if anchor_region is not None else None
+                anchor_detection = _select_best_anchor(detections, selected_target_box)
+                anchor_reference_box = anchor_detection.box if anchor_detection is not None else selected_target_box
+                anchor_region = _select_best_anchor(tracked_regions, anchor_reference_box) or anchor_detection
+                anchor_track_id = anchor_region.id if anchor_region is not None and anchor_region.id.startswith('track-') else None
+                anchor_box = anchor_region.box if anchor_region is not None else anchor_reference_box
+                anchor_class_name = anchor_detection.class_name if anchor_detection is not None else anchor_region.class_name if anchor_region is not None else None
 
-        if anchor_track_id is None:
+        if anchor_box is None:
             return [], {
                 'trackerMode': options.tracker_mode,
                 'matchedFrames': 0,
@@ -290,27 +299,178 @@ class TargetCentricTracker:
                 'frameRate': frame_rate,
             }
 
-        tracked_frames: list[TrackedRegion] = []
-        confidences: list[float] = []
-        missed_frames = 0
-        for time_ms in sorted(sample_times):
-            matched = next((region for region in tracked_by_time.get(time_ms, []) if region.id == anchor_track_id), None)
-            if matched is None:
-                missed_frames += 1
-                continue
-            tracked_frames.append(matched)
-            confidences.append(matched.confidence)
+        backward_frames, backward_misses, backward_reassociated, _ = self._follow_ultralytics_direction(
+            sorted((time_ms for time_ms in sample_times if time_ms < anchor_time_ms), reverse=True),
+            anchor_box,
+            anchor_track_id,
+            anchor_class_name,
+            tracked_by_time,
+            detections_by_time,
+            options,
+        )
+        forward_frames, forward_misses, forward_reassociated, _ = self._follow_ultralytics_direction(
+            sorted(time_ms for time_ms in sample_times if time_ms > anchor_time_ms),
+            anchor_box,
+            anchor_track_id,
+            anchor_class_name,
+            tracked_by_time,
+            detections_by_time,
+            options,
+        )
+
+        tracked_frames: list[TrackedRegion] = list(reversed(backward_frames))
+        if anchor_time_ms in sample_times and anchor_region is not None:
+            tracked_frames.append(self._clone_tracked_region(anchor_region, {
+                'trackingSource': 'anchor',
+                'preferredTrackId': anchor_track_id,
+            }))
+        tracked_frames.extend(forward_frames)
+
+        missed_frames = backward_misses + forward_misses
+        reassociated_frames = backward_reassociated + forward_reassociated
+        confidences = [frame.confidence for frame in tracked_frames]
 
         diagnostics = {
             'trackerMode': options.tracker_mode,
             'matchedFrames': len(tracked_frames),
             'missedFrames': missed_frames,
             'averageMatchScore': (sum(confidences) / len(confidences)) if confidences else 0.0,
-            'anchorDetected': anchor_region is not None,
+            'anchorDetected': anchor_region is not None or anchor_detection is not None,
             'anchorTrackId': anchor_track_id,
             'frameRate': frame_rate,
+            'reassociatedFrames': reassociated_frames,
         }
         return tracked_frames, diagnostics
+
+    def _follow_ultralytics_direction(
+        self,
+        traversal_times: list[int],
+        seed_box: NormalizedRect,
+        preferred_track_id: str | None,
+        expected_class_name: str | None,
+        tracked_by_time: dict[int, list[TrackedRegion]],
+        detections_by_time: dict[int, list[TrackedRegion]],
+        options: AnalysisOptions,
+    ) -> tuple[list[TrackedRegion], int, int, str | None]:
+        tracked_frames: list[TrackedRegion] = []
+        missed_frames = 0
+        reassociated_frames = 0
+        current_box = seed_box
+        current_track_id = preferred_track_id
+
+        for time_ms in traversal_times:
+            tracker_match, tracker_score, tracker_diagnostics = self._associate_tracked_regions(
+                tracked_by_time.get(time_ms, []),
+                current_box,
+                current_track_id,
+                expected_class_name,
+                options,
+            )
+            detection_match, detection_score, detection_diagnostics = self._associate(
+                detections_by_time.get(time_ms, []),
+                current_box,
+                current_box,
+                options,
+            )
+            use_detection_fallback = detection_match is not None and (
+                tracker_match is None or detection_score > (tracker_score + 0.08)
+            )
+
+            selected = tracker_match
+            diagnostics = {
+                'trackingSource': 'tracker',
+                'preferredTrackId': current_track_id,
+                'selectionScore': tracker_score,
+                'selection': tracker_diagnostics,
+            }
+            current_track_id_before = current_track_id
+
+            if use_detection_fallback:
+                selected = detection_match
+                diagnostics = {
+                    'trackingSource': 'detection-fallback',
+                    'preferredTrackId': current_track_id,
+                    'selectionScore': detection_score,
+                    'selection': detection_diagnostics,
+                }
+                if current_track_id is not None:
+                    reassociated_frames += 1
+            elif selected is None:
+                missed_frames += 1
+                continue
+            elif current_track_id is not None and selected.id != current_track_id:
+                reassociated_frames += 1
+
+            if selected.id.startswith('track-'):
+                current_track_id = selected.id
+
+            tracked_frames.append(self._clone_tracked_region(selected, diagnostics))
+            current_box = selected.box
+
+            if current_track_id_before is None and not selected.id.startswith('track-'):
+                current_track_id = None
+
+        return tracked_frames, missed_frames, reassociated_frames, current_track_id
+
+    def _associate_tracked_regions(
+        self,
+        tracked_regions: list[TrackedRegion],
+        reference_box: NormalizedRect,
+        preferred_track_id: str | None,
+        expected_class_name: str | None,
+        options: AnalysisOptions,
+    ) -> tuple[TrackedRegion | None, float, dict[str, Any]]:
+        ranked: list[tuple[float, TrackedRegion, dict[str, Any]]] = []
+        for candidate in tracked_regions:
+            predicted_iou = candidate.box.intersection_over_union(reference_box)
+            center_distance = candidate.box.center_distance(reference_box)
+            area_similarity = min(candidate.box.area(), reference_box.area()) / max(candidate.box.area(), reference_box.area(), 0.0001)
+            confidence_band = 1.0 if candidate.confidence >= options.tracker_high_confidence else 0.8
+            track_bonus = 0.26 if preferred_track_id and candidate.id == preferred_track_id and (predicted_iou >= 0.04 or center_distance <= 0.18) else 0.0
+            class_bonus = 0.08 if expected_class_name and candidate.class_name == expected_class_name else 0.0
+            score = (
+                (predicted_iou * 0.56)
+                + (area_similarity * 0.17)
+                + (candidate.confidence * 0.24 * confidence_band)
+                - (center_distance * 0.36)
+                + track_bonus
+                + class_bonus
+            )
+            diagnostics = {
+                'predictedIou': predicted_iou,
+                'centerDistance': center_distance,
+                'areaSimilarity': area_similarity,
+                'confidenceBand': confidence_band,
+                'trackBonus': track_bonus,
+                'classBonus': class_bonus,
+            }
+            ranked.append((score, candidate, diagnostics))
+
+        ranked.sort(key=lambda item: item[0], reverse=True)
+        if not ranked:
+            return None, 0.0, {'reason': 'no-tracked-regions'}
+
+        best_score, best_candidate, best_diagnostics = ranked[0]
+        if best_score < 0.05:
+            return None, best_score, {'reason': 'below-threshold'} | best_diagnostics
+        return best_candidate, best_score, best_diagnostics
+
+    def _clone_tracked_region(
+        self,
+        region: TrackedRegion,
+        diagnostics: dict[str, Any],
+    ) -> TrackedRegion:
+        return TrackedRegion(
+            id=region.id,
+            time_ms=region.time_ms,
+            box=region.box,
+            confidence=region.confidence,
+            class_name=region.class_name,
+            diagnostics={
+                **(region.diagnostics or {}),
+                **diagnostics,
+            },
+        )
 
     def _tracker_times(self, interval: dict[str, int], anchor_time_ms: int, sample_times: list[int]) -> list[int]:
         start_ms = int(interval['startMs'])

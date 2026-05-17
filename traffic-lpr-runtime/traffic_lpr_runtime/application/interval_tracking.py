@@ -143,6 +143,8 @@ class IntervalTrackingService:
         anchor_box = anchor_frame.box if anchor_frame is not None else None
         if anchor_box is None or anchor_box.width <= 0.0 or anchor_box.height <= 0.0:
             return {}
+        if anchor_box.intersection_over_union(selected_target_box) < 0.1 and anchor_box.center_distance(selected_target_box) > 0.12:
+            return {}
 
         anchor_width = max(anchor_box.width, 1e-6)
         anchor_height = max(anchor_box.height, 1e-6)
