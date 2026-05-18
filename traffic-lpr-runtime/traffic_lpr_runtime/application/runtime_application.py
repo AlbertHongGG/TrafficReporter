@@ -17,13 +17,13 @@ from traffic_lpr_runtime.application.preprocessing import PlateObservation, Plat
 from traffic_lpr_runtime.application.workflows import FrameAnalysisWorkflow, IntervalAnalysisWorkflow, TargetScanWorkflow
 from traffic_lpr_runtime.infrastructure.dependencies import DependencyRegistry
 from traffic_lpr_runtime.infrastructure.frame_reader import OpenCvFrameReader
+from traffic_lpr_runtime.infrastructure.ai_provider_factory import build_ai_provider
 from traffic_lpr_runtime.infrastructure.image_processing import QualityScorer
 from traffic_lpr_runtime.infrastructure.model_runtime import (
     FastAlprPlateRecognizer,
     ModelRegistry,
     UltralyticsTargetDetector,
 )
-from traffic_lpr_runtime.infrastructure.ollama_provider import OllamaVisionProvider
 
 
 class LprRuntimeApplication:
@@ -78,7 +78,7 @@ class LprRuntimeApplication:
             analyze_frame=self.analyze_frame,
             analyze_interval=self.analyze_interval,
         )
-        self._ai_provider = OllamaVisionProvider()
+        self._ai_provider = build_ai_provider(runtime_root=self._dependencies.runtime_root())
         self._ai_evidence_workflow = AiEvidenceWorkflow(
             ensure_ready=self._dependencies.ensure_ready,
             status=self.status,

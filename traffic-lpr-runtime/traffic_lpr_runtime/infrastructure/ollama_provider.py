@@ -39,6 +39,14 @@ class OllamaVisionProvider:
         self._model = model or os.environ.get('TRAFFIC_OLLAMA_MODEL') or DEFAULT_OLLAMA_MODEL
         self._timeout_s = _resolve_timeout_seconds(os.environ.get('TRAFFIC_OLLAMA_TIMEOUT_S'))
 
+    def describe(self) -> dict[str, object]:
+        return {
+            'kind': self.kind,
+            'baseUrl': self._base_url,
+            'model': self._model,
+            'defaultTimeoutS': self._timeout_s,
+        }
+
     def generate_json(
         self,
         *,
@@ -46,7 +54,9 @@ class OllamaVisionProvider:
         user_prompt: str,
         images: list[VisionChatImage],
         timeout_s: int = DEFAULT_OLLAMA_TIMEOUT_S,
+        request_metadata: dict[str, Any] | None = None,
     ) -> dict[str, object]:
+        del request_metadata
         resolved_timeout_s = _resolve_timeout_seconds(timeout_s or self._timeout_s)
         payload = {
             'model': self._model,

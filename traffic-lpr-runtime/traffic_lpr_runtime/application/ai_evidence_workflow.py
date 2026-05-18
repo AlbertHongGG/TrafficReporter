@@ -4,9 +4,9 @@ import base64
 import re
 import time
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 
 from traffic_lpr_runtime.application.ai_provider import VisionChatImage, VisionLlmProvider
 from traffic_lpr_runtime.domain.errors import RuntimeFailure
@@ -34,6 +34,21 @@ class RenderedFrame:
             'frameWidth': self.frame_width,
             'frameHeight': self.frame_height,
         }
+
+
+@dataclass(frozen=True, slots=True)
+class SelectedKeyframe:
+    frame: RenderedFrame
+    description: str
+
+
+@dataclass(frozen=True, slots=True)
+class StoryboardSelection:
+    start_frame: RenderedFrame
+    end_frame: RenderedFrame
+    anchor_frame: RenderedFrame
+    summary: str
+    keyframes: Sequence[SelectedKeyframe] = field(default_factory=tuple)
 
 
 class AiEvidenceWorkflow:
@@ -98,11 +113,11 @@ class AiEvidenceWorkflow:
             stage='localize',
             tool_name='llm-localize-coarse-interval',
             input_summary=f'frames={len(coarse_frames)} description={description[:96]}',
-            func=lambda: self._select_coarse_interval(description, coarse_frames),
+            func=lambda: self._select_coarse_interval(request_id, description, coarse_frames),
         )
 
-        fine_start_ms = max(0, coarse_choice['startFrame']['timeMs'] - fine_padding_ms)
-        fine_end_ms = min(duration_ms, coarse_choice['endFrame']['timeMs'] + fine_padding_ms)
+        fine_start_ms = max(0, coarse_choice.start_frame.time_ms - fine_padding_ms)
+        fine_end_ms = min(duration_ms, coarse_choice.end_frame.time_ms + fine_padding_ms)
         if fine_end_ms <= fine_start_ms:
             fine_end_ms = min(duration_ms, fine_start_ms + max(fine_padding_ms * 2, 1000))
 
@@ -130,12 +145,12 @@ class AiEvidenceWorkflow:
             stage='localize',
             tool_name='llm-select-keyframes',
             input_summary=f'frames={len(fine_frames)} maxKeyframes={max_keyframes}',
-            func=lambda: self._select_fine_interval(description, fine_frames, max_keyframes),
+            func=lambda: self._select_fine_interval(request_id, description, fine_frames, max_keyframes),
         )
 
         planned_interval = {
-            'startMs': int(fine_choice['startFrame']['timeMs']),
-            'endMs': int(fine_choice['endFrame']['timeMs']),
+            'startMs': int(fine_choice.start_frame.time_ms),
+            'endMs': int(fine_choice.end_frame.time_ms),
         }
         if planned_interval['endMs'] < planned_interval['startMs']:
             planned_interval = {
@@ -143,13 +158,14 @@ class AiEvidenceWorkflow:
                 'endMs': planned_interval['startMs'],
             }
 
-        anchor_frame = fine_choice['anchorFrame']
+        anchor_frame = fine_choice.anchor_frame
         target_resolution = self._record_tool_call(
             tool_calls,
             stage='resolve-target',
             tool_name='llm-resolve-target',
             input_summary=f'anchor={anchor_frame.frame_id} timeMs={anchor_frame.time_ms}',
             func=lambda: self._resolve_target(
+                request_id=request_id,
                 description=description,
                 source_path=source_path,
                 marker_rect=marker_rect,
@@ -191,16 +207,16 @@ class AiEvidenceWorkflow:
             tool_calls,
             stage='render',
             tool_name='render-keyframes',
-            input_summary=f'keyframes={len(fine_choice["keyframes"])}',
+            input_summary=f'keyframes={len(fine_choice.keyframes)}',
             func=lambda: self._render_keyframes(
                 source_path=source_path,
-                keyframe_refs=fine_choice['keyframes'],
+                keyframe_refs=fine_choice.keyframes,
                 analysis_track=projection['analysisTrack'],
                 output_dir=artifact_root / 'keyframes',
             ),
         )
 
-        summary = fine_choice['summary'] or _build_summary(description, planned_interval, plate_candidate)
+        summary = fine_choice.summary or _build_summary(description, planned_interval, plate_candidate)
         runtime_status = self._status()
         return {
             'requestId': request_id,
@@ -268,7 +284,7 @@ class AiEvidenceWorkflow:
             raise RuntimeFailure('AI evidence storyboard sampling produced no frames.')
         return frames
 
-    def _select_coarse_interval(self, description: str, frames: list[RenderedFrame]) -> dict[str, Any]:
+    def _select_coarse_interval(self, request_id: str, description: str, frames: list[RenderedFrame]) -> StoryboardSelection:
         system_prompt = (
             '你是交通事件關鍵證據規劃器。你只能引用系統提供的 frameId，不能自行猜測時間。'
             '請根據使用者描述，從提供的 frameId 中找出最可能涵蓋完整事件過程的起點、終點與 anchor。'
@@ -285,20 +301,27 @@ class AiEvidenceWorkflow:
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             images=[self._frame_to_chat_image(frame) for frame in frames],
+            request_metadata={
+                'workflow': 'ai-evidence',
+                'requestId': request_id,
+                'stage': 'localize-coarse-interval',
+                'frameCount': len(frames),
+            },
         )
-        return {
-            'startFrame': _resolve_frame_ref(response.get('startFrameId'), frames),
-            'endFrame': _resolve_frame_ref(response.get('endFrameId'), frames),
-            'anchorFrame': _resolve_frame_ref(response.get('anchorFrameId'), frames),
-            'summary': str(response.get('summary') or '').strip(),
-        }
+        return StoryboardSelection(
+            start_frame=_resolve_frame_ref(response.get('startFrameId'), frames),
+            end_frame=_resolve_frame_ref(response.get('endFrameId'), frames),
+            anchor_frame=_resolve_frame_ref(response.get('anchorFrameId'), frames),
+            summary=str(response.get('summary') or '').strip(),
+        )
 
     def _select_fine_interval(
         self,
+        request_id: str,
         description: str,
         frames: list[RenderedFrame],
         max_keyframes: int,
-    ) -> dict[str, Any]:
+    ) -> StoryboardSelection:
         system_prompt = (
             '你是交通事件關鍵幀規劃器。你只能引用提供的 frameId，不能自由編造新的時間。'
             '請選出完整事件區段的起點、終點、一個 target anchor，以及 8 到 10 個足以描述完整過程的關鍵幀。'
@@ -316,22 +339,30 @@ class AiEvidenceWorkflow:
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             images=[self._frame_to_chat_image(frame) for frame in frames],
+            request_metadata={
+                'workflow': 'ai-evidence',
+                'requestId': request_id,
+                'stage': 'select-keyframes',
+                'frameCount': len(frames),
+                'maxKeyframes': max_keyframes,
+            },
         )
         start_frame = _resolve_frame_ref(response.get('startFrameId'), frames)
         end_frame = _resolve_frame_ref(response.get('endFrameId'), frames)
         anchor_frame = _resolve_frame_ref(response.get('anchorFrameId'), frames)
         keyframe_refs = _normalize_keyframes(response.get('keyframes'), frames, desired_count=max_keyframes)
-        return {
-            'startFrame': start_frame,
-            'endFrame': end_frame,
-            'anchorFrame': anchor_frame,
-            'summary': str(response.get('summary') or '').strip(),
-            'keyframes': keyframe_refs,
-        }
+        return StoryboardSelection(
+            start_frame=start_frame,
+            end_frame=end_frame,
+            anchor_frame=anchor_frame,
+            summary=str(response.get('summary') or '').strip(),
+            keyframes=tuple(keyframe_refs),
+        )
 
     def _resolve_target(
         self,
         *,
+        request_id: str,
         description: str,
         source_path: str,
         marker_rect: NormalizedRect | None,
@@ -434,6 +465,14 @@ class AiEvidenceWorkflow:
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             images=chat_images,
+            request_metadata={
+                'workflow': 'ai-evidence',
+                'requestId': request_id,
+                'stage': 'resolve-target',
+                'anchorFrameId': anchor_frame.frame_id,
+                'anchorTimeMs': anchor_frame.time_ms,
+                'candidateCount': len(detection_payloads),
+            },
         )
         selected_track_id = _optional_string(response.get('selectedTrackId'))
         selected_payload = next((payload for payload in detection_payloads if payload['trackId'] == selected_track_id), None)
@@ -481,14 +520,14 @@ class AiEvidenceWorkflow:
         self,
         *,
         source_path: str,
-        keyframe_refs: list[dict[str, Any]],
+        keyframe_refs: Sequence[SelectedKeyframe],
         analysis_track: dict[str, Any] | None,
         output_dir: Path,
     ) -> list[dict[str, Any]]:
         output_dir.mkdir(parents=True, exist_ok=True)
         rendered_keyframes: list[dict[str, Any]] = []
         for keyframe in keyframe_refs:
-            rendered_frame = keyframe['frame']
+            rendered_frame = keyframe.frame
             frame = self._frame_reader.read_frame(source_path, rendered_frame.time_ms)
             box = _find_closest_track_box(analysis_track, rendered_frame.time_ms)
             title = rendered_frame.frame_id
@@ -498,7 +537,7 @@ class AiEvidenceWorkflow:
             self._write_image(output_path, annotated)
             rendered_keyframes.append({
                 'frame': rendered_frame.to_payload(image_path=str(output_path)),
-                'description': str(keyframe.get('description') or rendered_frame.label),
+                'description': keyframe.description,
                 'overlay': self._overlay_payload(NormalizedRect.from_payload(box) if isinstance(box, dict) else None, frame_width, frame_height),
             })
         return rendered_keyframes
@@ -676,29 +715,37 @@ def _resolve_frame_ref(value: Any, frames: list[RenderedFrame]) -> RenderedFrame
     raise RuntimeFailure('LLM returned an unknown frame reference.')
 
 
-def _normalize_keyframes(value: Any, frames: list[RenderedFrame], *, desired_count: int) -> list[dict[str, Any]]:
+def _normalize_keyframes(value: Any, frames: list[RenderedFrame], *, desired_count: int) -> list[SelectedKeyframe]:
     by_id = {frame.frame_id: frame for frame in frames}
-    selected: list[dict[str, Any]] = []
+    selected: list[SelectedKeyframe] = []
     for item in value if isinstance(value, list) else []:
         frame_id = item.get('frameId') if isinstance(item, dict) else item if isinstance(item, str) else None
         if isinstance(frame_id, str) and frame_id in by_id:
-            selected.append({
-                'frame': by_id[frame_id],
-                'description': str(item.get('description') or by_id[frame_id].label) if isinstance(item, dict) else by_id[frame_id].label,
-            })
-    selected = list(OrderedDict((entry['frame'].frame_id, entry) for entry in selected).values())
+            frame = by_id[frame_id]
+            selected.append(SelectedKeyframe(
+                frame=frame,
+                description=str(item.get('description') or frame.label) if isinstance(item, dict) else frame.label,
+            ))
+    deduped: list[SelectedKeyframe] = []
+    seen_frame_ids: set[str] = set()
+    for entry in selected:
+        if entry.frame.frame_id in seen_frame_ids:
+            continue
+        seen_frame_ids.add(entry.frame.frame_id)
+        deduped.append(entry)
+    selected = deduped
     if len(selected) >= desired_count:
         return selected[:desired_count]
 
-    remaining = [frame for frame in frames if frame.frame_id not in {item['frame'].frame_id for item in selected}]
+    remaining = [frame for frame in frames if frame.frame_id not in {item.frame.frame_id for item in selected}]
     while len(selected) < desired_count and remaining:
         pick_index = min(len(remaining) - 1, max(0, round((len(remaining) - 1) * (len(selected) / max(1, desired_count - 1)))))
         fallback_frame = remaining.pop(pick_index)
-        selected.append({
-            'frame': fallback_frame,
-            'description': fallback_frame.label,
-        })
-    return sorted(selected, key=lambda entry: entry['frame'].time_ms)
+        selected.append(SelectedKeyframe(
+            frame=fallback_frame,
+            description=fallback_frame.label,
+        ))
+    return sorted(selected, key=lambda entry: entry.frame.time_ms)
 
 
 def _find_closest_track_box(track: dict[str, Any] | None, time_ms: int) -> dict[str, Any] | None:
