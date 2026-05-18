@@ -42,7 +42,7 @@ export type PlateWindowAction =
   | { type: 'toggle-developer-diagnostics' }
   | { type: 'export-evidence' }
   | { type: 'clear-results' }
-  | { type: 'select-target-track'; targetTrackId: string }
+  | { type: 'select-target-track'; targetTrackId: string; anchorTimeMs: number }
   | { type: 'accept-candidate'; candidateId: string }
   | { type: 'seek-to-sample'; sampleId: string; timeMs: number };
 

@@ -1608,7 +1608,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         dispatch({ type: 'clear-lpr-results' });
         break;
       case 'select-target-track':
-        handleSelectTargetTrack(action.targetTrackId, livePlayheadMsRef.current);
+        handleSelectTargetTrack(action.targetTrackId, action.anchorTimeMs);
         break;
       case 'accept-candidate':
         dispatch({ type: 'accept-lpr-candidate', candidateId: action.candidateId });

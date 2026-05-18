@@ -7,7 +7,7 @@ import {
   buildEditorFileState,
   findClosestTrackFrame,
 } from './model'
-import { resolveLprAnalysisTargetVehicleKind } from './lprState'
+import { buildLprTargetAnchor, resolveLprAnalysisTargetVehicleKind } from './lprState'
 
 describe('editor model', () => {
   it('starts a new workspace with no active file and no imported media', () => {
@@ -74,5 +74,23 @@ describe('editor model', () => {
     expect(resolveLprAnalysisTargetVehicleKind({ className: 'car' }, 'vehicle')).toBe('car')
     expect(resolveLprAnalysisTargetVehicleKind({ className: 'vehicle' }, 'vehicle')).toBe('vehicle')
     expect(resolveLprAnalysisTargetVehicleKind(null, 'truck')).toBe('truck')
+  })
+
+  it('builds a target anchor from the frame nearest the requested selection time', () => {
+    const anchor = buildLprTargetAnchor({
+      id: 'track-1',
+      className: 'motorcycle',
+      frames: [
+        { id: 'f1', timeMs: 6210, box: { x: 0.18, y: 0.34, width: 0.14, height: 0.22 }, confidence: 0.9, className: 'motorcycle' },
+        { id: 'f2', timeMs: 7030, box: { x: 0.44, y: 0.32, width: 0.12, height: 0.24 }, confidence: 0.91, className: 'motorcycle' },
+      ],
+    }, 6280)
+
+    expect(anchor).toEqual({
+      trackId: 'track-1',
+      className: 'motorcycle',
+      timeMs: 6210,
+      box: { x: 0.18, y: 0.34, width: 0.14, height: 0.22 },
+    })
   })
 })

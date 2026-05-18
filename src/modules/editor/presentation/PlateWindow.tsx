@@ -481,6 +481,10 @@ export const PlateWindow: React.FC = () => {
                 <div className={styles.segmentDivider} />
                 <button type="button" onClick={() => void sendAction({ type: 'clear-interval' })} disabled={!snapshot.explicitInterval}>Clear</button>
               </div>
+              <div className={styles.intervalBadge}>
+                <Clock size={12} className={styles.mutedIcon} />
+                <span>{formatIntervalLabel(snapshot.effectiveInterval)}</span>
+              </div>
               <div className={styles.profileSelectGroup}>
                 <Select
                   size="compact"
@@ -493,10 +497,6 @@ export const PlateWindow: React.FC = () => {
                     description: compactProfileDescription(profile.id, profile.description),
                   }))}
                 />
-              </div>
-              <div className={styles.intervalBadge}>
-                <Clock size={12} className={styles.mutedIcon} />
-                <span>{formatIntervalLabel(snapshot.effectiveInterval)}</span>
               </div>
               <div className={styles.inputWrapper}>
                 <Globe size={14} className={styles.inputIcon} />
@@ -555,7 +555,11 @@ export const PlateWindow: React.FC = () => {
                           key={track.id}
                           type="button"
                           className={`${styles.listItemBtn} ${track.id === lprState.selectedTargetTrackId ? styles.listItemBtnActive : ''}`}
-                          onClick={() => void sendAction({ type: 'select-target-track', targetTrackId: track.id })}
+                          onClick={() => void sendAction({
+                            type: 'select-target-track',
+                            targetTrackId: track.id,
+                            anchorTimeMs: track.frames[0]?.timeMs ?? snapshot.anchorTimeMs,
+                          })}
                         >
                           <span className={styles.listItemMainText}>{track.label}</span>
                           <span className={styles.listItemBadge}>{formatConfidence(track.confidence)}</span>

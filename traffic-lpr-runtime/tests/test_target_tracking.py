@@ -169,6 +169,43 @@ class TargetTrackingTests(unittest.TestCase):
         self.assertEqual(diagnostics['anchorTrackId'], 'track-1')
         self.assertGreaterEqual(diagnostics['reassociatedFrames'], 2)
 
+    def test_ultralytics_tracking_rejects_same_class_lateral_takeover(self) -> None:
+        selected_target_box = NormalizedRect(x=0.18, y=0.29, width=0.14, height=0.26)
+        detections_by_time = {
+            6210: [
+                make_region('target-6210-0', 6210, 0.18, 0.29, 0.14, 0.26, confidence=0.86),
+                make_region('target-6210-1', 6210, 0.39, 0.28, 0.16, 0.27, confidence=0.93),
+            ],
+            7030: [
+                make_region('target-7030-0', 7030, 0.24, 0.31, 0.09, 0.21, confidence=0.48),
+                make_region('target-7030-1', 7030, 0.39, 0.29, 0.17, 0.27, confidence=0.95),
+            ],
+        }
+        tracked_by_time = {
+            6210: [
+                make_region('track-1', 6210, 0.18, 0.29, 0.14, 0.26, confidence=0.86),
+                make_region('track-7', 6210, 0.39, 0.28, 0.16, 0.27, confidence=0.93),
+            ],
+            7030: [
+                make_region('track-1', 7030, 0.39, 0.29, 0.17, 0.27, confidence=0.95),
+            ],
+        }
+        tracker = ScriptedTargetCentricTracker(detections_by_time, tracked_by_time)
+
+        tracked_frames, diagnostics = tracker.track(
+            source_path='demo.mp4',
+            interval={'startMs': 6210, 'endMs': 7030},
+            anchor_time_ms=6210,
+            vehicle_kind='motorcycle',
+            selected_target_box=selected_target_box,
+            sample_times=[6210, 7030],
+            options=AnalysisOptions(tracker_mode='botsort'),
+        )
+
+        self.assertEqual([frame.id for frame in tracked_frames], ['track-1', 'target-7030-0'])
+        self.assertLess(tracked_frames[1].box.x, 0.3)
+        self.assertEqual(tracked_frames[1].diagnostics['trackingSource'], 'detection-fallback')
+
     def test_calibration_skips_when_anchor_box_does_not_match_selected_target(self) -> None:
         service = IntervalTrackingService(
             frame_reader=FrameReaderStub(),

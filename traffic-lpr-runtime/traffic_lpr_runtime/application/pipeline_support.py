@@ -382,8 +382,14 @@ class TargetCentricTracker:
                 current_box,
                 options,
             )
+            tracker_motion_ok = tracker_match is not None and tracker_diagnostics.get('motionGatePassed') is True
+            detection_motion_ok = detection_match is not None and detection_diagnostics.get('motionGatePassed') is True
             use_detection_fallback = detection_match is not None and (
-                tracker_match is None or detection_score > (tracker_score + 0.08)
+                detection_motion_ok and (
+                    tracker_match is None
+                    or not tracker_motion_ok
+                    or detection_score > (tracker_score + (0.12 if tracker_motion_ok else 0.04))
+                )
             )
 
             selected = tracker_match
@@ -411,6 +417,11 @@ class TargetCentricTracker:
             elif current_track_id is not None and selected.id != current_track_id:
                 reassociated_frames += 1
 
+            selection_motion_ok = diagnostics['selection'].get('motionGatePassed') is True
+            if not selection_motion_ok:
+                missed_frames += 1
+                continue
+
             if selected.id.startswith('track-'):
                 current_track_id = selected.id
 
@@ -436,8 +447,10 @@ class TargetCentricTracker:
             center_distance = candidate.box.center_distance(reference_box)
             area_similarity = min(candidate.box.area(), reference_box.area()) / max(candidate.box.area(), reference_box.area(), 0.0001)
             confidence_band = 1.0 if candidate.confidence >= options.tracker_high_confidence else 0.8
+            motion_gate = _motion_gate(candidate.box, reference_box)
             track_bonus = 0.26 if preferred_track_id and candidate.id == preferred_track_id and (predicted_iou >= 0.04 or center_distance <= 0.18) else 0.0
             class_bonus = 0.08 if expected_class_name and candidate.class_name == expected_class_name else 0.0
+            motion_penalty = 0.0 if motion_gate['passed'] else (0.34 if predicted_iou < 0.12 else 0.18)
             score = (
                 (predicted_iou * 0.56)
                 + (area_similarity * 0.17)
@@ -445,6 +458,7 @@ class TargetCentricTracker:
                 - (center_distance * 0.36)
                 + track_bonus
                 + class_bonus
+                - motion_penalty
             )
             diagnostics = {
                 'predictedIou': predicted_iou,
@@ -453,6 +467,9 @@ class TargetCentricTracker:
                 'confidenceBand': confidence_band,
                 'trackBonus': track_bonus,
                 'classBonus': class_bonus,
+                'motionPenalty': motion_penalty,
+                'motionGatePassed': motion_gate['passed'],
+                'motionGate': motion_gate,
             }
             ranked.append((score, candidate, diagnostics))
 
@@ -696,12 +713,15 @@ class TargetCentricTracker:
             center_distance = candidate.box.center_distance(predicted_box)
             area_similarity = min(candidate.box.area(), predicted_box.area()) / max(candidate.box.area(), predicted_box.area(), 0.0001)
             confidence_band = 1.0 if candidate.confidence >= options.tracker_high_confidence else 0.8
+            motion_gate = _motion_gate(candidate.box, predicted_box)
+            motion_penalty = 0.0 if motion_gate['passed'] else (0.34 if predicted_iou < 0.12 else 0.18)
             score = (
                 (predicted_iou * 0.52)
                 + (previous_iou * 0.18)
                 + (area_similarity * 0.15)
                 + (candidate.confidence * 0.25 * confidence_band)
                 - (center_distance * 0.35)
+                - motion_penalty
             )
             diagnostics = {
                 'predictedIou': predicted_iou,
@@ -709,6 +729,9 @@ class TargetCentricTracker:
                 'centerDistance': center_distance,
                 'areaSimilarity': area_similarity,
                 'confidenceBand': confidence_band,
+                'motionPenalty': motion_penalty,
+                'motionGatePassed': motion_gate['passed'],
+                'motionGate': motion_gate,
             }
             ranked.append((score, candidate, diagnostics))
 
@@ -752,6 +775,27 @@ def _anchor_matches_reference(
     overlap = candidate.box.intersection_over_union(reference_box)
     center_distance = candidate.box.center_distance(reference_box)
     return overlap >= 0.18 or center_distance <= 0.08
+
+
+def _motion_gate(candidate_box: NormalizedRect, reference_box: NormalizedRect) -> dict[str, float | bool]:
+    candidate_center_x = candidate_box.x + (candidate_box.width / 2.0)
+    candidate_center_y = candidate_box.y + (candidate_box.height / 2.0)
+    reference_center_x = reference_box.x + (reference_box.width / 2.0)
+    reference_center_y = reference_box.y + (reference_box.height / 2.0)
+    delta_x = abs(candidate_center_x - reference_center_x)
+    delta_y = abs(candidate_center_y - reference_center_y)
+    base_width = max(candidate_box.width, reference_box.width)
+    base_height = max(candidate_box.height, reference_box.height)
+    max_horizontal_shift = clamp((base_width * 0.45) + 0.035, 0.08, 0.13)
+    max_vertical_shift = clamp((base_height * 1.1) + 0.05, 0.12, 0.3)
+    passed = delta_x <= max_horizontal_shift and delta_y <= max_vertical_shift
+    return {
+        'passed': passed,
+        'deltaX': delta_x,
+        'deltaY': delta_y,
+        'maxHorizontalShift': max_horizontal_shift,
+        'maxVerticalShift': max_vertical_shift,
+    }
 
 
 def _update_velocity(
