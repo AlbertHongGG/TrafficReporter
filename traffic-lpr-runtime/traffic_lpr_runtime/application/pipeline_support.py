@@ -284,9 +284,15 @@ class TargetCentricTracker:
             if time_ms == anchor_time_ms:
                 anchor_detection = _select_best_anchor(detections, selected_target_box)
                 anchor_reference_box = anchor_detection.box if anchor_detection is not None else selected_target_box
-                anchor_region = _select_best_anchor(tracked_regions, anchor_reference_box) or anchor_detection
-                anchor_track_id = anchor_region.id if anchor_region is not None and anchor_region.id.startswith('track-') else None
-                anchor_box = anchor_region.box if anchor_region is not None else anchor_reference_box
+                tracker_anchor_region = _select_best_anchor(tracked_regions, anchor_reference_box)
+                if _anchor_matches_reference(tracker_anchor_region, anchor_reference_box):
+                    anchor_region = tracker_anchor_region
+                    anchor_track_id = tracker_anchor_region.id if tracker_anchor_region.id.startswith('track-') else None
+                    anchor_box = tracker_anchor_region.box
+                else:
+                    anchor_region = anchor_detection
+                    anchor_track_id = None
+                    anchor_box = anchor_reference_box
                 anchor_class_name = anchor_detection.class_name if anchor_detection is not None else anchor_region.class_name if anchor_region is not None else None
 
         if anchor_box is None:
@@ -730,6 +736,18 @@ def _select_best_anchor(
         reverse=True,
     )
     return ranked[0]
+
+
+def _anchor_matches_reference(
+    candidate: TrackedRegion | None,
+    reference_box: NormalizedRect | None,
+) -> bool:
+    if candidate is None or reference_box is None:
+        return False
+
+    overlap = candidate.box.intersection_over_union(reference_box)
+    center_distance = candidate.box.center_distance(reference_box)
+    return overlap >= 0.18 or center_distance <= 0.08
 
 
 def _update_velocity(

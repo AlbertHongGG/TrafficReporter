@@ -82,6 +82,44 @@ class ScriptedTargetCentricTracker(TargetCentricTracker):
 
 
 class TargetTrackingTests(unittest.TestCase):
+    def test_anchor_uses_selected_detection_when_tracker_anchor_points_to_other_vehicle(self) -> None:
+        selected_target_box = NormalizedRect(x=0.12, y=0.22, width=0.12, height=0.26)
+        detections_by_time = {
+            2000: [
+                make_region('target-2000-0', 2000, 0.12, 0.22, 0.12, 0.26),
+                make_region('target-2000-1', 2000, 0.52, 0.18, 0.11, 0.24),
+            ],
+            3000: [
+                make_region('target-3000-0', 3000, 0.14, 0.23, 0.12, 0.26),
+                make_region('target-3000-1', 3000, 0.50, 0.18, 0.11, 0.24),
+            ],
+        }
+        tracked_by_time = {
+            2000: [
+                make_region('track-88', 2000, 0.52, 0.18, 0.11, 0.24),
+            ],
+            3000: [
+                make_region('track-9', 3000, 0.14, 0.23, 0.12, 0.26),
+                make_region('track-88', 3000, 0.50, 0.18, 0.11, 0.24),
+            ],
+        }
+        tracker = ScriptedTargetCentricTracker(detections_by_time, tracked_by_time)
+
+        tracked_frames, diagnostics = tracker.track(
+            source_path='demo.mp4',
+            interval={'startMs': 2000, 'endMs': 3000},
+            anchor_time_ms=2000,
+            vehicle_kind='motorcycle',
+            selected_target_box=selected_target_box,
+            sample_times=[2000, 3000],
+            options=AnalysisOptions(tracker_mode='botsort'),
+        )
+
+        self.assertEqual([frame.id for frame in tracked_frames], ['target-2000-0', 'track-9'])
+        self.assertIsNone(diagnostics['anchorTrackId'])
+        self.assertLess(tracked_frames[0].box.x, 0.2)
+        self.assertLess(tracked_frames[1].box.x, 0.2)
+
     def test_ultralytics_tracking_reassociates_when_tracker_id_drifts(self) -> None:
         selected_target_box = NormalizedRect(x=0.12, y=0.22, width=0.12, height=0.26)
         detections_by_time = {
