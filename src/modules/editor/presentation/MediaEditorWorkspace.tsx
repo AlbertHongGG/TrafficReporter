@@ -4,6 +4,7 @@ import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import {
   AlertCircle,
+  Brain,
   FileOutput,
   FilePlus2,
   Film,
@@ -45,13 +46,14 @@ import {
   type TimelineClip,
   type VideoMarkerRect,
 } from '../domain/model';
-import { getLprSessionByFileId } from '../domain/analysisState';
-import { buildLprTargetAnchor, resolveLprAnalysisTargetVehicleKind } from '../domain/lprState';
+import { getAiEvidenceSessionByFileId, getLprSessionByFileId } from '../domain/analysisState';
+import { buildDefaultLprState, buildLprTargetAnchor, resolveLprAnalysisTargetVehicleKind } from '../domain/lprState';
 import {
   buildEditorAsset,
   exportFrameImage,
   isSupportedMediaPath,
 } from '../infrastructure/mediaApi';
+import { analyzeAiEvidence } from '../infrastructure/aiEvidenceApi';
 import {
   analyzeLprFrame,
   analyzeLprInterval,
@@ -64,13 +66,22 @@ import { createLogger, getErrorMessage, getErrorSummary, serializeError } from '
 import { openExportWindow } from '../../export/infrastructure/exportApi';
 import { preparePendingExportSession } from '../../export/application/exportSession';
 import {
+  AI_PANEL_ACTION_EVENT,
+  AI_PANEL_SESSION_REQUEST_EVENT,
+  type AiPanelAction,
+  type AiPanelSessionSnapshot,
+} from '../application/aiPanelWindow';
+import {
   PLATE_ACTION_EVENT,
   PLATE_SESSION_REQUEST_EVENT,
   type PlateWindowAction,
   type PlateWindowSessionSnapshot,
 } from '../application/plateWindow';
+import { emitAiPanelWindowSession, openAiPanelWindow } from '../infrastructure/aiPanelApi';
 import { emitPlateWindowSession, openPlateWindow } from '../infrastructure/plateWindowApi';
 import type {
+  AiEvidenceProgress,
+  AiEvidenceResponse,
   LprPlateCandidate,
   LprReviewState,
   LprSessionState,
@@ -277,10 +288,12 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
   const latestCountryHintDraftRef = useRef<string | null>(null);
   const activeLprRequestIdRef = useRef<string | null>(null);
   const cancelledLprRequestIdsRef = useRef(new Set<string>());
+  const activeAiRequestRef = useRef<{ requestId: string; fileId: string } | null>(null);
 
   const activeFile = useMemo(() => getActiveFile(state), [state]);
   const lprRuntimeStatus = state.analysis.lprRuntimeStatus;
   const lprState = useMemo(() => getLprSessionByFileId(state.analysis, activeFile?.id ?? null), [activeFile?.id, state.analysis]);
+  const aiState = useMemo(() => getAiEvidenceSessionByFileId(state.analysis, activeFile?.id ?? null), [activeFile?.id, state.analysis]);
   const currentZoom = activeFile?.zoom ?? DEFAULT_ZOOM;
   const currentPlayheadMs = activeFile?.playheadMs ?? 0;
   const currentPreviewVolume = activeFile?.previewVolume ?? 0.85;
@@ -1227,6 +1240,196 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     playheadMs: Math.max(0, Math.round(livePlayheadMsRef.current)),
   }), [activeFile, canAnalyzeRange, lprRuntimeStatus, lprSelectedTargetAnchor, lprState, lprTopCandidate, state.workspaceName]);
 
+  const buildAiPanelWindowSnapshot = useCallback((): AiPanelSessionSnapshot => ({
+    workspaceName: state.workspaceName,
+    activeFileName: activeFile?.asset.name ?? null,
+    hasActiveFile: Boolean(activeFile),
+    runtimeStatus: lprRuntimeStatus,
+    lpr: lprState,
+    ai: aiState,
+    playheadMs: Math.max(0, Math.round(livePlayheadMsRef.current)),
+  }), [activeFile, aiState, lprRuntimeStatus, lprState, state.workspaceName]);
+
+  const updateAiJob = useCallback((fileId: string, job: Partial<typeof aiState.job>) => {
+    dispatch({
+      type: 'set-ai-job',
+      fileId,
+      job: {
+        ...job,
+        updatedAt: new Date().toISOString(),
+      },
+    });
+  }, [dispatch]);
+
+  const beginAiRequest = useCallback((fileId: string, prompt: string) => {
+    const requestId = createId('ai-evidence');
+    activeAiRequestRef.current = { requestId, fileId };
+    dispatch({ type: 'set-ai-prompt', fileId, prompt });
+    dispatch({ type: 'set-ai-result', fileId, result: null });
+    updateAiJob(fileId, {
+      status: 'running',
+      progress: 0.05,
+      stage: 'Prepare',
+      detail: 'Preparing AI evidence workflow.',
+      requestId,
+      error: null,
+      startedAt: new Date().toISOString(),
+      currentToolName: null,
+    });
+    return requestId;
+  }, [dispatch, updateAiJob]);
+
+  const forgetAiRequest = useCallback((requestId: string) => {
+    if (activeAiRequestRef.current?.requestId === requestId) {
+      activeAiRequestRef.current = null;
+    }
+  }, []);
+
+  const applyAiEvidenceProjection = useCallback((fileId: string, response: AiEvidenceResponse) => {
+    const currentLprState = getLprSessionByFileId(state.analysis, fileId);
+    const acceptedCandidateId = response.projection.acceptedCandidateId ?? null;
+    const projectedSession = buildDefaultLprState({
+      ...currentLprState,
+      workflowMode: response.projection.candidates.length > 0 ? 'review' : 'target',
+      interval: response.projection.interval ?? currentLprState.interval,
+      targetTracks: response.projection.targetTracks,
+      selectedTargetTrackId: response.projection.selectedTargetTrackId ?? response.projection.analysisTrack?.id ?? currentLprState.selectedTargetTrackId,
+      selectedTargetAnchor: response.projection.analysisTrack
+        ? buildLprTargetAnchor(response.projection.analysisTrack, response.primaryAnchor?.timeMs ?? response.projection.interval?.startMs ?? null)
+        : currentLprState.selectedTargetAnchor,
+      analysisTrack: response.projection.analysisTrack ?? null,
+      samples: response.projection.samples,
+      candidates: response.projection.candidates,
+      review: response.projection.review ?? null,
+      lastAnalysisProvenance: response.projection.provenance ?? null,
+      acceptedCandidateId,
+      job: {
+        ...currentLprState.job,
+        status: 'completed',
+        progress: 1,
+        stage: 'AI evidence',
+        detail: response.summary,
+        requestId: response.requestId ?? currentLprState.job.requestId,
+        error: null,
+        updatedAt: new Date().toISOString(),
+      },
+      history: response.projection.candidates.length > 0
+        ? [...currentLprState.history, {
+          id: createId('lpr-history'),
+          createdAt: new Date().toISOString(),
+          interval: response.projection.interval ?? null,
+          targetTrackId: response.projection.selectedTargetTrackId ?? response.projection.analysisTrack?.id ?? null,
+          acceptedCandidateId,
+          analysisProfileId: currentLprState.selectedAnalysisProfileId,
+          developerDiagnosticsEnabled: currentLprState.showDeveloperDiagnostics,
+          candidates: response.projection.candidates,
+          summary: response.summary,
+        }]
+        : currentLprState.history,
+    });
+    dispatch({ type: 'replace-lpr-session', fileId, session: projectedSession });
+  }, [dispatch, state.analysis]);
+
+  const handleCancelAiJob = useCallback(async () => {
+    const activeRequest = activeAiRequestRef.current;
+    if (!activeRequest) {
+      return;
+    }
+
+    updateAiJob(activeRequest.fileId, {
+      status: 'cancelled',
+      stage: aiState.job.stage || 'AI evidence',
+      detail: 'Cancelling current AI evidence task.',
+      error: null,
+    });
+
+    try {
+      await cancelLprRuntimeJob();
+      activeAiRequestRef.current = null;
+      updateAiJob(activeRequest.fileId, {
+        status: 'cancelled',
+        progress: 1,
+        stage: aiState.job.stage || 'AI evidence',
+        detail: 'Current AI evidence task cancelled.',
+        error: null,
+      });
+      await refreshLprRuntimeStatus();
+    } catch (error) {
+      const summary = getErrorSummary(error, 'Unable to cancel the current AI evidence task.');
+      updateAiJob(activeRequest.fileId, {
+        status: 'failed',
+        progress: 1,
+        stage: aiState.job.stage || 'AI evidence',
+        detail: 'Unable to cancel the current AI evidence task.',
+        error: summary,
+      });
+      setWorkspaceFeedback(summary);
+    }
+  }, [aiState.job.stage, refreshLprRuntimeStatus, updateAiJob]);
+
+  const handleRunAiEvidence = useCallback(async (prompt: string) => {
+    if (!activeFile || activeFile.asset.status !== 'ready') {
+      return;
+    }
+
+    const trimmedPrompt = prompt.trim();
+    if (!trimmedPrompt) {
+      setWorkspaceFeedback('AI evidence analysis requires a natural-language description.');
+      return;
+    }
+
+    const fileId = activeFile.id;
+    const requestId = beginAiRequest(fileId, trimmedPrompt);
+    setWorkspaceFeedback(null);
+
+    try {
+      const response = await analyzeAiEvidence({
+        sourcePath: activeFile.asset.path,
+        description: trimmedPrompt,
+        markerRect: activeFile.markerRect,
+        targetVehicleKind: lprAnalysisVehicleKind,
+        countryHints: lprState.countryHints,
+        analysisProfileId: lprState.selectedAnalysisProfileId,
+        enableDeveloperDiagnostics: lprState.showDeveloperDiagnostics,
+        requestId,
+      });
+
+      if (activeAiRequestRef.current?.requestId !== requestId || activeAiRequestRef.current?.fileId !== fileId) {
+        return;
+      }
+
+      dispatch({ type: 'set-lpr-runtime-status', runtimeStatus: response.runtime });
+      dispatch({ type: 'set-ai-result', fileId, result: response });
+      updateAiJob(fileId, {
+        status: 'completed',
+        progress: 1,
+        stage: 'Completed',
+        detail: response.summary,
+        error: null,
+        requestId,
+        currentToolName: null,
+      });
+      applyAiEvidenceProjection(fileId, response);
+    } catch (error) {
+      if (activeAiRequestRef.current?.requestId !== requestId || activeAiRequestRef.current?.fileId !== fileId) {
+        return;
+      }
+      log.error('AI evidence analysis failed.', serializeError(error));
+      const summary = getErrorSummary(error, 'Unable to run the AI evidence workflow.');
+      updateAiJob(fileId, {
+        status: 'failed',
+        progress: 1,
+        stage: 'Failed',
+        detail: 'AI evidence analysis failed.',
+        error: summary,
+        requestId,
+      });
+      setWorkspaceFeedback(summary);
+    } finally {
+      forgetAiRequest(requestId);
+    }
+  }, [activeFile, applyAiEvidenceProjection, beginAiRequest, dispatch, forgetAiRequest, lprAnalysisVehicleKind, lprState.countryHints, lprState.selectedAnalysisProfileId, lprState.showDeveloperDiagnostics, updateAiJob]);
+
   const handleSetIntervalBoundary = (boundary: 'start' | 'end') => {
     const currentInterval = resolveSuggestedInterval(livePlayheadMsRef.current);
     dispatch({
@@ -1562,6 +1765,11 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     await emitPlateWindowSession(buildPlateWindowSnapshot()).catch(() => undefined);
   };
 
+  const handleOpenAiPanelWindow = async () => {
+    await openAiPanelWindow();
+    await emitAiPanelWindowSession(buildAiPanelWindowSnapshot()).catch(() => undefined);
+  };
+
   const handlePlateWindowAction = React.useEffectEvent(async (action: PlateWindowAction) => {
     switch (action.type) {
       case 'refresh-runtime':
@@ -1628,6 +1836,71 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     await emitPlateWindowSession(buildPlateWindowSnapshot()).catch(() => undefined);
   });
 
+  const handleAiPanelAction = React.useEffectEvent(async (action: AiPanelAction) => {
+    switch (action.type) {
+      case 'run-analysis':
+        await handleRunAiEvidence(action.prompt);
+        break;
+      case 'cancel-job':
+        await handleCancelAiJob();
+        break;
+      case 'seek-to-time':
+        dispatch({ type: 'set-playhead', playheadMs: Math.max(0, Math.round(action.timeMs)) });
+        if (currentIsPlaying) {
+          dispatch({ type: 'set-playing', isPlaying: false });
+        }
+        break;
+      case 'reset-session':
+        if (activeFile) {
+          dispatch({ type: 'reset-ai-session', fileId: activeFile.id });
+        }
+        break;
+      default:
+        break;
+    }
+  });
+
+  const handleAiPanelSessionRequest = React.useEffectEvent(async () => {
+    await emitAiPanelWindowSession(buildAiPanelWindowSnapshot()).catch(() => undefined);
+  });
+
+  useEffect(() => {
+    let disposed = false;
+    let progressCleanup: (() => void) | undefined;
+
+    void listen<AiEvidenceProgress>('editor/ai-evidence-progress', (event) => {
+      if (disposed) {
+        return;
+      }
+
+      const activeRequest = activeAiRequestRef.current;
+      if (!activeRequest) {
+        return;
+      }
+
+      if (event.payload.requestId && event.payload.requestId !== activeRequest.requestId) {
+        return;
+      }
+
+      updateAiJob(activeRequest.fileId, {
+        status: event.payload.failed ? 'failed' : event.payload.done ? 'completed' : 'running',
+        progress: Math.max(0, Math.min(1, event.payload.progress)),
+        stage: event.payload.stage,
+        detail: event.payload.detail,
+        requestId: activeRequest.requestId,
+        error: event.payload.failed ? event.payload.detail : null,
+        currentToolName: event.payload.stage,
+      });
+    }).then((unlisten) => {
+      progressCleanup = unlisten;
+    });
+
+    return () => {
+      disposed = true;
+      progressCleanup?.();
+    };
+  }, [updateAiJob]);
+
   useEffect(() => {
     let disposed = false;
     let actionCleanup: (() => void) | undefined;
@@ -1661,8 +1934,44 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
   }, []);
 
   useEffect(() => {
+    let disposed = false;
+    let actionCleanup: (() => void) | undefined;
+    let requestCleanup: (() => void) | undefined;
+
+    void listen<AiPanelAction>(AI_PANEL_ACTION_EVENT, (event) => {
+      if (disposed) {
+        return;
+      }
+
+      void handleAiPanelAction(event.payload);
+    }).then((unlisten) => {
+      actionCleanup = unlisten;
+    });
+
+    void listen(AI_PANEL_SESSION_REQUEST_EVENT, () => {
+      if (disposed) {
+        return;
+      }
+
+      void handleAiPanelSessionRequest();
+    }).then((unlisten) => {
+      requestCleanup = unlisten;
+    });
+
+    return () => {
+      disposed = true;
+      actionCleanup?.();
+      requestCleanup?.();
+    };
+  }, []);
+
+  useEffect(() => {
     void emitPlateWindowSession(buildPlateWindowSnapshot()).catch(() => undefined);
   }, [buildPlateWindowSnapshot]);
+
+  useEffect(() => {
+    void emitAiPanelWindowSession(buildAiPanelWindowSnapshot()).catch(() => undefined);
+  }, [buildAiPanelWindowSnapshot]);
 
   const handleMarkerPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!activeFile?.markerRect) {
@@ -1780,6 +2089,10 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
           <button type="button" className={styles.toolbarButton} onClick={() => void handleOpenPlateWindow()}>
             <Target size={14} />
             Plate
+          </button>
+          <button type="button" className={styles.toolbarButton} onClick={() => void handleOpenAiPanelWindow()}>
+            <Brain size={14} />
+            AI
           </button>
           <button type="button" className={styles.primaryButton} onClick={() => void handleImportClick()}>
             <Import size={14} />

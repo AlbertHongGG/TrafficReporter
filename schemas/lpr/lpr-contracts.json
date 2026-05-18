@@ -9,6 +9,10 @@
       "request": "LprTargetScanRequest",
       "response": "LprTargetScanResponse"
     },
+    "ai-evidence": {
+      "request": "AiEvidenceRequest",
+      "response": "AiEvidenceResponse"
+    },
     "analyze-frame": {
       "request": "LprFrameAnalysisRequest",
       "response": "LprFrameAnalysisResponse"
@@ -429,6 +433,182 @@
         { "name": "bundleDir", "type": "string" },
         { "name": "exportedFileCount", "type": "number", "rustType": "usize" },
         { "name": "decisionFrameCount", "type": "number", "rustType": "usize" }
+      ]
+    },
+    {
+      "name": "AiEvidenceProviderKind",
+      "kind": "stringUnion",
+      "values": ["ollama"]
+    },
+    {
+      "name": "AiEvidenceJobState",
+      "kind": "object",
+      "targets": ["ts"],
+      "fields": [
+        { "name": "status", "type": "LprJobStatus" },
+        { "name": "progress", "type": "number" },
+        { "name": "stage", "type": "string" },
+        { "name": "detail", "type": "string" },
+        { "name": "requestId", "type": "string", "nullable": true },
+        { "name": "error", "type": "string", "nullable": true },
+        { "name": "startedAt", "type": "string", "nullable": true },
+        { "name": "updatedAt", "type": "string", "nullable": true },
+        { "name": "currentToolName", "type": "string", "optional": true, "nullable": true }
+      ]
+    },
+    {
+      "name": "AiEvidenceProgress",
+      "kind": "object",
+      "targets": ["ts", "rust"],
+      "rustName": "AiEvidenceProgressPayload",
+      "fields": [
+        { "name": "progress", "type": "number" },
+        { "name": "stage", "type": "string" },
+        { "name": "detail", "type": "string" },
+        { "name": "done", "type": "boolean" },
+        { "name": "failed", "type": "boolean" },
+        { "name": "requestId", "type": "string", "nullable": true }
+      ]
+    },
+    {
+      "name": "AiEvidencePixelBox",
+      "kind": "object",
+      "rustName": "AiEvidencePixelBoxPayload",
+      "fields": [
+        { "name": "x", "type": "number", "rustType": "u32" },
+        { "name": "y", "type": "number", "rustType": "u32" },
+        { "name": "width", "type": "number", "rustType": "u32" },
+        { "name": "height", "type": "number", "rustType": "u32" }
+      ]
+    },
+    {
+      "name": "AiEvidenceOverlayBox",
+      "kind": "object",
+      "rustName": "AiEvidenceOverlayBoxPayload",
+      "fields": [
+        { "name": "normalizedBox", "type": "VideoMarkerRect", "nullable": true },
+        { "name": "pixelBox", "type": "AiEvidencePixelBox", "nullable": true },
+        { "name": "frameWidth", "type": "number", "rustType": "u32" },
+        { "name": "frameHeight", "type": "number", "rustType": "u32" }
+      ]
+    },
+    {
+      "name": "AiEvidenceTimelineFrameRef",
+      "kind": "object",
+      "rustName": "AiEvidenceTimelineFrameRefPayload",
+      "fields": [
+        { "name": "frameId", "type": "string" },
+        { "name": "timeMs", "type": "number", "rustType": "u64" },
+        { "name": "sequenceIndex", "type": "number", "rustType": "u32" },
+        { "name": "label", "type": "string" },
+        { "name": "imagePath", "type": "string", "nullable": true },
+        { "name": "frameWidth", "type": "number", "rustType": "u32" },
+        { "name": "frameHeight", "type": "number", "rustType": "u32" }
+      ]
+    },
+    {
+      "name": "AiEvidenceToolCall",
+      "kind": "object",
+      "rustName": "AiEvidenceToolCallPayload",
+      "fields": [
+        { "name": "stage", "type": "string" },
+        { "name": "toolName", "type": "string" },
+        { "name": "inputSummary", "type": "string" },
+        { "name": "outputSummary", "type": "string" },
+        { "name": "startedAtMs", "type": "number", "rustType": "u64" },
+        { "name": "completedAtMs", "type": "number", "rustType": "u64" },
+        { "name": "success", "type": "boolean" }
+      ]
+    },
+    {
+      "name": "AiEvidenceTargetSelection",
+      "kind": "object",
+      "rustName": "AiEvidenceTargetSelectionPayload",
+      "fields": [
+        { "name": "anchorFrameId", "type": "string" },
+        { "name": "selectedTrackId", "type": "string", "nullable": true },
+        { "name": "selectedCandidateId", "type": "string", "nullable": true },
+        { "name": "confidence", "type": "number" },
+        { "name": "rationale", "type": "string" },
+        { "name": "selectedBox", "type": "AiEvidenceOverlayBox", "nullable": true }
+      ]
+    },
+    {
+      "name": "AiEvidenceKeyframe",
+      "kind": "object",
+      "rustName": "AiEvidenceKeyframePayload",
+      "fields": [
+        { "name": "frame", "type": "AiEvidenceTimelineFrameRef" },
+        { "name": "description", "type": "string" },
+        { "name": "overlay", "type": "AiEvidenceOverlayBox", "nullable": true },
+        { "name": "selectedForTargetResolution", "type": "boolean", "optional": true }
+      ]
+    },
+    {
+      "name": "AiEvidenceSharedProjection",
+      "kind": "object",
+      "rustName": "AiEvidenceSharedProjectionPayload",
+      "fields": [
+        { "name": "interval", "type": "TimelineIntervalSelection", "nullable": true },
+        { "name": "targetTracks", "type": "array", "items": "LprTargetTrack" },
+        { "name": "analysisTrack", "type": "LprTargetTrack", "nullable": true },
+        { "name": "selectedTargetTrackId", "type": "string", "nullable": true },
+        { "name": "samples", "type": "array", "items": "LprFrameSample" },
+        { "name": "candidates", "type": "array", "items": "LprPlateCandidate" },
+        { "name": "acceptedCandidateId", "type": "string", "nullable": true },
+        { "name": "review", "type": "LprReviewState", "nullable": true },
+        { "name": "provenance", "type": "LprAnalysisProvenance", "nullable": true }
+      ]
+    },
+    {
+      "name": "AiEvidenceResponse",
+      "kind": "object",
+      "rustName": "AiEvidenceResponsePayload",
+      "fields": [
+        { "name": "requestId", "type": "string", "nullable": true },
+        { "name": "description", "type": "string" },
+        { "name": "summary", "type": "string" },
+        { "name": "provider", "type": "AiEvidenceProviderKind" },
+        { "name": "interval", "type": "TimelineIntervalSelection", "nullable": true },
+        { "name": "plateNumber", "type": "string", "nullable": true },
+        { "name": "plateCandidate", "type": "LprPlateCandidate", "nullable": true },
+        { "name": "primaryAnchor", "type": "AiEvidenceTimelineFrameRef", "nullable": true },
+        { "name": "targetSelection", "type": "AiEvidenceTargetSelection", "nullable": true },
+        { "name": "keyframes", "type": "array", "items": "AiEvidenceKeyframe" },
+        { "name": "toolCalls", "type": "array", "items": "AiEvidenceToolCall" },
+        { "name": "projection", "type": "AiEvidenceSharedProjection" },
+        { "name": "clipPath", "type": "string", "optional": true, "nullable": true },
+        { "name": "runtime", "type": "LprRuntimeStatus" }
+      ]
+    },
+    {
+      "name": "AiEvidenceRequest",
+      "kind": "object",
+      "rustName": "AiEvidenceRequestPayload",
+      "fields": [
+        { "name": "sourcePath", "type": "string" },
+        { "name": "description", "type": "string" },
+        { "name": "markerRect", "type": "VideoMarkerRect", "nullable": true },
+        { "name": "targetVehicleKind", "type": "LprVehicleKind" },
+        { "name": "countryHints", "type": "array", "items": "string" },
+        { "name": "analysisProfileId", "type": "LprAnalysisProfileId", "optional": true, "nullable": true },
+        { "name": "enableDeveloperDiagnostics", "type": "boolean", "optional": true },
+        { "name": "coarseSampleEveryMs", "type": "number", "rustType": "u64", "optional": true },
+        { "name": "fineSampleEveryMs", "type": "number", "rustType": "u64", "optional": true },
+        { "name": "fineWindowPaddingMs", "type": "number", "rustType": "u64", "optional": true },
+        { "name": "maxKeyframes", "type": "number", "rustType": "u32", "optional": true },
+        { "name": "requestId", "type": "string", "optional": true, "nullable": true }
+      ]
+    },
+    {
+      "name": "AiEvidenceSessionState",
+      "kind": "object",
+      "targets": ["ts"],
+      "fields": [
+        { "name": "prompt", "type": "string" },
+        { "name": "job", "type": "AiEvidenceJobState" },
+        { "name": "result", "type": "AiEvidenceResponse", "nullable": true },
+        { "name": "lastCompletedAt", "type": "string", "nullable": true }
       ]
     }
   ]

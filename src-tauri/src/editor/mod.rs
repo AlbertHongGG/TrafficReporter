@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use tauri::Emitter;
 
 use crate::contracts::{
+    AiEvidenceProgressPayload, AiEvidenceRequestPayload, AiEvidenceResponsePayload,
     FrameExportRequest, LprAnalysisProvenancePayload,
     LprEvidenceExportRequestPayload, LprEvidenceExportResponsePayload,
     LprFrameAnalysisRequestPayload, LprFrameAnalysisResponsePayload,
@@ -24,6 +25,7 @@ use crate::platform::process::{find_bundled, find_lpr_runtime_root, find_python_
 const LPR_RUNTIME_RETRY_LIMIT: usize = 1;
 const LPR_RUNTIME_PROTOCOL_VERSION: u8 = 1;
 const APP_LOG_EVENT: &str = "app/log";
+const AI_EVIDENCE_PROGRESS_EVENT: &str = "editor/ai-evidence-progress";
 
 static LPR_RUNTIME_WORKER: OnceLock<Mutex<Option<PersistentLprRuntime>>> = OnceLock::new();
 static LPR_RUNTIME_WORKER_PID: OnceLock<Mutex<Option<u32>>> = OnceLock::new();
@@ -376,6 +378,28 @@ fn emit_lpr_result_log(
     );
 }
 
+fn emit_ai_evidence_progress(
+    app_handle: &tauri::AppHandle,
+    request_id: Option<&str>,
+    progress: f64,
+    stage: &str,
+    detail: impl Into<String>,
+    done: bool,
+    failed: bool,
+) {
+    let _ = app_handle.emit(
+        AI_EVIDENCE_PROGRESS_EVENT,
+        AiEvidenceProgressPayload {
+            progress,
+            stage: stage.to_string(),
+            detail: detail.into(),
+            done,
+            failed,
+            request_id: request_id.map(|value| value.to_string()),
+        },
+    );
+}
+
 fn format_worker_error<TResponse>(response: RuntimeWorkerResponse<TResponse>) -> String {
     let mut detail = response
         .error
@@ -431,6 +455,69 @@ fn parse_stream_resolution(line: &str) -> Option<(u32, u32)> {
 
 fn seconds_from_ms(value: u64) -> String {
     format!("{:.3}", value as f64 / 1000.0)
+}
+
+fn export_ai_evidence_clip(
+    source_path: &str,
+    start_ms: u64,
+    end_ms: u64,
+    output_path: &Path,
+) -> Result<(), String> {
+    if end_ms <= start_ms {
+        return Err("AI evidence clip export requires a non-empty interval.".to_string());
+    }
+
+    if let Some(parent) = output_path.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent)
+                .map_err(|error| format!("Failed to create AI evidence clip directory: {}", error))?;
+        }
+    }
+
+    let ffmpeg = find_bundled("ffmpeg")?;
+    let duration_ms = end_ms.saturating_sub(start_ms);
+    let args = vec![
+        "-y".to_string(),
+        "-hide_banner".to_string(),
+        "-loglevel".to_string(),
+        "error".to_string(),
+        "-ss".to_string(),
+        seconds_from_ms(start_ms),
+        "-t".to_string(),
+        seconds_from_ms(duration_ms),
+        "-i".to_string(),
+        source_path.to_string(),
+        "-map".to_string(),
+        "0:v:0".to_string(),
+        "-map".to_string(),
+        "0:a?".to_string(),
+        "-c:v".to_string(),
+        "libx264".to_string(),
+        "-preset".to_string(),
+        "faster".to_string(),
+        "-pix_fmt".to_string(),
+        "yuv420p".to_string(),
+        "-c:a".to_string(),
+        "aac".to_string(),
+        "-movflags".to_string(),
+        "+faststart".to_string(),
+        output_path.to_string_lossy().to_string(),
+    ];
+    let output = hidden_command(&ffmpeg)
+        .args(&args)
+        .output()
+        .map_err(|error| format!("Failed to execute ffmpeg for AI evidence clip export: {}", error))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if stderr.is_empty() {
+            "ffmpeg failed to export the AI evidence clip.".to_string()
+        } else {
+            stderr
+        });
+    }
+
+    Ok(())
 }
 
 fn build_drawbox_filter(marker_rect: &VideoMarkerRectPayload) -> String {
@@ -802,6 +889,126 @@ pub async fn analyze_lpr_interval(
     })
         .await
         .map_err(|error| format!("Failed to join interval analysis task: {}", error))?
+}
+
+#[tauri::command]
+pub async fn analyze_ai_evidence(
+    app_handle: tauri::AppHandle,
+    request: AiEvidenceRequestPayload,
+) -> Result<AiEvidenceResponsePayload, String> {
+    let request_id = request.request_id.clone();
+    emit_ai_evidence_progress(
+        &app_handle,
+        request_id.as_deref(),
+        0.05,
+        "prepare",
+        "Preparing AI evidence workflow.",
+        false,
+        false,
+    );
+
+    let app_handle_for_task = app_handle.clone();
+    let response = tauri::async_runtime::spawn_blocking(move || -> Result<AiEvidenceResponsePayload, String> {
+        emit_app_log(
+            &app_handle_for_task,
+            "info",
+            "AiEvidenceRequest",
+            format!(
+                "requestId={} description={} vehicleKind={}",
+                request.request_id.as_deref().unwrap_or("-"),
+                request.description.as_str(),
+                request.target_vehicle_kind.as_str(),
+            ),
+        );
+        emit_ai_evidence_progress(
+            &app_handle_for_task,
+            request.request_id.as_deref(),
+            0.15,
+            "analyze",
+            "Running AI evidence localization and range analysis.",
+            false,
+            false,
+        );
+
+        let mut response: AiEvidenceResponsePayload = invoke_lpr_runtime(
+            app_handle_for_task.clone(),
+            "ai-evidence",
+            &request,
+        )?;
+
+        if let Some(interval) = response.interval.clone() {
+            let request_folder = response
+                .request_id
+                .clone()
+                .or_else(|| request.request_id.clone())
+                .unwrap_or_else(|| format!("ai-evidence-{}", SystemTime::now().duration_since(UNIX_EPOCH).map(|value| value.as_millis()).unwrap_or(0)));
+            let clip_path = find_lpr_runtime_root()?
+                .join(".runtime")
+                .join("ai-evidence")
+                .join(request_folder)
+                .join("clip.mp4");
+
+            emit_ai_evidence_progress(
+                &app_handle_for_task,
+                response.request_id.as_deref(),
+                0.8,
+                "export-clip",
+                "Exporting resolved AI evidence clip.",
+                false,
+                false,
+            );
+            export_ai_evidence_clip(
+                &request.source_path,
+                interval.start_ms,
+                interval.end_ms,
+                &clip_path,
+            )?;
+            response.clip_path = Some(clip_path.to_string_lossy().to_string());
+        }
+
+        Ok(response)
+    })
+    .await
+    .map_err(|error| format!("Failed to join AI evidence task: {}", error))?;
+
+    match response {
+        Ok(payload) => {
+            emit_ai_evidence_progress(
+                &app_handle,
+                payload.request_id.as_deref(),
+                1.0,
+                "completed",
+                "AI evidence workflow completed.",
+                true,
+                false,
+            );
+            emit_app_log(
+                &app_handle,
+                "info",
+                "AiEvidenceResult",
+                format!(
+                    "requestId={} plate={} clip={} keyframes={}",
+                    payload.request_id.as_deref().unwrap_or("-"),
+                    payload.plate_number.as_deref().unwrap_or("-"),
+                    payload.clip_path.as_deref().unwrap_or("-"),
+                    payload.keyframes.len(),
+                ),
+            );
+            Ok(payload)
+        }
+        Err(error) => {
+            emit_ai_evidence_progress(
+                &app_handle,
+                request_id.as_deref(),
+                1.0,
+                "failed",
+                error.clone(),
+                true,
+                true,
+            );
+            Err(error)
+        }
+    }
 }
 
 #[tauri::command]

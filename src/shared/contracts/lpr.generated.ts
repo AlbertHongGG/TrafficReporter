@@ -275,3 +275,127 @@ export interface LprEvidenceExportResponse {
   exportedFileCount: number;
   decisionFrameCount: number;
 }
+
+export type AiEvidenceProviderKind = 'ollama';
+
+export interface AiEvidenceJobState {
+  status: LprJobStatus;
+  progress: number;
+  stage: string;
+  detail: string;
+  requestId: string | null;
+  error: string | null;
+  startedAt: string | null;
+  updatedAt: string | null;
+  currentToolName?: string | null;
+}
+
+export interface AiEvidenceProgress {
+  progress: number;
+  stage: string;
+  detail: string;
+  done: boolean;
+  failed: boolean;
+  requestId: string | null;
+}
+
+export interface AiEvidencePixelBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface AiEvidenceOverlayBox {
+  normalizedBox: VideoMarkerRect | null;
+  pixelBox: AiEvidencePixelBox | null;
+  frameWidth: number;
+  frameHeight: number;
+}
+
+export interface AiEvidenceTimelineFrameRef {
+  frameId: string;
+  timeMs: number;
+  sequenceIndex: number;
+  label: string;
+  imagePath: string | null;
+  frameWidth: number;
+  frameHeight: number;
+}
+
+export interface AiEvidenceToolCall {
+  stage: string;
+  toolName: string;
+  inputSummary: string;
+  outputSummary: string;
+  startedAtMs: number;
+  completedAtMs: number;
+  success: boolean;
+}
+
+export interface AiEvidenceTargetSelection {
+  anchorFrameId: string;
+  selectedTrackId: string | null;
+  selectedCandidateId: string | null;
+  confidence: number;
+  rationale: string;
+  selectedBox: AiEvidenceOverlayBox | null;
+}
+
+export interface AiEvidenceKeyframe {
+  frame: AiEvidenceTimelineFrameRef;
+  description: string;
+  overlay: AiEvidenceOverlayBox | null;
+  selectedForTargetResolution?: boolean;
+}
+
+export interface AiEvidenceSharedProjection {
+  interval: TimelineIntervalSelection | null;
+  targetTracks: LprTargetTrack[];
+  analysisTrack: LprTargetTrack | null;
+  selectedTargetTrackId: string | null;
+  samples: LprFrameSample[];
+  candidates: LprPlateCandidate[];
+  acceptedCandidateId: string | null;
+  review: LprReviewState | null;
+  provenance: LprAnalysisProvenance | null;
+}
+
+export interface AiEvidenceResponse {
+  requestId: string | null;
+  description: string;
+  summary: string;
+  provider: AiEvidenceProviderKind;
+  interval: TimelineIntervalSelection | null;
+  plateNumber: string | null;
+  plateCandidate: LprPlateCandidate | null;
+  primaryAnchor: AiEvidenceTimelineFrameRef | null;
+  targetSelection: AiEvidenceTargetSelection | null;
+  keyframes: AiEvidenceKeyframe[];
+  toolCalls: AiEvidenceToolCall[];
+  projection: AiEvidenceSharedProjection;
+  clipPath?: string | null;
+  runtime: LprRuntimeStatus;
+}
+
+export interface AiEvidenceRequest {
+  sourcePath: string;
+  description: string;
+  markerRect: VideoMarkerRect | null;
+  targetVehicleKind: LprVehicleKind;
+  countryHints: string[];
+  analysisProfileId?: LprAnalysisProfileId | null;
+  enableDeveloperDiagnostics?: boolean;
+  coarseSampleEveryMs?: number;
+  fineSampleEveryMs?: number;
+  fineWindowPaddingMs?: number;
+  maxKeyframes?: number;
+  requestId?: string | null;
+}
+
+export interface AiEvidenceSessionState {
+  prompt: string;
+  job: AiEvidenceJobState;
+  result: AiEvidenceResponse | null;
+  lastCompletedAt: string | null;
+}

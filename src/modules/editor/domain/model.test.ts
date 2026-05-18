@@ -18,6 +18,7 @@ describe('editor model', () => {
       activeFileId: null,
       files: [],
       analysis: {
+        aiEvidenceSessionsByFileId: {},
         lprRuntimeStatus: null,
         lprSessionsByFileId: {},
       },

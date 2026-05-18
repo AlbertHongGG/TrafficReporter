@@ -15,6 +15,9 @@ export type { AudioBitrateKbps, VideoQuality } from '../../../shared/contracts';
 export type { LprAnalysisProfileId, LprVehicleKind, LprWorkflowMode } from '../../../shared/contracts';
 
 export type {
+  AiEvidenceJobState,
+  AiEvidenceResponse,
+  AiEvidenceSessionState,
   LprFrameSample,
   LprJobState,
   LprPlateCandidate,

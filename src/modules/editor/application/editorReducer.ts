@@ -1,4 +1,5 @@
 import type {
+  AiEvidenceSessionState,
   EditorAsset,
   LprSessionState,
   EditorWorkspaceState,
@@ -15,11 +16,14 @@ import {
   normalizeMarkerRect,
 } from '../domain/model';
 import {
+  getAiEvidenceSessionByFileId,
   getLprSessionByFileId,
   pruneAnalysisSessions,
+  setAiEvidenceSessionByFileId,
   setAnalysisRuntimeStatus,
   setLprSessionByFileId,
 } from '../domain/analysisState';
+import { isAiEvidenceSessionAction, reduceAiEvidenceSession, type AiEvidenceSessionAction } from './aiEvidenceSessionReducer';
 import { isLprSessionAction, reduceLprSession, type LprSessionAction } from './lprSessionReducer';
 import {
   deleteSelectedClips,
@@ -54,6 +58,8 @@ export type EditorAction =
   | { type: 'set-marker-rect'; markerRect: VideoMarkerRect }
   | { type: 'clear-marker' }
   | { type: 'set-lpr-runtime-status'; runtimeStatus: LprRuntimeStatus | null }
+  | { type: 'replace-lpr-session'; fileId: string; session: LprSessionState }
+  | AiEvidenceSessionAction
   | LprSessionAction;
 
 export function createInitialEditorState() {
@@ -111,6 +117,21 @@ function updateActiveLprSession(
       state.analysis,
       activeFile.id,
       updater(getLprSessionByFileId(state.analysis, activeFile.id)),
+    ),
+  };
+}
+
+function updateAiEvidenceSessionByFileId(
+  state: EditorWorkspaceState,
+  fileId: string,
+  updater: (aiState: AiEvidenceSessionState) => AiEvidenceSessionState,
+) {
+  return {
+    ...state,
+    analysis: setAiEvidenceSessionByFileId(
+      state.analysis,
+      fileId,
+      updater(getAiEvidenceSessionByFileId(state.analysis, fileId)),
     ),
   };
 }
@@ -264,7 +285,20 @@ export function editorReducer(state: EditorWorkspaceState, action: EditorAction)
         analysis: setAnalysisRuntimeStatus(state.analysis, action.runtimeStatus),
       };
 
+    case 'replace-lpr-session':
+      return {
+        ...state,
+        analysis: setLprSessionByFileId(state.analysis, action.fileId, action.session),
+      };
+
     default:
+      if (isAiEvidenceSessionAction(action)) {
+        return updateAiEvidenceSessionByFileId(
+          state,
+          action.fileId,
+          (aiState) => reduceAiEvidenceSession(aiState, action),
+        );
+      }
       if (!isLprSessionAction(action)) {
         return state;
       }

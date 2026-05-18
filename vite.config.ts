@@ -13,6 +13,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'index.html'),
+        'ai-panel': resolve(__dirname, 'ai-panel.html'),
         export: resolve(__dirname, 'export.html'),
         plate: resolve(__dirname, 'plate.html'),
       },

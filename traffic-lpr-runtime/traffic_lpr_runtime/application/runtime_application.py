@@ -8,6 +8,7 @@ from traffic_lpr_runtime.domain.interfaces import FrameReader, PlateRecognizer, 
 from traffic_lpr_runtime.domain.models import FrameSample, PlateCandidate, TargetTrack, TrackedRegion
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect, crop_image
 from traffic_lpr_runtime.application.benchmark_workflow import BenchmarkRunWorkflow
+from traffic_lpr_runtime.application.ai_evidence_workflow import AiEvidenceWorkflow
 from traffic_lpr_runtime.application.candidate_fusion import CandidateFusionService, apply_reliability_selection
 from traffic_lpr_runtime.application.contract_spec import LprContractRegistry
 from traffic_lpr_runtime.application.interval_tracking import IntervalTrackingService
@@ -22,6 +23,7 @@ from traffic_lpr_runtime.infrastructure.model_runtime import (
     ModelRegistry,
     UltralyticsTargetDetector,
 )
+from traffic_lpr_runtime.infrastructure.ollama_provider import OllamaVisionProvider
 
 
 class LprRuntimeApplication:
@@ -76,6 +78,18 @@ class LprRuntimeApplication:
             analyze_frame=self.analyze_frame,
             analyze_interval=self.analyze_interval,
         )
+        self._ai_provider = OllamaVisionProvider()
+        self._ai_evidence_workflow = AiEvidenceWorkflow(
+            ensure_ready=self._dependencies.ensure_ready,
+            status=self.status,
+            runtime_root=self._dependencies.runtime_root,
+            dependencies=self._dependencies,
+            frame_reader=self._frame_reader,
+            detect_targets=self._detect_targets,
+            analyze_frame=self.analyze_frame,
+            analyze_interval=self.analyze_interval,
+            provider=self._ai_provider,
+        )
         self._contract_registry = LprContractRegistry()
 
     def dispatch(self, subcommand: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -86,6 +100,8 @@ class LprRuntimeApplication:
         self._contract_registry.validate_request(subcommand, payload)
         if subcommand == 'scan-targets':
             result = self.scan_targets(payload)
+        elif subcommand == 'ai-evidence':
+            result = self.ai_evidence(payload)
         elif subcommand == 'analyze-frame':
             result = self.analyze_frame(payload)
         elif subcommand == 'analyze-interval':
@@ -106,6 +122,9 @@ class LprRuntimeApplication:
 
     def analyze_interval(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._interval_analysis_workflow.run(payload)
+
+    def ai_evidence(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._ai_evidence_workflow.run(payload)
 
     def benchmark_run(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._benchmark_run_workflow.run(payload)
