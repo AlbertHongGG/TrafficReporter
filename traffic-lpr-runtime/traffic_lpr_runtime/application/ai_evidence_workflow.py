@@ -354,7 +354,7 @@ class AiEvidenceWorkflow:
         chat_images = [VisionChatImage(
             frame_id='anchor-overview',
             label=f'anchor-overview @ T+{_format_time_label(anchor_frame.time_ms)}',
-            image_base64=_encode_image_path(annotated_path),
+            image_base64=self._encode_chat_image(annotated_path),
         )]
         plate_hint = _extract_plate_hint(description)
 
@@ -397,7 +397,7 @@ class AiEvidenceWorkflow:
             chat_images.append(VisionChatImage(
                 frame_id=detection.id,
                 label=f'target-{index:02d} @ T+{_format_time_label(anchor_frame.time_ms)}',
-                image_base64=_encode_image_path(crop_path),
+                image_base64=self._encode_chat_image(crop_path),
             ))
 
         if plate_hint:
@@ -540,8 +540,29 @@ class AiEvidenceWorkflow:
         return VisionChatImage(
             frame_id=frame.frame_id,
             label=frame.label,
-            image_base64=_encode_image_path(Path(frame.image_path)),
+            image_base64=self._encode_chat_image(Path(frame.image_path)),
         )
+
+    def _encode_chat_image(self, path: Path) -> str:
+        cv2 = self._dependencies.cv2
+        image = cv2.imread(str(path))
+        if image is None:
+            return _encode_image_path(path)
+
+        height, width = image.shape[:2]
+        longest_side = max(width, height)
+        if longest_side > 960:
+            scale = 960.0 / float(longest_side)
+            image = cv2.resize(
+                image,
+                (int(round(width * scale)), int(round(height * scale))),
+                interpolation=cv2.INTER_AREA,
+            )
+
+        ok, encoded = cv2.imencode('.jpg', image, [int(cv2.IMWRITE_JPEG_QUALITY), 82])
+        if not ok:
+            return _encode_image_path(path)
+        return base64.b64encode(encoded.tobytes()).decode('ascii')
 
     def _overlay_payload(
         self,

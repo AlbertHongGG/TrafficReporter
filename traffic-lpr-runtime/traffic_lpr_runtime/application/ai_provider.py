@@ -20,5 +20,5 @@ class VisionLlmProvider(Protocol):
         system_prompt: str,
         user_prompt: str,
         images: list[VisionChatImage],
-        timeout_s: int = 120,
+        timeout_s: int = 1200,
     ) -> dict[str, object]: ...

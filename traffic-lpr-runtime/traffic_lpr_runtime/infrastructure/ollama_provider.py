@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import urllib.error
 import urllib.request
 from typing import Any
@@ -12,6 +13,22 @@ from traffic_lpr_runtime.domain.errors import RuntimeFailure
 
 DEFAULT_OLLAMA_BASE_URL = 'https://lacresha-posological-steven.ngrok-free.dev'
 DEFAULT_OLLAMA_MODEL = 'qwen3.6:35b'
+DEFAULT_OLLAMA_TIMEOUT_S = 1200
+MIN_OLLAMA_TIMEOUT_S = 30
+
+
+def _resolve_timeout_seconds(value: int | str | None) -> int:
+    if value is None or value == '':
+        return DEFAULT_OLLAMA_TIMEOUT_S
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return DEFAULT_OLLAMA_TIMEOUT_S
+    return max(MIN_OLLAMA_TIMEOUT_S, parsed)
+
+
+def _is_timeout_reason(reason: object) -> bool:
+    return isinstance(reason, (TimeoutError, socket.timeout)) or 'timed out' in str(reason).lower()
 
 
 class OllamaVisionProvider:
@@ -20,6 +37,7 @@ class OllamaVisionProvider:
     def __init__(self, base_url: str | None = None, model: str | None = None) -> None:
         self._base_url = (base_url or os.environ.get('TRAFFIC_OLLAMA_URL') or DEFAULT_OLLAMA_BASE_URL).rstrip('/')
         self._model = model or os.environ.get('TRAFFIC_OLLAMA_MODEL') or DEFAULT_OLLAMA_MODEL
+        self._timeout_s = _resolve_timeout_seconds(os.environ.get('TRAFFIC_OLLAMA_TIMEOUT_S'))
 
     def generate_json(
         self,
@@ -27,8 +45,9 @@ class OllamaVisionProvider:
         system_prompt: str,
         user_prompt: str,
         images: list[VisionChatImage],
-        timeout_s: int = 120,
+        timeout_s: int = DEFAULT_OLLAMA_TIMEOUT_S,
     ) -> dict[str, object]:
+        resolved_timeout_s = _resolve_timeout_seconds(timeout_s or self._timeout_s)
         payload = {
             'model': self._model,
             'stream': False,
@@ -56,7 +75,7 @@ class OllamaVisionProvider:
         )
 
         try:
-            with urllib.request.urlopen(request, timeout=timeout_s) as response:
+            with urllib.request.urlopen(request, timeout=resolved_timeout_s) as response:
                 raw_response = response.read().decode('utf-8')
         except urllib.error.HTTPError as error:
             detail = error.read().decode('utf-8', errors='replace').strip()
@@ -64,7 +83,21 @@ class OllamaVisionProvider:
                 f'Ollama request failed with HTTP {error.code}: {detail or error.reason}.',
             ) from error
         except urllib.error.URLError as error:
+            if _is_timeout_reason(error.reason):
+                raise RuntimeFailure(
+                    f'Ollama request timed out after {resolved_timeout_s}s. Increase TRAFFIC_OLLAMA_TIMEOUT_S if the remote model is slow.',
+                ) from error
             raise RuntimeFailure(f'Unable to reach Ollama provider: {error.reason}.') from error
+        except (TimeoutError, socket.timeout) as error:
+            raise RuntimeFailure(
+                f'Ollama request timed out after {resolved_timeout_s}s. Increase TRAFFIC_OLLAMA_TIMEOUT_S if the remote model is slow.',
+            ) from error
+        except OSError as error:
+            if _is_timeout_reason(error):
+                raise RuntimeFailure(
+                    f'Ollama request timed out after {resolved_timeout_s}s. Increase TRAFFIC_OLLAMA_TIMEOUT_S if the remote model is slow.',
+                ) from error
+            raise
 
         try:
             response_payload = json.loads(raw_response)
