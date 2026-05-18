@@ -106,6 +106,13 @@ export interface LprTargetTrack {
   diagnostics?: LprDiagnostics | null;
 }
 
+export interface LprTargetAnchor {
+  trackId: string;
+  className: string;
+  timeMs: number;
+  box: VideoMarkerRect;
+}
+
 export interface LprPlateCandidate {
   id: string;
   text: string;
@@ -163,6 +170,7 @@ export interface LprSessionState {
   job: LprJobState;
   targetTracks: LprTargetTrack[];
   selectedTargetTrackId: string | null;
+  selectedTargetAnchor: LprTargetAnchor | null;
   analysisTrack: LprTargetTrack | null;
   samples: LprFrameSample[];
   candidates: LprPlateCandidate[];

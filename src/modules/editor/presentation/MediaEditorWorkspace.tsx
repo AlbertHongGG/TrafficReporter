@@ -46,7 +46,7 @@ import {
   type VideoMarkerRect,
 } from '../domain/model';
 import { getLprSessionByFileId } from '../domain/analysisState';
-import { resolveLprAnalysisTargetVehicleKind } from '../domain/lprState';
+import { buildLprTargetAnchor, resolveLprAnalysisTargetVehicleKind } from '../domain/lprState';
 import {
   buildEditorAsset,
   exportFrameImage,
@@ -245,6 +245,10 @@ function normalizeLprInterval(interval: TimelineIntervalSelection): TimelineInte
   };
 }
 
+function isAnchorWithinInterval(anchorTimeMs: number, interval: TimelineIntervalSelection) {
+  return anchorTimeMs >= interval.startMs && anchorTimeMs <= interval.endMs;
+}
+
 export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isActive = true }) => {
   const [state, dispatch] = useReducer(editorReducer, initialEditorState);
   const [workspaceFeedback, setWorkspaceFeedback] = useState<string | null>(null);
@@ -352,6 +356,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
   );
   const lprJob = lprState.job;
   const lprBusy = lprJob.status === 'queued' || lprJob.status === 'running';
+  const lprSelectedTargetAnchor = lprState.selectedTargetAnchor;
   const lprSelectedTrack = useMemo(
     () => lprState.targetTracks.find((track) => track.id === lprState.selectedTargetTrackId) ?? null,
     [lprState.selectedTargetTrackId, lprState.targetTracks],
@@ -382,7 +387,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     () => resolveLprAnalysisTargetVehicleKind(lprSelectedTrack, lprState.targetVehicleKind),
     [lprSelectedTrack, lprState.targetVehicleKind],
   );
-  const canAnalyzeRange = Boolean(activeFile && !lprBusy && lprSelectedTrack && lprState.interval);
+  const canAnalyzeRange = Boolean(activeFile && !lprBusy && lprSelectedTrack && lprSelectedTargetAnchor && lprState.interval);
 
   useEffect(() => {
     setLiveOverlayPlayheadMs(currentPlayheadMs);
@@ -1218,9 +1223,9 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     effectiveInterval: lprState.interval,
     canAnalyzeRange,
     topCandidate: lprTopCandidate,
-    anchorTimeMs: Math.max(0, Math.round(livePlayheadMsRef.current)),
+    anchorTimeMs: Math.max(0, Math.round(lprSelectedTargetAnchor?.timeMs ?? livePlayheadMsRef.current)),
     playheadMs: Math.max(0, Math.round(livePlayheadMsRef.current)),
-  }), [activeFile, canAnalyzeRange, lprRuntimeStatus, lprState, lprTopCandidate, state.workspaceName]);
+  }), [activeFile, canAnalyzeRange, lprRuntimeStatus, lprSelectedTargetAnchor, lprState, lprTopCandidate, state.workspaceName]);
 
   const handleSetIntervalBoundary = (boundary: 'start' | 'end') => {
     const currentInterval = resolveSuggestedInterval(livePlayheadMsRef.current);
@@ -1405,6 +1410,32 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     }
 
     const interval = normalizeLprInterval(lprState.interval);
+    if (!lprSelectedTargetAnchor) {
+      const errorMessage = 'Select a target on the intended frame before running Range.';
+      updateLprJob({
+        status: 'failed',
+        progress: 1,
+        stage: 'Interval',
+        detail: 'Range analysis requires an anchored target selection.',
+        error: errorMessage,
+      });
+      setWorkspaceFeedback(errorMessage);
+      return;
+    }
+
+    if (!isAnchorWithinInterval(lprSelectedTargetAnchor.timeMs, interval)) {
+      const errorMessage = 'The selected target frame is outside the current Range. Reselect the target on a frame inside the interval, or adjust In/Out.';
+      updateLprJob({
+        status: 'failed',
+        progress: 1,
+        stage: 'Interval',
+        detail: 'Range analysis requires the selected target anchor to stay inside the chosen interval.',
+        error: errorMessage,
+      });
+      setWorkspaceFeedback(errorMessage);
+      return;
+    }
+
     const countryHints = applyCountryHints(
       latestCountryHintDraftRef.current ?? (lprState.countryHints.join(', ')),
     );
@@ -1417,9 +1448,9 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       const response = await analyzeLprInterval({
         sourcePath: activeFile.asset.path,
         interval,
-        anchorTimeMs: Math.max(0, Math.round(livePlayheadMsRef.current)),
+        anchorTimeMs: Math.max(0, Math.round(lprSelectedTargetAnchor.timeMs)),
         targetVehicleKind: lprAnalysisVehicleKind,
-        selectedTargetBox: (lprSelectedTrackFrame ?? lprSelectedTrack.frames[0])?.box ?? null,
+        selectedTargetBox: lprSelectedTargetAnchor.box,
         countryHints,
         sampleEveryMs,
         maxSamples: lprState.useDenseSampling ? 18 : 8,
@@ -1480,9 +1511,12 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     }
   };
 
-  const handleSelectTargetTrack = (targetTrackId: string) => {
-    dispatch({ type: 'select-lpr-target-track', targetTrackId });
-  };
+  const handleSelectTargetTrack = useCallback((targetTrackId: string, preferredTimeMs?: number | null) => {
+    const targetTrack = lprState.targetTracks.find((track) => track.id === targetTrackId) ?? null;
+    const anchor = buildLprTargetAnchor(targetTrack, preferredTimeMs ?? livePlayheadMsRef.current);
+
+    dispatch({ type: 'select-lpr-target-track', targetTrackId, anchor });
+  }, [dispatch, lprState.targetTracks]);
 
   const handleExportLprEvidence = async () => {
     if (!activeFile || activeFile.asset.status !== 'ready' || (!lprTopCandidate && lprState.samples.length === 0)) {
@@ -1574,7 +1608,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         dispatch({ type: 'clear-lpr-results' });
         break;
       case 'select-target-track':
-        handleSelectTargetTrack(action.targetTrackId);
+        handleSelectTargetTrack(action.targetTrackId, livePlayheadMsRef.current);
         break;
       case 'accept-candidate':
         dispatch({ type: 'accept-lpr-candidate', candidateId: action.candidateId });
@@ -1778,7 +1812,6 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
               <div className={styles.dropOverlayContent}>
                 <Import size={32} />
                 <strong>Drop Videos Here</strong>
-                <span>Release to add files into the current workspace</span>
               </div>
             </div>
           )}
@@ -1876,7 +1909,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
                         type="button"
                         className={`${styles.lprOverlayTarget} ${selectionTrackId === lprState.selectedTargetTrackId ? styles.lprOverlayTargetSelected : ''}`}
                         style={overlayStyle}
-                        onClick={() => selectionTrackId && handleSelectTargetTrack(selectionTrackId)}
+                        onClick={() => selectionTrackId && handleSelectTargetTrack(selectionTrackId, frame.timeMs)}
                       >
                         <span className={styles.lprOverlayLabel}>{track.label}</span>
                       </button>

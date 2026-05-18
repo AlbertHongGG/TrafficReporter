@@ -20,6 +20,7 @@ export type {
   LprPlateCandidate,
   LprResultHistoryEntry,
   LprSessionState,
+  LprTargetAnchor,
   LprTargetTrack,
   TimelineIntervalSelection,
   MediaProbeResult,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -191,7 +192,7 @@ class PlatePreprocessor:
             best_quad = cv2.boxPoints(rect)
 
         if best_quad is None:
-            return plate_image, {'applied': False, 'method': 'crop'}
+            return self._deskew_plate(plate_image)
 
         ordered = _order_quad_points(best_quad)
         dest_width = max(128, int(round(max(_distance(ordered[0], ordered[1]), _distance(ordered[2], ordered[3])))))
@@ -204,34 +205,106 @@ class PlatePreprocessor:
         rectified = cv2.warpPerspective(plate_image, transform, (dest_width, dest_height))
         return rectified, {'applied': True, 'method': 'minAreaRect', 'score': best_score}
 
+    def _deskew_plate(self, plate_image: Any) -> tuple[Any, dict[str, Any]]:
+        cv2 = self._dependencies.cv2
+        numpy = self._dependencies.numpy
+        if cv2 is None or numpy is None or plate_image is None or getattr(plate_image, 'size', 0) == 0:
+            return plate_image, {'applied': False, 'method': 'crop'}
+
+        grayscale = cv2.cvtColor(plate_image, cv2.COLOR_BGR2GRAY)
+        blurred = cv2.GaussianBlur(grayscale, (5, 5), 0)
+        edges = cv2.Canny(blurred, 50, 160)
+        min_line_length = max(int(round(plate_image.shape[1] * 0.4)), 24)
+        max_line_gap = max(int(round(plate_image.shape[1] * 0.12)), 6)
+        lines = cv2.HoughLinesP(
+            edges,
+            1,
+            numpy.pi / 180.0,
+            threshold=24,
+            minLineLength=min_line_length,
+            maxLineGap=max_line_gap,
+        )
+        if lines is None:
+            return plate_image, {'applied': False, 'method': 'crop'}
+
+        weighted_angles: list[tuple[float, float]] = []
+        for line in lines.reshape(-1, 4):
+            x1, y1, x2, y2 = [int(value) for value in line]
+            angle = math.degrees(math.atan2(y2 - y1, x2 - x1))
+            if abs(angle) > 45.0:
+                continue
+            length = math.hypot(x2 - x1, y2 - y1)
+            if length < max(18.0, plate_image.shape[1] * 0.18):
+                continue
+            weighted_angles.append((angle, length))
+
+        if not weighted_angles:
+            return plate_image, {'applied': False, 'method': 'crop'}
+
+        total_weight = sum(weight for _, weight in weighted_angles)
+        weighted_angle = sum(angle * weight for angle, weight in weighted_angles) / max(total_weight, 1e-6)
+        if abs(weighted_angle) < 2.0:
+            return plate_image, {'applied': False, 'method': 'crop'}
+
+        height, width = plate_image.shape[:2]
+        center = (width / 2.0, height / 2.0)
+        transform = cv2.getRotationMatrix2D(center, -weighted_angle, 1.0)
+        cos_theta = abs(transform[0, 0])
+        sin_theta = abs(transform[0, 1])
+        bound_width = int(round((height * sin_theta) + (width * cos_theta)))
+        bound_height = int(round((height * cos_theta) + (width * sin_theta)))
+        transform[0, 2] += (bound_width / 2.0) - center[0]
+        transform[1, 2] += (bound_height / 2.0) - center[1]
+        rotated = cv2.warpAffine(
+            plate_image,
+            transform,
+            (bound_width, bound_height),
+            flags=cv2.INTER_CUBIC,
+            borderMode=cv2.BORDER_REPLICATE,
+        )
+        return rotated, {
+            'applied': True,
+            'method': 'hough-deskew',
+            'angle': weighted_angle,
+            'linesUsed': len(weighted_angles),
+        }
+
     def _enhance_plate(self, plate_image: Any) -> Any:
         cv2 = self._dependencies.cv2
         if cv2 is None or plate_image is None or getattr(plate_image, 'size', 0) == 0:
             return plate_image
 
+        grayscale = cv2.cvtColor(plate_image, cv2.COLOR_BGR2GRAY)
+        contrast = float(grayscale.std()) / 255.0
+        brightness = float(grayscale.mean()) / 255.0
+        clip_limit = 3.0 if contrast < 0.22 or brightness < 0.4 else 2.2
+        tile_grid = (6, 6) if min(plate_image.shape[:2]) >= 96 else (4, 4)
         lab = cv2.cvtColor(plate_image, cv2.COLOR_BGR2LAB)
         channel_l, channel_a, channel_b = cv2.split(lab)
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4, 4))
+        clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=tile_grid)
         equalized_l = clahe.apply(channel_l)
         merged_lab = cv2.merge((equalized_l, channel_a, channel_b))
         enhanced = cv2.cvtColor(merged_lab, cv2.COLOR_LAB2BGR)
-        denoised = cv2.bilateralFilter(enhanced, 5, 45, 45)
-        softened = cv2.GaussianBlur(denoised, (0, 0), 1.2)
-        return cv2.addWeighted(denoised, 1.55, softened, -0.55, 0)
+        filter_strength = 55 if contrast < 0.22 else 45
+        denoised = cv2.bilateralFilter(enhanced, 7 if contrast < 0.22 else 5, filter_strength, filter_strength)
+        softened = cv2.GaussianBlur(denoised, (0, 0), 0.95 if contrast < 0.22 else 1.2)
+        sharpen_gain = 1.68 if contrast < 0.22 else 1.55
+        return cv2.addWeighted(denoised, sharpen_gain, softened, -(sharpen_gain - 1.0), 0)
 
     def _should_restore(self, plate_image: Any, quality: QualityMetrics | None, options: AnalysisOptions) -> bool:
         if options.restoration_mode == 'off' or plate_image is None:
             return False
         height, width = plate_image.shape[:2]
-        if min(height, width) < 42:
+        if min(height, width) < 52:
             return True
         if quality is None:
             return True
         return (
-            quality.overall_score < 0.62
-            or quality.sharpness < 0.28
-            or quality.glare_score < 0.45
-            or quality.contrast < 0.35
+            quality.overall_score < 0.7
+            or quality.sharpness < 0.34
+            or quality.glare_score < 0.52
+            or quality.contrast < 0.42
+            or quality.legibility_score < 0.72
         )
 
     def _restore_plate(self, plate_image: Any, options: AnalysisOptions) -> tuple[Any | None, dict[str, Any]]:
@@ -264,8 +337,13 @@ class PlatePreprocessor:
 
         upscaled = cv2.resize(plate_image, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_LANCZOS4)
         denoised = cv2.fastNlMeansDenoisingColored(upscaled, None, 3, 3, 7, 21)
-        softened = cv2.GaussianBlur(denoised, (0, 0), 1.0)
-        return cv2.addWeighted(denoised, 1.65, softened, -0.65, 0)
+        lab = cv2.cvtColor(denoised, cv2.COLOR_BGR2LAB)
+        channel_l, channel_a, channel_b = cv2.split(lab)
+        clahe = cv2.createCLAHE(clipLimit=2.6, tileGridSize=(6, 6))
+        restored_lab = cv2.merge((clahe.apply(channel_l), channel_a, channel_b))
+        restored = cv2.cvtColor(restored_lab, cv2.COLOR_LAB2BGR)
+        softened = cv2.GaussianBlur(restored, (0, 0), 1.0)
+        return cv2.addWeighted(restored, 1.65, softened, -0.65, 0)
 
 
 def _merge_quality_metrics(

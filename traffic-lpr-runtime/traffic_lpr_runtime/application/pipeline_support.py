@@ -97,8 +97,12 @@ class AnalysisOptions:
 
     def for_interval_sample(self, sample_count_hint: int | None = None) -> 'AnalysisOptions':
         restoration_mode = self.restoration_mode
-        if sample_count_hint is not None and sample_count_hint >= 8:
-            restoration_mode = 'off'
+        if (
+            sample_count_hint is not None
+            and sample_count_hint >= 8
+            and restoration_mode not in {'off', 'classical'}
+        ):
+            restoration_mode = 'classical'
         return replace(
             self,
             enable_recognizer_comparison=False,

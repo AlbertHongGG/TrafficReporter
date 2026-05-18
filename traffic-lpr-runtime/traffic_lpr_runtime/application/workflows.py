@@ -12,6 +12,28 @@ from traffic_lpr_runtime.domain.models import FrameSample, PlateCandidate, Targe
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect
 
 
+def _boxes_remain_anchored(anchor_box: NormalizedRect | None, selected_target_box: NormalizedRect | None) -> bool:
+    if anchor_box is None or selected_target_box is None:
+        return False
+
+    iou = anchor_box.intersection_over_union(selected_target_box)
+    center_distance = anchor_box.center_distance(selected_target_box)
+    area_similarity = min(anchor_box.area(), selected_target_box.area()) / max(anchor_box.area(), selected_target_box.area(), 1e-6)
+    return iou >= 0.1 or (center_distance <= 0.12 and area_similarity >= 0.45)
+
+
+def _resolve_interval_anchor_box(
+    tracked_frames: list[TrackedRegion],
+    calibrated_target_boxes: dict[int, NormalizedRect],
+    anchor_time_ms: int,
+) -> NormalizedRect | None:
+    if anchor_time_ms in calibrated_target_boxes:
+        return calibrated_target_boxes[anchor_time_ms]
+
+    anchor_frame = next((frame for frame in tracked_frames if frame.time_ms == anchor_time_ms), None)
+    return anchor_frame.box if anchor_frame is not None else None
+
+
 class TargetScanWorkflow:
     def __init__(
         self,
@@ -145,14 +167,20 @@ class IntervalAnalysisWorkflow:
         self._ensure_ready()
         options = AnalysisOptions.from_payload(payload)
         artifact_root = options.resolve_artifact_root(self._runtime_root(), 'interval')
+        interval = payload['interval']
+        anchor_time_ms = int(payload['anchorTimeMs'])
+        start_ms = int(interval['startMs'])
+        end_ms = int(interval['endMs'])
         selected_target_box = NormalizedRect.from_payload(payload.get('selectedTargetBox'))
         if selected_target_box is None:
             raise RuntimeFailure('Range analysis requires a selected target on the anchor frame.')
+        if anchor_time_ms < start_ms or anchor_time_ms > end_ms:
+            raise RuntimeFailure('Range analysis requires the selected target anchor to stay inside the requested interval.')
 
         tracked_frames, track_diagnostics = self._track_target_across_interval(
             payload['sourcePath'],
-            payload['interval'],
-            int(payload['anchorTimeMs']),
+            interval,
+            anchor_time_ms,
             payload.get('targetVehicleKind', 'vehicle'),
             selected_target_box,
             payload.get('sampleEveryMs'),
@@ -161,9 +189,13 @@ class IntervalAnalysisWorkflow:
         )
         calibrated_target_boxes = self._calibrate_interval_target_boxes(
             tracked_frames,
-            int(payload['anchorTimeMs']),
+            anchor_time_ms,
             selected_target_box,
         )
+        resolved_anchor_box = _resolve_interval_anchor_box(tracked_frames, calibrated_target_boxes, anchor_time_ms)
+        if not _boxes_remain_anchored(resolved_anchor_box, selected_target_box):
+            raise RuntimeFailure('Range analysis lost the selected target at the anchor frame. Reselect the vehicle on the intended frame and retry.')
+
         sample_options = options.for_interval_sample(sample_count_hint=len(tracked_frames))
 
         samples: list[FrameSample] = []

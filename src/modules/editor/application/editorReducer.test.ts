@@ -56,7 +56,14 @@ describe('editorReducer LPR workflow', () => {
     track.frames[0].box.x = 0.75
 
     expect(lprState.selectedTargetTrackId).toBe('track-1')
+    expect(lprState.selectedTargetAnchor).toEqual({
+      trackId: 'track-1',
+      className: 'motorcycle',
+      timeMs: 1200,
+      box: { x: 0.1, y: 0.2, width: 0.25, height: 0.18 },
+    })
     expect(lprState.targetTracks[0]?.frames[0]?.box.x).toBe(0.1)
+    expect(lprState.selectedTargetAnchor?.box.x).toBe(0.1)
   })
 
   it('keeps scanned targets when storing a separate analysis track', () => {
@@ -122,6 +129,22 @@ describe('editorReducer LPR workflow', () => {
 
     let state = createWorkspaceState()
     state = editorReducer(state, {
+      type: 'set-lpr-target-tracks',
+      targetTracks: [{
+        id: 'track-1',
+        className: 'motorcycle',
+        label: 'motorcycle 1',
+        confidence: 0.93,
+        frames: [{
+          id: 'frame-1',
+          timeMs: 1200,
+          box: { x: 0.1, y: 0.2, width: 0.25, height: 0.18 },
+          confidence: 0.88,
+          className: 'motorcycle',
+        }],
+      }],
+    })
+    state = editorReducer(state, {
       type: 'set-lpr-interval',
       interval: { startMs: 1000, endMs: 2400 },
     })
@@ -150,6 +173,7 @@ describe('editorReducer LPR workflow', () => {
     expect(lprState.candidates).toEqual([])
     expect(lprState.samples).toEqual([])
     expect(lprState.targetTracks).toEqual([])
+    expect(lprState.selectedTargetAnchor).toBeNull()
     expect(lprState.analysisTrack).toBeNull()
     expect(lprState.interval).toEqual({ startMs: 1000, endMs: 2400 })
     expect(lprState.history).toHaveLength(1)

@@ -4,13 +4,14 @@ import type {
   LprPlateCandidate,
   LprResultHistoryEntry,
   LprSessionState,
+  LprTargetAnchor,
   LprTargetTrack,
   LprVehicleKind,
   LprWorkflowMode,
   TimelineIntervalSelection,
 } from '../domain/model';
 import type { LprAnalysisProvenance, LprReviewState } from '../../../shared/contracts';
-import { buildDefaultLprState } from '../domain/lprState';
+import { buildDefaultLprState, buildLprTargetAnchor } from '../domain/lprState';
 
 export type LprSessionAction =
   | { type: 'set-lpr-mode'; workflowMode: LprWorkflowMode }
@@ -25,7 +26,7 @@ export type LprSessionAction =
     }
   | { type: 'set-lpr-target-tracks'; targetTracks: LprTargetTrack[] }
   | { type: 'set-lpr-analysis-track'; analysisTrack: LprTargetTrack | null }
-  | { type: 'select-lpr-target-track'; targetTrackId: string | null }
+  | { type: 'select-lpr-target-track'; targetTrackId: string | null; anchor: LprTargetAnchor | null }
   | { type: 'set-lpr-job'; job: Partial<LprJobState> }
   | { type: 'set-lpr-samples'; samples: LprFrameSample[] }
   | { type: 'set-lpr-candidates'; candidates: LprPlateCandidate[] }
@@ -134,12 +135,21 @@ export function reduceLprSession(lprState: LprSessionState, action: LprSessionAc
       };
 
     case 'set-lpr-target-tracks':
+      const targetTracks = buildDefaultLprState({ targetTracks: action.targetTracks }).targetTracks;
+      const selectedTargetTrackId = targetTracks.some((track) => track.id === lprState.selectedTargetTrackId)
+        ? lprState.selectedTargetTrackId
+        : targetTracks[0]?.id ?? null;
+      const selectedTargetTrack = targetTracks.find((track) => track.id === selectedTargetTrackId) ?? null;
       return {
         ...lprState,
-        targetTracks: buildDefaultLprState({ targetTracks: action.targetTracks }).targetTracks,
-        selectedTargetTrackId: action.targetTracks.some((track) => track.id === lprState.selectedTargetTrackId)
-          ? lprState.selectedTargetTrackId
-          : action.targetTracks[0]?.id ?? null,
+        targetTracks,
+        selectedTargetTrackId,
+        selectedTargetAnchor: buildLprTargetAnchor(
+          selectedTargetTrack,
+          lprState.selectedTargetAnchor?.trackId === selectedTargetTrackId
+            ? lprState.selectedTargetAnchor.timeMs
+            : null,
+        ),
       };
 
     case 'set-lpr-analysis-track':
@@ -152,6 +162,7 @@ export function reduceLprSession(lprState: LprSessionState, action: LprSessionAc
       return {
         ...lprState,
         selectedTargetTrackId: action.targetTrackId,
+        selectedTargetAnchor: buildDefaultLprState({ selectedTargetAnchor: action.anchor }).selectedTargetAnchor,
         workflowMode: action.targetTrackId ? 'target' : lprState.workflowMode,
       };
 
@@ -211,6 +222,7 @@ export function reduceLprSession(lprState: LprSessionState, action: LprSessionAc
         job: buildDefaultLprState().job,
         targetTracks: [],
         selectedTargetTrackId: null,
+        selectedTargetAnchor: null,
         analysisTrack: null,
         samples: [],
         candidates: [],

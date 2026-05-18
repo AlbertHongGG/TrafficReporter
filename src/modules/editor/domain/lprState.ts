@@ -6,6 +6,7 @@ import type {
   LprReviewState,
   LprResultHistoryEntry,
   LprSessionState,
+  LprTargetAnchor,
   LprTargetTrack,
   LprVehicleKind,
   TimelineIntervalSelection,
@@ -54,6 +55,53 @@ function cloneLprTargetTracks(targetTracks: LprTargetTrack[]) {
 
 function cloneLprTargetTrack(track: LprTargetTrack | null) {
   return track ? cloneLprTargetTracks([track])[0] ?? null : null;
+}
+
+function cloneLprTargetAnchor(anchor: LprTargetAnchor | null) {
+  return anchor ? {
+    ...anchor,
+    box: { ...anchor.box },
+  } : null;
+}
+
+function resolveAnchorFrame(
+  track: Pick<LprTargetTrack, 'frames'>,
+  preferredTimeMs: number | null | undefined,
+) {
+  if (track.frames.length === 0) {
+    return null;
+  }
+
+  if (typeof preferredTimeMs !== 'number' || Number.isNaN(preferredTimeMs)) {
+    return track.frames[0] ?? null;
+  }
+
+  return track.frames.reduce((closestFrame, candidateFrame) => (
+    Math.abs(candidateFrame.timeMs - preferredTimeMs) < Math.abs(closestFrame.timeMs - preferredTimeMs)
+      ? candidateFrame
+      : closestFrame
+  ));
+}
+
+export function buildLprTargetAnchor(
+  track: Pick<LprTargetTrack, 'id' | 'className' | 'frames'> | null | undefined,
+  preferredTimeMs?: number | null,
+): LprTargetAnchor | null {
+  if (!track) {
+    return null;
+  }
+
+  const anchorFrame = resolveAnchorFrame(track, preferredTimeMs);
+  if (!anchorFrame) {
+    return null;
+  }
+
+  return {
+    trackId: track.id,
+    className: track.className,
+    timeMs: anchorFrame.timeMs,
+    box: { ...anchorFrame.box },
+  };
 }
 
 function cloneLprPlateCandidates(candidates: LprPlateCandidate[]) {
@@ -109,6 +157,7 @@ export function buildDefaultLprState(overrides: Partial<LprSessionState> = {}): 
     job: cloneLprJobState(overrides.job ?? DEFAULT_LPR_JOB_STATE),
     targetTracks: cloneLprTargetTracks(overrides.targetTracks ?? []),
     selectedTargetTrackId: overrides.selectedTargetTrackId ?? null,
+    selectedTargetAnchor: cloneLprTargetAnchor(overrides.selectedTargetAnchor ?? null),
     analysisTrack: cloneLprTargetTrack(overrides.analysisTrack ?? null),
     samples: cloneLprSamples(overrides.samples ?? []),
     candidates: cloneLprPlateCandidates(overrides.candidates ?? []),
