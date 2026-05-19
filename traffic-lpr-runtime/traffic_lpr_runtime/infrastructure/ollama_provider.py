@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import socket
+import time
 import urllib.error
 import urllib.request
 from typing import Any
@@ -15,6 +16,9 @@ DEFAULT_OLLAMA_BASE_URL = 'https://lacresha-posological-steven.ngrok-free.dev'
 DEFAULT_OLLAMA_MODEL = 'qwen3.6:35b'
 DEFAULT_OLLAMA_TIMEOUT_S = 1200
 MIN_OLLAMA_TIMEOUT_S = 30
+DEFAULT_OLLAMA_RETRY_ATTEMPTS = 1
+DEFAULT_OLLAMA_RETRY_DELAY_S = 1.0
+RETRYABLE_OLLAMA_HTTP_STATUS_CODES = frozenset({502, 503, 504})
 
 
 def _resolve_timeout_seconds(value: int | str | None) -> int:
@@ -29,6 +33,13 @@ def _resolve_timeout_seconds(value: int | str | None) -> int:
 
 def _is_timeout_reason(reason: object) -> bool:
     return isinstance(reason, (TimeoutError, socket.timeout)) or 'timed out' in str(reason).lower()
+
+
+def _should_retry_http_error(code: int, detail: str) -> bool:
+    if code in RETRYABLE_OLLAMA_HTTP_STATUS_CODES:
+        return True
+    lowered_detail = detail.lower()
+    return 'err_ngrok_3004' in lowered_detail or 'ngrok gateway error' in lowered_detail
 
 
 class OllamaVisionProvider:
@@ -84,30 +95,35 @@ class OllamaVisionProvider:
             method='POST',
         )
 
-        try:
-            with urllib.request.urlopen(request, timeout=resolved_timeout_s) as response:
-                raw_response = response.read().decode('utf-8')
-        except urllib.error.HTTPError as error:
-            detail = error.read().decode('utf-8', errors='replace').strip()
-            raise RuntimeFailure(
-                f'Ollama request failed with HTTP {error.code}: {detail or error.reason}.',
-            ) from error
-        except urllib.error.URLError as error:
-            if _is_timeout_reason(error.reason):
+        for attempt in range(DEFAULT_OLLAMA_RETRY_ATTEMPTS + 1):
+            try:
+                with urllib.request.urlopen(request, timeout=resolved_timeout_s) as response:
+                    raw_response = response.read().decode('utf-8')
+                break
+            except urllib.error.HTTPError as error:
+                detail = error.read().decode('utf-8', errors='replace').strip()
+                if attempt < DEFAULT_OLLAMA_RETRY_ATTEMPTS and _should_retry_http_error(error.code, detail):
+                    time.sleep(DEFAULT_OLLAMA_RETRY_DELAY_S * (attempt + 1))
+                    continue
+                raise RuntimeFailure(
+                    f'Ollama request failed with HTTP {error.code}: {detail or error.reason}.',
+                ) from error
+            except urllib.error.URLError as error:
+                if _is_timeout_reason(error.reason):
+                    raise RuntimeFailure(
+                        f'Ollama request timed out after {resolved_timeout_s}s. Increase TRAFFIC_OLLAMA_TIMEOUT_S if the remote model is slow.',
+                    ) from error
+                raise RuntimeFailure(f'Unable to reach Ollama provider: {error.reason}.') from error
+            except (TimeoutError, socket.timeout) as error:
                 raise RuntimeFailure(
                     f'Ollama request timed out after {resolved_timeout_s}s. Increase TRAFFIC_OLLAMA_TIMEOUT_S if the remote model is slow.',
                 ) from error
-            raise RuntimeFailure(f'Unable to reach Ollama provider: {error.reason}.') from error
-        except (TimeoutError, socket.timeout) as error:
-            raise RuntimeFailure(
-                f'Ollama request timed out after {resolved_timeout_s}s. Increase TRAFFIC_OLLAMA_TIMEOUT_S if the remote model is slow.',
-            ) from error
-        except OSError as error:
-            if _is_timeout_reason(error):
-                raise RuntimeFailure(
-                    f'Ollama request timed out after {resolved_timeout_s}s. Increase TRAFFIC_OLLAMA_TIMEOUT_S if the remote model is slow.',
-                ) from error
-            raise
+            except OSError as error:
+                if _is_timeout_reason(error):
+                    raise RuntimeFailure(
+                        f'Ollama request timed out after {resolved_timeout_s}s. Increase TRAFFIC_OLLAMA_TIMEOUT_S if the remote model is slow.',
+                    ) from error
+                raise
 
         try:
             response_payload = json.loads(raw_response)
