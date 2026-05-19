@@ -1,19 +1,17 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from traffic_lpr_runtime.application.ai_provider import VisionLlmProvider
 from traffic_lpr_runtime.domain.errors import RuntimeFailure
 from traffic_lpr_runtime.infrastructure.ai_logging import JsonFileAiCallLogger, LoggingVisionLlmProvider
 from traffic_lpr_runtime.infrastructure.ollama_provider import OllamaVisionProvider
-
-
-DEFAULT_AI_PROVIDER = 'ollama'
+from traffic_lpr_runtime.infrastructure.runtime_settings import DEFAULT_AI_PROVIDER, get_runtime_settings
 
 
 def build_ai_provider(*, runtime_root: Path) -> VisionLlmProvider:
-    provider_name = (os.environ.get('TRAFFIC_AI_PROVIDER') or DEFAULT_AI_PROVIDER).strip().lower() or DEFAULT_AI_PROVIDER
+    settings = get_runtime_settings()
+    provider_name = settings.ai_provider
     if provider_name == 'ollama':
         provider: VisionLlmProvider = OllamaVisionProvider()
     else:

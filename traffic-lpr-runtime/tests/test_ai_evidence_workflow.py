@@ -11,6 +11,29 @@ from traffic_lpr_runtime.application.ai_evidence_workflow import AiEvidenceWorkf
 
 
 class AiEvidenceWorkflowTests(unittest.TestCase):
+    def _build_workflow(self, *, runtime_root: Path) -> AiEvidenceWorkflow:
+        class ProviderStub:
+            kind = 'stub'
+
+        return AiEvidenceWorkflow(
+            ensure_ready=lambda: None,
+            status=lambda: {'available': True, 'detail': 'ok'},
+            runtime_root=lambda: runtime_root,
+            dependencies=object(),
+            frame_reader=object(),
+            detect_targets=lambda *args, **kwargs: [],
+            analyze_frame=lambda payload: payload,
+            analyze_interval=lambda payload: {
+                'targetTracks': [],
+                'samples': [],
+                'candidates': [],
+                'acceptedCandidateId': None,
+                'review': None,
+                'provenance': None,
+            },
+            provider=ProviderStub(),
+        )
+
     def test_normalize_keyframes_returns_selected_keyframe_objects(self) -> None:
         frames = [
             RenderedFrame('fine-000', 1000, 0, 'fine-000', 'fine-000.jpg', 1280, 720),
@@ -38,29 +61,9 @@ class AiEvidenceWorkflowTests(unittest.TestCase):
         frame = RenderedFrame('fine-001', 1500, 1, 'fine-001', 'fine-001.jpg', 1280, 720)
         keyframe = SelectedKeyframe(frame=frame, description='關鍵幀')
 
-        class ProviderStub:
-            kind = 'stub'
-
         with tempfile.TemporaryDirectory() as temp_dir:
             runtime_root = Path(temp_dir)
-            workflow = AiEvidenceWorkflow(
-                ensure_ready=lambda: None,
-                status=lambda: {'available': True, 'detail': 'ok'},
-                runtime_root=lambda: runtime_root,
-                dependencies=object(),
-                frame_reader=object(),
-                detect_targets=lambda *args, **kwargs: [],
-                analyze_frame=lambda payload: payload,
-                analyze_interval=lambda payload: {
-                    'targetTracks': [],
-                    'samples': [],
-                    'candidates': [],
-                    'acceptedCandidateId': None,
-                    'review': None,
-                    'provenance': None,
-                },
-                provider=ProviderStub(),
-            )
+            workflow = self._build_workflow(runtime_root=runtime_root)
 
             workflow._probe_duration_ms = lambda source_path: 5000
             workflow._render_storyboard_frames = lambda **kwargs: [frame]
@@ -94,6 +97,70 @@ class AiEvidenceWorkflowTests(unittest.TestCase):
             self.assertEqual(result['summary'], 'fine')
             self.assertEqual(result['primaryAnchor']['frameId'], 'fine-001')
             self.assertEqual(result['keyframes'][0]['description'], '關鍵幀')
+
+    def test_build_projection_keeps_anchor_target_candidates_and_analysis_track(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workflow = self._build_workflow(runtime_root=Path(temp_dir))
+
+            projection = workflow._build_projection(
+                {
+                    'targetTracks': [{
+                        'id': 'analysis-track-1',
+                        'className': 'motorcycle',
+                        'label': 'analysis target',
+                        'confidence': 0.91,
+                        'frames': [{
+                            'id': 'analysis-frame-1',
+                            'timeMs': 6000,
+                            'box': {'x': 0.2, 'y': 0.3, 'width': 0.18, 'height': 0.22},
+                            'confidence': 0.91,
+                            'className': 'motorcycle',
+                        }],
+                    }],
+                    'samples': [],
+                    'candidates': [],
+                    'acceptedCandidateId': None,
+                    'review': None,
+                    'provenance': None,
+                },
+                {'startMs': 5800, 'endMs': 7200},
+                {
+                    'selectedTrackId': 'candidate-track-2',
+                    'candidateTracks': [
+                        {
+                            'id': 'candidate-track-1',
+                            'className': 'car',
+                            'label': 'car 1',
+                            'confidence': 0.88,
+                            'frames': [{
+                                'id': 'candidate-track-1-anchor',
+                                'timeMs': 6000,
+                                'box': {'x': 0.12, 'y': 0.2, 'width': 0.2, 'height': 0.18},
+                                'confidence': 0.88,
+                                'className': 'car',
+                            }],
+                        },
+                        {
+                            'id': 'candidate-track-2',
+                            'className': 'motorcycle',
+                            'label': 'candidate plate',
+                            'confidence': 0.92,
+                            'frames': [{
+                                'id': 'candidate-track-2-anchor',
+                                'timeMs': 6000,
+                                'box': {'x': 0.42, 'y': 0.18, 'width': 0.16, 'height': 0.2},
+                                'confidence': 0.92,
+                                'className': 'motorcycle',
+                            }],
+                        },
+                    ],
+                },
+            )
+
+            self.assertEqual(projection['selectedTargetTrackId'], 'candidate-track-2')
+            self.assertEqual(len(projection['targetTracks']), 2)
+            self.assertEqual(projection['targetTracks'][1]['label'], 'candidate plate')
+            self.assertEqual(projection['analysisTrack']['id'], 'analysis-track-1')
 
 
 if __name__ == '__main__':

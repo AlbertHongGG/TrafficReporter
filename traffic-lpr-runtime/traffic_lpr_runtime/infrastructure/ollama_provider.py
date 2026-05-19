@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import socket
 import time
 import urllib.error
@@ -10,14 +9,10 @@ from typing import Any
 
 from traffic_lpr_runtime.application.ai_provider import VisionChatImage
 from traffic_lpr_runtime.domain.errors import RuntimeFailure
+from traffic_lpr_runtime.infrastructure.runtime_settings import DEFAULT_OLLAMA_TIMEOUT_S, get_runtime_settings
 
 
-DEFAULT_OLLAMA_BASE_URL = 'https://lacresha-posological-steven.ngrok-free.dev'
-DEFAULT_OLLAMA_MODEL = 'qwen3.6:35b'
-DEFAULT_OLLAMA_TIMEOUT_S = 1200
 MIN_OLLAMA_TIMEOUT_S = 30
-DEFAULT_OLLAMA_RETRY_ATTEMPTS = 1
-DEFAULT_OLLAMA_RETRY_DELAY_S = 1.0
 RETRYABLE_OLLAMA_HTTP_STATUS_CODES = frozenset({502, 503, 504})
 
 
@@ -46,9 +41,12 @@ class OllamaVisionProvider:
     kind = 'ollama'
 
     def __init__(self, base_url: str | None = None, model: str | None = None) -> None:
-        self._base_url = (base_url or os.environ.get('TRAFFIC_OLLAMA_URL') or DEFAULT_OLLAMA_BASE_URL).rstrip('/')
-        self._model = model or os.environ.get('TRAFFIC_OLLAMA_MODEL') or DEFAULT_OLLAMA_MODEL
-        self._timeout_s = _resolve_timeout_seconds(os.environ.get('TRAFFIC_OLLAMA_TIMEOUT_S'))
+        settings = get_runtime_settings().ollama
+        self._base_url = (base_url or settings.base_url).rstrip('/')
+        self._model = model or settings.model
+        self._timeout_s = settings.timeout_s
+        self._retry_attempts = settings.retry_attempts
+        self._retry_delay_s = settings.retry_delay_s
 
     def describe(self) -> dict[str, object]:
         return {
@@ -95,15 +93,15 @@ class OllamaVisionProvider:
             method='POST',
         )
 
-        for attempt in range(DEFAULT_OLLAMA_RETRY_ATTEMPTS + 1):
+        for attempt in range(self._retry_attempts + 1):
             try:
                 with urllib.request.urlopen(request, timeout=resolved_timeout_s) as response:
                     raw_response = response.read().decode('utf-8')
                 break
             except urllib.error.HTTPError as error:
                 detail = error.read().decode('utf-8', errors='replace').strip()
-                if attempt < DEFAULT_OLLAMA_RETRY_ATTEMPTS and _should_retry_http_error(error.code, detail):
-                    time.sleep(DEFAULT_OLLAMA_RETRY_DELAY_S * (attempt + 1))
+                if attempt < self._retry_attempts and _should_retry_http_error(error.code, detail):
+                    time.sleep(self._retry_delay_s * (attempt + 1))
                     continue
                 raise RuntimeFailure(
                     f'Ollama request failed with HTTP {error.code}: {detail or error.reason}.',

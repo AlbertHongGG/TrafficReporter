@@ -151,13 +151,6 @@ export const AiEvidenceWindow: React.FC = () => {
     await getCurrentWindow().close();
   };
 
-  const handlePromptKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-      event.preventDefault();
-      void handleRun();
-    }
-  };
-
   return (
     <div className={styles.window}>
       <div data-tauri-drag-region className={styles.chrome}>
@@ -186,12 +179,8 @@ export const AiEvidenceWindow: React.FC = () => {
                   className={styles.textarea}
                   value={promptDraft}
                   onChange={(event) => setPromptDraft(event.target.value)}
-                  onKeyDown={handlePromptKeyDown}
                   placeholder="例如：NCE9762 的駕駛在路口右轉"
                 />
-                <div className={styles.promptMeta}>
-                  <span>Ctrl+Enter</span>
-                </div>
               </div>
 
               <div className={styles.commandColumn}>

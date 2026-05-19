@@ -12,6 +12,7 @@ from traffic_lpr_runtime.application.ai_provider import VisionChatImage, VisionL
 from traffic_lpr_runtime.domain.errors import RuntimeFailure
 from traffic_lpr_runtime.domain.models import TrackedRegion
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect, crop_image
+from traffic_lpr_runtime.infrastructure.runtime_settings import get_runtime_settings
 
 
 @dataclass(slots=True)
@@ -77,6 +78,7 @@ class AiEvidenceWorkflow:
 
     def run(self, payload: dict[str, Any]) -> dict[str, Any]:
         self._ensure_ready()
+        settings = get_runtime_settings()
         description = str(payload.get('description') or '').strip()
         if not description:
             raise RuntimeFailure('AI evidence analysis requires a non-empty natural-language description.')
@@ -90,9 +92,9 @@ class AiEvidenceWorkflow:
         country_hints = [str(value) for value in (payload.get('countryHints') or []) if str(value).strip()]
         analysis_profile_id = _optional_string(payload.get('analysisProfileId'))
         enable_developer_diagnostics = bool(payload.get('enableDeveloperDiagnostics'))
-        max_keyframes = max(8, min(10, int(payload.get('maxKeyframes') or 8)))
-        coarse_step_ms = max(1000, int(payload.get('coarseSampleEveryMs') or 4000))
-        fine_padding_ms = max(1000, int(payload.get('fineWindowPaddingMs') or 2000))
+        max_keyframes = max(8, min(10, int(payload.get('maxKeyframes') or settings.ai_evidence.max_keyframes)))
+        coarse_step_ms = max(1000, int(payload.get('coarseSampleEveryMs') or settings.ai_evidence.coarse_sample_every_ms))
+        fine_padding_ms = max(1000, int(payload.get('fineWindowPaddingMs') or settings.ai_evidence.fine_window_padding_ms))
 
         tool_calls: list[dict[str, Any]] = []
 
@@ -124,7 +126,7 @@ class AiEvidenceWorkflow:
         fine_step_ms = _resolve_fine_step_ms(
             start_ms=fine_start_ms,
             end_ms=fine_end_ms,
-            requested_step_ms=int(payload.get('fineSampleEveryMs') or 500),
+            requested_step_ms=int(payload.get('fineSampleEveryMs') or settings.ai_evidence.fine_sample_every_ms),
             preferred_samples=max_keyframes + 6,
             max_samples=24,
         )
@@ -201,7 +203,7 @@ class AiEvidenceWorkflow:
             }),
         )
 
-        projection = self._build_projection(interval_result, planned_interval)
+        projection = self._build_projection(interval_result, planned_interval, target_resolution)
         plate_candidate = _resolve_plate_candidate(projection['candidates'], projection['acceptedCandidateId'])
         keyframes = self._record_tool_call(
             tool_calls,
@@ -431,6 +433,11 @@ class AiEvidenceWorkflow:
                 image_base64=self._encode_chat_image(crop_path),
             ))
 
+        candidate_tracks = self._build_target_candidate_tracks(
+            anchor_frame=anchor_frame,
+            detection_payloads=detection_payloads,
+        )
+
         if plate_hint:
             for detection_payload in detection_payloads:
                 for candidate in detection_payload['candidates']:
@@ -443,6 +450,7 @@ class AiEvidenceWorkflow:
                             'confidence': 0.99,
                             'rationale': f'直接匹配描述中的車牌號碼 {candidate_text}。',
                             'selectedBox': detection_payload['selectedBox'],
+                            'candidateTracks': candidate_tracks,
                         }
 
         system_prompt = (
@@ -487,7 +495,49 @@ class AiEvidenceWorkflow:
             'confidence': float(response.get('confidence') or 0.5),
             'rationale': str(response.get('rationale') or f'預設選擇 {selected_payload["label"]}。').strip(),
             'selectedBox': selected_payload['selectedBox'],
+            'candidateTracks': candidate_tracks,
         }
+
+    def _build_target_candidate_tracks(
+        self,
+        *,
+        anchor_frame: RenderedFrame,
+        detection_payloads: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        tracks: list[dict[str, Any]] = []
+        for index, payload in enumerate(detection_payloads):
+            track_id = _optional_string(payload.get('trackId')) or f'ai-target-{index:02d}'
+            class_name = _optional_string(payload.get('className')) or 'vehicle'
+            normalized_box = payload.get('normalizedBox')
+            if not isinstance(normalized_box, dict):
+                continue
+            confidence = float(payload.get('confidence') or 0.0)
+            top_plate_text = _optional_string(payload.get('topPlateText'))
+            label = top_plate_text or f'{class_name} {index + 1}'
+            tracks.append({
+                'id': track_id,
+                'className': class_name,
+                'label': label,
+                'confidence': confidence,
+                'frames': [{
+                    'id': f'{track_id}-anchor',
+                    'timeMs': anchor_frame.time_ms,
+                    'box': normalized_box,
+                    'confidence': confidence,
+                    'className': class_name,
+                    'diagnostics': {
+                        'source': 'ai-evidence-target-resolution',
+                        'topPlateText': top_plate_text,
+                        'acceptedCandidateId': payload.get('acceptedCandidateId'),
+                    },
+                }],
+                'diagnostics': {
+                    'source': 'ai-evidence-target-resolution',
+                    'anchorFrameId': anchor_frame.frame_id,
+                    'topPlateText': top_plate_text,
+                },
+            })
+        return tracks
 
     def _render_detection_reference(
         self,
@@ -624,14 +674,31 @@ class AiEvidenceWorkflow:
             'frameHeight': frame_height,
         }
 
-    def _build_projection(self, interval_result: dict[str, Any], interval: dict[str, Any]) -> dict[str, Any]:
-        target_tracks = interval_result.get('targetTracks') or []
-        analysis_track = target_tracks[0] if target_tracks else None
+    def _build_projection(
+        self,
+        interval_result: dict[str, Any],
+        interval: dict[str, Any],
+        target_resolution: dict[str, Any],
+    ) -> dict[str, Any]:
+        interval_target_tracks = interval_result.get('targetTracks') or []
+        target_tracks = target_resolution.get('candidateTracks') or interval_target_tracks
+        selected_target_track_id = _optional_string(target_resolution.get('selectedTrackId'))
+        analysis_track = next(
+            (
+                track for track in interval_target_tracks
+                if isinstance(track, dict) and _optional_string(track.get('id')) == selected_target_track_id
+            ),
+            None,
+        )
+        if analysis_track is None:
+            analysis_track = interval_target_tracks[0] if interval_target_tracks else None
+        if selected_target_track_id is None and isinstance(analysis_track, dict):
+            selected_target_track_id = _optional_string(analysis_track.get('id'))
         return {
             'interval': interval,
             'targetTracks': target_tracks,
             'analysisTrack': analysis_track,
-            'selectedTargetTrackId': analysis_track.get('id') if isinstance(analysis_track, dict) else None,
+            'selectedTargetTrackId': selected_target_track_id,
             'samples': interval_result.get('samples') or [],
             'candidates': interval_result.get('candidates') or [],
             'acceptedCandidateId': interval_result.get('acceptedCandidateId'),

@@ -621,6 +621,22 @@
   color: var(--text-secondary);
 }
 
+.listItemTextStack {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.listItemMetaText {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 .listItemBadge {
   position: relative;
   z-index: 1;
@@ -637,6 +653,10 @@
 .listItemBtnActive .listItemBadge {
   color: var(--accent-primary);
   font-weight: 600;
+}
+
+.listItemBtnActive .listItemMetaText {
+  color: rgba(212, 175, 55, 0.86);
 }
 
 /* INFO ITEMS (Samples/History) */

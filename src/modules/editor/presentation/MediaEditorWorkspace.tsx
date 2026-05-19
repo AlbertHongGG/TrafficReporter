@@ -95,6 +95,7 @@ import {
   type PlaybackTimelineEntry,
   usePlaybackController,
 } from '../application/usePlaybackController';
+import { EDITOR_ENV } from '../../../shared/config/editorEnv';
 import styles from './MediaEditorWorkspace.module.css';
 
 const log = createLogger('MediaEditorWorkspace');
@@ -234,6 +235,21 @@ function buildLprCompletionDetail(
   const acceptedCandidate = candidates.find((candidate) => candidate.id === review?.acceptedCandidateId)
     ?? suggestedCandidate;
   return `Accepted ${acceptedCandidate.text}`;
+}
+
+function buildAiEvidenceProjectionDetail(
+  candidates: LprPlateCandidate[],
+  review: LprReviewState | null | undefined,
+  targetTracks: LprTargetTrack[],
+) {
+  const completionDetail = buildLprCompletionDetail(candidates, review);
+  if (completionDetail) {
+    return completionDetail;
+  }
+  if (targetTracks.length > 0) {
+    return `Resolved ${targetTracks.length} target ${targetTracks.length === 1 ? 'candidate' : 'candidates'}.`;
+  }
+  return 'AI evidence projection ready.';
 }
 
 function buildTargetTracksFromDetections(detections: LprTrackedRegion[]): LprTargetTrack[] {
@@ -376,17 +392,24 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
   );
   const lprAnalysisTrack = lprState.analysisTrack;
   const lprSelectedTrackFrame = useMemo(
-    () => (lprSelectedTrack ? findClosestTrackFrame(lprSelectedTrack, lprPreviewPlayheadMs) : null),
+    () => (lprSelectedTrack
+      ? findClosestTrackFrame(lprSelectedTrack, lprPreviewPlayheadMs, EDITOR_ENV.lprTargetOverlayToleranceMs)
+      : null),
     [lprPreviewPlayheadMs, lprSelectedTrack],
   );
   const lprOverlayTracks = useMemo(
-    () => (lprAnalysisTrack
-      ? [{ track: lprAnalysisTrack, selectionTrackId: lprState.selectedTargetTrackId }]
-      : lprState.targetTracks.map((track) => ({ track, selectionTrackId: track.id })))
+    () => ([
+      ...lprState.targetTracks
+        .filter((track) => track.id !== lprAnalysisTrack?.id)
+        .map((track) => ({ track, selectionTrackId: track.id })),
+      ...(lprAnalysisTrack
+        ? [{ track: lprAnalysisTrack, selectionTrackId: lprState.selectedTargetTrackId }]
+        : []),
+    ])
       .map(({ track, selectionTrackId }) => ({
         track,
         selectionTrackId,
-        frame: findClosestTrackFrame(track, deferredOverlayPlayheadMs),
+        frame: findClosestTrackFrame(track, deferredOverlayPlayheadMs, EDITOR_ENV.lprTargetOverlayToleranceMs),
       }))
       .filter((entry): entry is { track: LprTargetTrack; selectionTrackId: string | null; frame: LprTrackedRegion } => Boolean(entry.frame)),
     [deferredOverlayPlayheadMs, lprAnalysisTrack, lprState.selectedTargetTrackId, lprState.targetTracks],
@@ -1288,15 +1311,29 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
   const applyAiEvidenceProjection = useCallback((fileId: string, response: AiEvidenceResponse) => {
     const currentLprState = getLprSessionByFileId(state.analysis, fileId);
     const acceptedCandidateId = response.projection.acceptedCandidateId ?? null;
+    const projectedTargetTracks = response.projection.targetTracks;
+    const selectedTargetTrackId = response.projection.selectedTargetTrackId
+      ?? response.targetSelection?.selectedTrackId
+      ?? response.projection.analysisTrack?.id
+      ?? currentLprState.selectedTargetTrackId;
+    const projectedSelectedTrack = projectedTargetTracks.find((track) => track.id === selectedTargetTrackId) ?? null;
+    const selectedTargetAnchor = projectedSelectedTrack
+      ? buildLprTargetAnchor(projectedSelectedTrack, response.primaryAnchor?.timeMs ?? currentLprState.selectedTargetAnchor?.timeMs ?? null)
+      : response.projection.analysisTrack
+        ? buildLprTargetAnchor(response.projection.analysisTrack, response.primaryAnchor?.timeMs ?? response.projection.interval?.startMs ?? null)
+        : currentLprState.selectedTargetAnchor;
+    const projectionDetail = buildAiEvidenceProjectionDetail(
+      response.projection.candidates,
+      response.projection.review,
+      projectedTargetTracks,
+    );
     const projectedSession = buildDefaultLprState({
       ...currentLprState,
       workflowMode: response.projection.candidates.length > 0 ? 'review' : 'target',
       interval: response.projection.interval ?? currentLprState.interval,
-      targetTracks: response.projection.targetTracks,
-      selectedTargetTrackId: response.projection.selectedTargetTrackId ?? response.projection.analysisTrack?.id ?? currentLprState.selectedTargetTrackId,
-      selectedTargetAnchor: response.projection.analysisTrack
-        ? buildLprTargetAnchor(response.projection.analysisTrack, response.primaryAnchor?.timeMs ?? response.projection.interval?.startMs ?? null)
-        : currentLprState.selectedTargetAnchor,
+      targetTracks: projectedTargetTracks,
+      selectedTargetTrackId,
+      selectedTargetAnchor,
       analysisTrack: response.projection.analysisTrack ?? null,
       samples: response.projection.samples,
       candidates: response.projection.candidates,
@@ -1308,7 +1345,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         status: 'completed',
         progress: 1,
         stage: 'AI evidence',
-        detail: response.summary,
+        detail: projectionDetail,
         requestId: response.requestId ?? currentLprState.job.requestId,
         error: null,
         updatedAt: new Date().toISOString(),
@@ -1318,7 +1355,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
           id: createId('lpr-history'),
           createdAt: new Date().toISOString(),
           interval: response.projection.interval ?? null,
-          targetTrackId: response.projection.selectedTargetTrackId ?? response.projection.analysisTrack?.id ?? null,
+          targetTrackId: selectedTargetTrackId ?? response.projection.analysisTrack?.id ?? null,
           acceptedCandidateId,
           analysisProfileId: currentLprState.selectedAnalysisProfileId,
           developerDiagnosticsEnabled: currentLprState.showDeveloperDiagnostics,
@@ -1716,10 +1753,15 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
 
   const handleSelectTargetTrack = useCallback((targetTrackId: string, preferredTimeMs?: number | null) => {
     const targetTrack = lprState.targetTracks.find((track) => track.id === targetTrackId) ?? null;
-    const anchor = buildLprTargetAnchor(targetTrack, preferredTimeMs ?? livePlayheadMsRef.current);
+    const targetTimeMs = Math.max(0, Math.round(preferredTimeMs ?? livePlayheadMsRef.current));
+    const anchor = buildLprTargetAnchor(targetTrack, targetTimeMs);
 
     dispatch({ type: 'select-lpr-target-track', targetTrackId, anchor });
-  }, [dispatch, lprState.targetTracks]);
+    dispatch({ type: 'set-playhead', playheadMs: targetTimeMs });
+    if (currentIsPlaying) {
+      dispatch({ type: 'set-playing', isPlaying: false });
+    }
+  }, [currentIsPlaying, dispatch, lprState.targetTracks]);
 
   const handleExportLprEvidence = async () => {
     if (!activeFile || activeFile.asset.status !== 'ready' || (!lprTopCandidate && lprState.samples.length === 0)) {

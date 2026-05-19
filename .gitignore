@@ -47,3 +47,4 @@ traffic-lpr-runtime/**/__pycache__/
 datasets/*
 !datasets/README.md
 __pycache__/
+.env

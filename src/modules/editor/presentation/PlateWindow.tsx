@@ -548,23 +548,42 @@ export const PlateWindow: React.FC = () => {
                     <motion.div key="targets" variants={tabContentVariants} initial="hidden" animate="show" exit="exit" className={styles.listContainer}>
                       {lprState.targetTracks.length === 0 && <div className={styles.emptyInline}>No targets</div>}
                       {lprState.targetTracks.map((track) => (
-                        <motion.button
+                        <motion.div
                           layout
                           variants={listItemVariants}
-                          whileTap={{ scale: 0.98 }}
                           key={track.id}
-                          type="button"
-                          className={`${styles.listItemBtn} ${track.id === lprState.selectedTargetTrackId ? styles.listItemBtnActive : ''}`}
-                          onClick={() => void sendAction({
-                            type: 'select-target-track',
-                            targetTrackId: track.id,
-                            anchorTimeMs: track.frames[0]?.timeMs ?? snapshot.anchorTimeMs,
-                          })}
+                          className={styles.evidenceListHeader}
                         >
-                          <span className={styles.listItemMainText}>{track.label}</span>
-                          <span className={styles.listItemBadge}>{formatConfidence(track.confidence)}</span>
-                          {track.id === lprState.selectedTargetTrackId && <motion.div layoutId="activeTarget" className={styles.activeListItemGlow} />}
-                        </motion.button>
+                          <button
+                            type="button"
+                            className={styles.evidenceJumpInline}
+                            onClick={() => void sendAction({
+                              type: 'select-target-track',
+                              targetTrackId: track.id,
+                              anchorTimeMs: track.frames[0]?.timeMs ?? snapshot.anchorTimeMs,
+                            })}
+                            title={`Jump to ${formatSampleTimestamp(track.frames[0]?.timeMs ?? snapshot.anchorTimeMs)}`}
+                          >
+                            Jump
+                          </button>
+                          <button
+                            type="button"
+                            className={`${styles.listItemBtn} ${track.id === lprState.selectedTargetTrackId ? styles.listItemBtnActive : ''}`}
+                            onClick={() => void sendAction({
+                              type: 'select-target-track',
+                              targetTrackId: track.id,
+                              anchorTimeMs: track.frames[0]?.timeMs ?? snapshot.anchorTimeMs,
+                            })}
+                            title={`Select target and jump to ${formatSampleTimestamp(track.frames[0]?.timeMs ?? snapshot.anchorTimeMs)}`}
+                          >
+                            <span className={styles.listItemTextStack}>
+                              <span className={styles.listItemMainText}>{track.label}</span>
+                              <span className={styles.listItemMetaText}>Frame {formatSampleTimestamp(track.frames[0]?.timeMs ?? snapshot.anchorTimeMs)}</span>
+                            </span>
+                            <span className={styles.listItemBadge}>{formatConfidence(track.confidence)}</span>
+                            {track.id === lprState.selectedTargetTrackId && <motion.div layoutId="activeTarget" className={styles.activeListItemGlow} />}
+                          </button>
+                        </motion.div>
                       ))}
                     </motion.div>
                   )}
