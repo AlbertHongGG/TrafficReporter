@@ -1,18 +1,22 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   AlertCircle,
   Brain,
+  Car,
+  Clock,
   Download,
   Film,
-  LoaderCircle,
+  Image as ImageIcon,
   LocateFixed,
   PlayCircle,
   RotateCcw,
-  Shield,
+  StopCircle,
   X,
+  Crosshair,
 } from 'lucide-react';
 import { requestAiPanelWindowSession, sendAiPanelAction } from '../infrastructure/aiPanelApi';
 import {
@@ -33,9 +37,7 @@ function toLocalAsset(path: string | null | undefined) {
 }
 
 function downloadName(path: string | null | undefined, fallback: string) {
-  if (!path) {
-    return fallback;
-  }
+  if (!path) return fallback;
   return path.split(/[\\/]/).filter(Boolean).at(-1) ?? fallback;
 }
 
@@ -44,38 +46,11 @@ function compactLabel(value: string | null | undefined, fallback: string) {
   return trimmed ? trimmed : fallback;
 }
 
-function humanizeToken(value: string | null | undefined, fallback: string) {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed.replace(/[_-]+/g, ' ') : fallback;
-}
-
-function buildStatusLabel(
-  status: string | null | undefined,
-  runtimeReady: boolean,
-  hasResult: boolean,
-) {
-  switch (status) {
-    case 'queued':
-    case 'running':
-      return 'Running';
-    case 'failed':
-      return 'Failed';
-    case 'completed':
-      return 'Done';
-    case 'cancelled':
-      return 'Stopped';
-    default:
-      if (!runtimeReady) {
-        return 'Offline';
-      }
-      return hasResult ? 'Ready' : 'Idle';
-  }
-}
-
 export const AiEvidenceWindow: React.FC = () => {
   const [snapshot, setSnapshot] = React.useState<AiPanelSessionSnapshot | null>(null);
   const [promptDraft, setPromptDraft] = React.useState('');
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
+  const [isFocused, setIsFocused] = React.useState(false);
 
   const aiState = snapshot?.ai ?? buildDefaultAiEvidenceState();
   const result = aiState.result;
@@ -87,25 +62,18 @@ export const AiEvidenceWindow: React.FC = () => {
   const hasError = Boolean(errorMessage || aiState.job.error);
   const canRun = Boolean(snapshot?.hasActiveFile) && runtimeReady && !isRunning;
   const canReset = !isRunning && (Boolean(aiState.prompt.trim()) || Boolean(result));
-  const statusLabel = buildStatusLabel(aiState.job.status, runtimeReady, Boolean(result));
+
   const statusMessage = compactLabel(
     aiState.job.error || errorMessage || result?.summary || aiState.job.detail,
-    runtimeReady ? 'Ready for analysis.' : 'Local engine offline.',
+    ''
   );
-  const intervalLabel = result?.interval
-    ? `${formatTransportTime(result.interval.startMs)} - ${formatTransportTime(result.interval.endMs)}`
-    : 'No clip yet';
-  const anchorLabel = result?.primaryAnchor ? formatRulerLabel(result.primaryAnchor.timeMs) : 'No anchor';
-  const reviewLabel = humanizeToken(result?.projection.review?.status, 'idle');
 
   React.useEffect(() => {
     let disposed = false;
     let removeSessionListener: (() => void) | undefined;
 
     void listen<AiPanelSessionSnapshot>(AI_PANEL_SESSION_UPDATED_EVENT, (event) => {
-      if (disposed) {
-        return;
-      }
+      if (disposed) return;
       setSnapshot(event.payload);
       setErrorMessage(null);
     }).then((unlisten) => {
@@ -113,9 +81,7 @@ export const AiEvidenceWindow: React.FC = () => {
     });
 
     void requestAiPanelWindowSession().catch((error) => {
-      if (disposed) {
-        return;
-      }
+      if (disposed) return;
       setErrorMessage(error instanceof Error ? error.message : 'Unable to request the latest AI panel session.');
     });
 
@@ -167,163 +133,171 @@ export const AiEvidenceWindow: React.FC = () => {
 
       <div className={styles.body}>
         {!snapshot?.hasActiveFile ? (
-          <div className={styles.emptyState}>
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className={styles.emptyState}>
             <div className={styles.emptyStateIcon}><Film size={28} /></div>
             <p>Import a file to start analysis.</p>
-          </div>
+          </motion.div>
         ) : (
           <>
-            <section className={styles.composer}>
-              <div className={styles.promptArea}>
-                <textarea
-                  className={styles.textarea}
-                  value={promptDraft}
-                  onChange={(event) => setPromptDraft(event.target.value)}
-                  placeholder="例如：NCE9762 的駕駛在路口右轉"
-                />
-              </div>
-
-              <div className={styles.commandColumn}>
-                <button type="button" className={styles.actionPrimary} onClick={() => void handleRun()} disabled={!canRun}>
-                  {isRunning ? <LoaderCircle size={16} className={styles.spinningIcon} /> : <PlayCircle size={16} />}
-                  Run
-                </button>
-                <button type="button" className={styles.actionButton} onClick={() => void runPanelAction({ type: 'cancel-job' })} disabled={!isRunning}>
-                  <X size={15} />
-                  Cancel
-                </button>
-                <button type="button" className={styles.actionButton} onClick={() => void runPanelAction({ type: 'reset-session' })} disabled={!canReset}>
-                  <RotateCcw size={15} />
-                  Reset
-                </button>
-              </div>
-            </section>
-
-            <div className={styles.summaryGrid}>
-              <section className={styles.card}>
-                <div className={styles.cardHeader}>
-                  <div className={styles.cardHeaderLeft}>
-                    <span className={`${styles.statusBadge} ${runtimeReady ? styles.statusBadgeReady : styles.statusBadgeMuted}`}>{statusLabel}</span>
-                    <span className={`${styles.runtimeBadge} ${runtimeReady ? styles.runtimeBadgeReady : ''}`}>{runtimeReady ? 'Local Engine' : 'Offline'}</span>
-                  </div>
-                  <strong className={styles.percentValue}>{Math.round(progress * 100)}%</strong>
+            <motion.section layout className={`${styles.composer} ${isFocused ? styles.composerFocus : ''}`}>
+              <textarea
+                className={styles.textarea}
+                value={promptDraft}
+                onChange={(event) => setPromptDraft(event.target.value)}
+                onFocus={() => setIsFocused(true)}
+                onBlur={() => setIsFocused(false)}
+                placeholder="例如：NCE9762 車牌的駕駛在路口右轉"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    void handleRun();
+                  }
+                }}
+              />
+              <div className={styles.composerToolbar}>
+                <div className={styles.composerStatus}>
+                  <div className={`${styles.statusDot} ${hasError ? styles.statusDotError : isRunning ? styles.statusDotRunning : runtimeReady ? styles.statusDotReady : ''}`} title={runtimeReady ? 'Engine Ready' : 'Engine Offline'} />
+                  {runtimeReady ? 'Engine Ready' : 'Engine Offline'}
                 </div>
-
-                <div className={styles.progressTrack}>
-                  <div className={styles.progressValue} style={{ width: `${Math.round(progress * 100)}%` }} />
-                </div>
-
-                <div className={styles.metricGrid}>
-                  <div className={styles.metricCard}>
-                    <span>Plate</span>
-                    <strong>{compactLabel(result?.plateNumber, '—')}</strong>
-                  </div>
-                  <div className={styles.metricCard}>
-                    <span>Anchor</span>
-                    <strong>{anchorLabel}</strong>
-                  </div>
-                  <div className={styles.metricCard}>
-                    <span>Playhead</span>
-                    <strong>{formatRulerLabel(snapshot?.playheadMs ?? 0)}</strong>
-                  </div>
-                </div>
-
-                <div className={`${styles.messageRow} ${hasError ? styles.messageRowError : ''}`}>
-                  {hasError ? <AlertCircle size={14} /> : isRunning ? <LoaderCircle size={14} className={styles.spinningIcon} /> : <Shield size={14} />}
-                  <span>{statusMessage}</span>
-                </div>
-              </section>
-
-              <section className={styles.card}>
-                <div className={styles.cardHeader}>
-                  <span className={styles.cardTitle}>Clip</span>
-                  {clipHref && (
-                    <a className={styles.inlineAction} href={clipHref} download={downloadName(result?.clipPath, 'ai-evidence-clip.mp4')}>
-                      <Download size={14} />
-                    </a>
+                <div className={styles.composerActions}>
+                  {canReset && (
+                    <button type="button" className={styles.actionBtn} onClick={() => void runPanelAction({ type: 'reset-session' })}>
+                      <RotateCcw size={14} /> Reset
+                    </button>
+                  )}
+                  {isRunning ? (
+                    <button type="button" className={styles.actionBtn} onClick={() => void runPanelAction({ type: 'cancel-job' })}>
+                      <StopCircle size={14} /> Cancel
+                    </button>
+                  ) : (
+                    <button type="button" className={styles.runBtn} onClick={() => void handleRun()} disabled={!canRun}>
+                      <Brain size={14} /> Run
+                    </button>
                   )}
                 </div>
-
-                <div className={styles.clipStack}>
-                  <button
-                    type="button"
-                    className={styles.seekRow}
-                    onClick={() => result?.interval && void runPanelAction({ type: 'seek-to-time', timeMs: result.interval.startMs })}
-                    disabled={!result?.interval}
-                  >
-                    <PlayCircle size={14} />
-                    <span>{intervalLabel}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.seekRow}
-                    onClick={() => result?.primaryAnchor && void runPanelAction({ type: 'seek-to-time', timeMs: result.primaryAnchor.timeMs })}
-                    disabled={!result?.primaryAnchor}
-                  >
-                    <LocateFixed size={14} />
-                    <span>{anchorLabel}</span>
-                  </button>
-                </div>
-
-                <div className={styles.clipMetaRow}>
-                  <span className={styles.metaPill}>{reviewLabel}</span>
-                  <span className={styles.metaPill}>{keyframes.length} frame(s)</span>
-                </div>
-              </section>
-            </div>
-
-            <section className={`${styles.card} ${styles.framesCard}`}>
-              <div className={styles.cardHeader}>
-                <span className={styles.cardTitle}>Frames</span>
-                <span className={styles.countBadge}>{keyframes.length}</span>
               </div>
+            </motion.section>
 
-              {keyframes.length > 0 ? (
-                <div className={styles.keyframeRail}>
-                  {keyframes.map((keyframe) => {
-                    const imageHref = toLocalAsset(keyframe.frame.imagePath);
-                    return (
-                      <article key={keyframe.frame.frameId} className={styles.keyframeCard}>
-                        <div className={styles.keyframeMedia}>
-                          {imageHref ? (
-                            <img className={styles.keyframeImage} src={imageHref} alt={keyframe.description || keyframe.frame.label} />
-                          ) : (
-                            <div className={styles.keyframeFallback}><Film size={18} /></div>
-                          )}
-                        </div>
-
-                        <div className={styles.keyframeBody}>
-                          <strong className={styles.keyframeTime}>{formatRulerLabel(keyframe.frame.timeMs)}</strong>
-                          <p className={styles.keyframeText}>{compactLabel(keyframe.description, keyframe.frame.label)}</p>
-                          <div className={styles.keyframeActions}>
-                            <button
-                              type="button"
-                              className={styles.inlineButton}
-                              onClick={() => void runPanelAction({ type: 'seek-to-time', timeMs: keyframe.frame.timeMs })}
-                            >
-                              <LocateFixed size={13} />
-                              Locate
-                            </button>
-                            {imageHref && (
-                              <a
-                                className={styles.inlineButton}
-                                href={imageHref}
-                                download={downloadName(keyframe.frame.imagePath, `${keyframe.frame.frameId}.jpg`)}
-                              >
-                                <Download size={13} />
-                                Save
-                              </a>
-                            )}
-                          </div>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className={styles.framesEmpty}>Awaiting evidence</div>
+            <AnimatePresence mode="popLayout">
+              {hasError && statusMessage && (
+                <motion.div layout initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className={styles.errorBanner}>
+                  <AlertCircle size={14} /> {statusMessage}
+                </motion.div>
               )}
-            </section>
+
+              {/* Phase 1: Idle (No Result, Not Running) */}
+              {!result && !isRunning && (
+                <motion.div key="awaiting" layout initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className={styles.awaitingState}>
+                  <Brain size={48} className={styles.awaitingIcon} />
+                  <span className={styles.awaitingText}>Describe an event to find evidence.</span>
+                </motion.div>
+              )}
+
+              {/* Phase 2: Running */}
+              {isRunning && (
+                <motion.div key="running" layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className={styles.progressSection}>
+                  <div className={styles.progressHeader}>
+                    <div className={styles.progressStatusRow}>
+                      <Brain size={14} className={styles.spinningIcon} />
+                      <span>{statusMessage || 'Analyzing...'}</span>
+                    </div>
+                    <span className={styles.progressPercent}>{Math.round(progress * 100)}%</span>
+                  </div>
+                  <div className={styles.progressTrack}>
+                    <div className={styles.progressFill} style={{ width: `${Math.round(progress * 100)}%` }} />
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Phase 3: Completed / Result */}
+              {result && !isRunning && (
+                <motion.div key="results" layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className={styles.resultsArea}>
+
+                  <div className={styles.metricsRow}>
+                    {result.plateNumber && (
+                      <div className={styles.metricPill}>
+                        <Car size={14} className={styles.metricIcon} />
+                        <span className={styles.metricValue}>{result.plateNumber}</span>
+                      </div>
+                    )}
+                    {result.primaryAnchor && (
+                      <button className={styles.metricPill} onClick={() => void runPanelAction({ type: 'seek-to-time', timeMs: result.primaryAnchor!.timeMs })}>
+                        <Crosshair size={14} className={styles.metricIcon} />
+                        <span className={styles.metricValue}>{formatRulerLabel(result.primaryAnchor.timeMs)}</span>
+                      </button>
+                    )}
+                    {result.interval && (
+                      <button className={styles.metricPill} onClick={() => void runPanelAction({ type: 'seek-to-time', timeMs: result.interval!.startMs })}>
+                        <Clock size={14} className={styles.metricIcon} />
+                        <span className={styles.metricValue}>{formatTransportTime(result.interval.startMs)} - {formatTransportTime(result.interval.endMs)}</span>
+                      </button>
+                    )}
+                    {clipHref && (
+                      <a className={styles.metricPill} href={clipHref} download={downloadName(result.clipPath, 'ai-evidence-clip.mp4')}>
+                        <Download size={14} className={styles.metricIcon} />
+                        <span className={styles.metricValue}>Clip</span>
+                      </a>
+                    )}
+                    {snapshot?.playheadMs !== undefined && (
+                      <div className={styles.metricPill}>
+                        <PlayCircle size={14} className={styles.metricIcon} />
+                        <span className={styles.metricValue}>{formatRulerLabel(snapshot.playheadMs)}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {keyframes.length > 0 && (
+                    <div className={styles.framesGrid}>
+                      {keyframes.map((keyframe, i) => {
+                        const imageHref = toLocalAsset(keyframe.frame.imagePath);
+                        return (
+                          <motion.article
+                            key={keyframe.frame.frameId}
+                            className={styles.frameCard}
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ delay: i * 0.05 }}
+                          >
+                            {imageHref ? (
+                              <img className={styles.frameImg} src={imageHref} alt={keyframe.description || keyframe.frame.label} />
+                            ) : (
+                              <div className={styles.frameFallback}><ImageIcon size={24} /></div>
+                            )}
+
+                            <div className={styles.frameOverlay}>
+                              <div className={styles.frameHeader}>
+                                <span className={styles.frameTime}>{formatRulerLabel(keyframe.frame.timeMs)}</span>
+                                <div className={styles.frameActions}>
+                                  <button
+                                    type="button"
+                                    className={styles.frameActionBtn}
+                                    onClick={() => void runPanelAction({ type: 'seek-to-time', timeMs: keyframe.frame.timeMs })}
+                                    title="Locate"
+                                  >
+                                    <LocateFixed size={13} />
+                                  </button>
+                                  {imageHref && (
+                                    <a
+                                      className={styles.frameActionBtn}
+                                      href={imageHref}
+                                      download={downloadName(keyframe.frame.imagePath, `${keyframe.frame.frameId}.jpg`)}
+                                      title="Save"
+                                    >
+                                      <Download size={13} />
+                                    </a>
+                                  )}
+                                </div>
+                              </div>
+                              <p className={styles.frameDesc}>{compactLabel(keyframe.description, keyframe.frame.label)}</p>
+                            </div>
+                          </motion.article>
+                        );
+                      })}
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </>
         )}
       </div>
