@@ -13,6 +13,7 @@ import {
   Globe,
   Image,
   LoaderCircle,
+  LocateFixed,
   RefreshCw,
   RotateCcw,
   Search,
@@ -548,42 +549,29 @@ export const PlateWindow: React.FC = () => {
                     <motion.div key="targets" variants={tabContentVariants} initial="hidden" animate="show" exit="exit" className={styles.listContainer}>
                       {lprState.targetTracks.length === 0 && <div className={styles.emptyInline}>No targets</div>}
                       {lprState.targetTracks.map((track) => (
-                        <motion.div
+                        <motion.button
                           layout
                           variants={listItemVariants}
                           key={track.id}
-                          className={styles.evidenceListHeader}
+                          type="button"
+                          className={`${styles.targetRowBtn} ${track.id === lprState.selectedTargetTrackId ? styles.targetRowBtnActive : ''}`}
+                          onClick={() => void sendAction({
+                            type: 'select-target-track',
+                            targetTrackId: track.id,
+                            anchorTimeMs: track.frames[0]?.timeMs ?? snapshot.anchorTimeMs,
+                          })}
                         >
-                          <button
-                            type="button"
-                            className={styles.evidenceJumpInline}
-                            onClick={() => void sendAction({
-                              type: 'select-target-track',
-                              targetTrackId: track.id,
-                              anchorTimeMs: track.frames[0]?.timeMs ?? snapshot.anchorTimeMs,
-                            })}
-                            title={`Jump to ${formatSampleTimestamp(track.frames[0]?.timeMs ?? snapshot.anchorTimeMs)}`}
-                          >
-                            Jump
-                          </button>
-                          <button
-                            type="button"
-                            className={`${styles.listItemBtn} ${track.id === lprState.selectedTargetTrackId ? styles.listItemBtnActive : ''}`}
-                            onClick={() => void sendAction({
-                              type: 'select-target-track',
-                              targetTrackId: track.id,
-                              anchorTimeMs: track.frames[0]?.timeMs ?? snapshot.anchorTimeMs,
-                            })}
-                            title={`Select target and jump to ${formatSampleTimestamp(track.frames[0]?.timeMs ?? snapshot.anchorTimeMs)}`}
-                          >
-                            <span className={styles.listItemTextStack}>
-                              <span className={styles.listItemMainText}>{track.label}</span>
-                              <span className={styles.listItemMetaText}>Frame {formatSampleTimestamp(track.frames[0]?.timeMs ?? snapshot.anchorTimeMs)}</span>
+                          <div className={styles.targetRowContent}>
+                            <div className={styles.targetRowHeader}>
+                              <span className={styles.targetRowTitle}>{track.label}</span>
+                              <span className={styles.targetRowConfidence}>{formatConfidence(track.confidence)}</span>
+                            </div>
+                            <span className={styles.targetRowFrame}>
+                              Frame {formatSampleTimestamp(track.frames[0]?.timeMs ?? snapshot.anchorTimeMs)}
                             </span>
-                            <span className={styles.listItemBadge}>{formatConfidence(track.confidence)}</span>
-                            {track.id === lprState.selectedTargetTrackId && <motion.div layoutId="activeTarget" className={styles.activeListItemGlow} />}
-                          </button>
-                        </motion.div>
+                          </div>
+                          {track.id === lprState.selectedTargetTrackId && <motion.div layoutId="activeTarget" className={styles.activeListItemGlow} />}
+                        </motion.button>
                       ))}
                     </motion.div>
                   )}
@@ -629,27 +617,26 @@ export const PlateWindow: React.FC = () => {
                             <div className={styles.evidenceListHeader}>
                               <button
                                 type="button"
-                                className={styles.evidenceJumpInline}
-                                onClick={() => void handleSeekToSample(entry.sample.id, entry.sample.timeMs)}
-                              >
-                                Jump
-                              </button>
-                              <button
-                                type="button"
-                                className={styles.evidenceRowButton}
+                                className={styles.evidenceRowContentBtn}
                                 onClick={() => {
                                   setSelectedEvidenceSampleId(entry.sample.id);
                                   setIsEvidenceSelectionPinned(true);
                                 }}
                               >
-                                <div className={styles.evidenceChipTopRow}>
-                                  <span className={styles.evidenceChipTime}>{formatSampleTimestamp(entry.sample.timeMs)}</span>
-                                  <div className={styles.evidenceChipBadges}>
-                                    <span className={styles.evidenceMiniPill}>{entry.artifacts.length}</span>
-                                    <span className={styles.evidenceChipBadge}>{formatConfidence(entry.sample.quality?.overallScore ?? 0)}</span>
-                                  </div>
+                                <span className={styles.evidenceChipTime}>{formatSampleTimestamp(entry.sample.timeMs)}</span>
+                                <div className={styles.evidencePlateRow}>
+                                  <strong className={styles.evidenceChipText}>{entry.matchingCandidate?.text ?? samplePrimaryText(entry.sample)}</strong>
+                                  <span className={styles.evidenceChipBadge}>{formatConfidence(entry.sample.quality?.overallScore ?? 0)}</span>
                                 </div>
-                                <strong className={styles.evidenceChipText}>{entry.matchingCandidate?.text ?? samplePrimaryText(entry.sample)}</strong>
+                              </button>
+                              
+                              <button
+                                type="button"
+                                className={styles.evidenceJumpIconBtn}
+                                onClick={() => void handleSeekToSample(entry.sample.id, entry.sample.timeMs)}
+                                title="Jump to this frame"
+                              >
+                                <LocateFixed size={14} />
                               </button>
                             </div>
 
@@ -664,22 +651,57 @@ export const PlateWindow: React.FC = () => {
                                   ))}
                                 </div>
 
-                                {lprState.showDeveloperDiagnostics && (
-                                  <div className={styles.evidenceMetaRail}>
-                                    {qualityMetrics(entry.sample).map(([label, value]) => (
-                                      <div key={label} className={styles.evidenceMetricPill}>
-                                        <span>{label}</span>
-                                        <strong>{formatMetric(value)}</strong>
-                                      </div>
-                                    ))}
-                                    {evidenceCandidates(entry.sample).map((candidate) => (
-                                      <div key={candidate.id} className={styles.evidenceCandidatePill}>
-                                        <span>{candidate.text}</span>
-                                        <strong>{formatConfidence(candidate.confidence)}</strong>
-                                      </div>
-                                    ))}
+                                <div className={styles.evidenceMetaRail}>
+                                  <div className={styles.evidenceMetaSection}>
+                                    <div className={styles.evidenceMetaHeader}>
+                                      <Zap size={14} className={styles.metaIcon} />
+                                      <span className={styles.evidenceMetaTitle}>Image Quality</span>
+                                    </div>
+                                    <div className={styles.evidenceMetricList}>
+                                      {qualityMetrics(entry.sample).map(([label, value]) => {
+                                        const percent = formatMetric(value);
+                                        return (
+                                          <div key={label} className={styles.evidenceMetricRow}>
+                                            <div className={styles.metricHeader}>
+                                              <span className={styles.metricLabel}>{label}</span>
+                                              <strong className={styles.metricValue}>{percent}</strong>
+                                            </div>
+                                            <div className={styles.metricTrack}>
+                                              <div className={styles.metricFill} style={{ width: percent }} />
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
                                   </div>
-                                )}
+                                  
+                                  {entry.sample.candidates.length > 0 && (
+                                    <div className={styles.evidenceMetaSection}>
+                                      <div className={styles.evidenceMetaHeader}>
+                                        <Database size={14} className={styles.metaIcon} />
+                                        <span className={styles.evidenceMetaTitle}>Candidates</span>
+                                      </div>
+                                      <div className={styles.evidenceCandidateList}>
+                                        {evidenceCandidates(entry.sample).map((candidate, idx) => {
+                                          const isTop = idx === 0;
+                                          const percent = formatConfidence(candidate.confidence);
+                                          return (
+                                            <div key={candidate.id} className={`${styles.evidenceCandidateRow} ${isTop ? styles.candidateRowTop : ''}`}>
+                                              <div className={styles.candidateHeader}>
+                                                <span className={styles.candidateRank}>#{idx + 1}</span>
+                                                <span className={styles.candidateText}>{candidate.text}</span>
+                                                <strong className={styles.candidateScore}>{percent}</strong>
+                                              </div>
+                                              <div className={styles.metricTrack}>
+                                                <div className={`${styles.metricFill} ${isTop ? styles.metricFillTop : ''}`} style={{ width: percent }} />
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                             )}
                           </motion.div>

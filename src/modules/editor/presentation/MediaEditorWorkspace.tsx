@@ -541,7 +541,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     setLiveOverlayPlayheadMs(playheadMs);
 
     if (currentTimecodeRef.current) {
-      currentTimecodeRef.current.textContent = formatTransportTime(playheadMs);
+      currentTimecodeRef.current.textContent = formatRulerLabel(playheadMs);
     }
 
     if (timelineCanvasRef.current) {
@@ -1076,16 +1076,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     await importMediaPaths(Array.isArray(selection) ? selection : [selection]);
   };
 
-  const handleResetWorkspace = () => {
-    if (state.files.length > 0 && !window.confirm('Clear the current workspace? This cannot be saved.')) {
-      return;
-    }
 
-    stopPlayback();
-    dispatch({ type: 'reset-workspace' });
-    setWorkspaceFeedback(null);
-    setImportFeedback(null);
-  };
 
   const handleSelectFile = (fileId: string) => {
     stopPlayback();
@@ -2104,17 +2095,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
   return (
     <div className={styles.editor}>
       <section className={styles.toolbar}>
-        <div className={styles.workspaceMeta}>
-          <strong>{state.workspaceName}</strong>
-          <span>{state.files.length} file(s)</span>
-        </div>
-
         <div className={styles.toolbarActions}>
-          <button type="button" className={styles.toolbarButton} onClick={handleResetWorkspace}>
-            <FilePlus2 size={14} />
-            New
-          </button>
-          <div className={styles.toolbarDivider} />
           <button
             type="button"
             className={styles.toolbarButton}
@@ -2303,9 +2284,9 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
           <div className={styles.transportRow}>
             <div className={styles.transportLeftGroup}>
               <div className={styles.transportTime}>
-                <span ref={currentTimecodeRef} className={styles.timecode}>{formatTransportTime(displayPlayheadMs)}</span>
+                <span ref={currentTimecodeRef} className={styles.timecode}>{formatRulerLabel(displayPlayheadMs)}</span>
                 <span className={styles.timecodeDivider}>/</span>
-                <span className={styles.timecodeDuration}>{formatTransportTime(timelineDurationMs)}</span>
+                <span className={styles.timecodeDuration}>{formatRulerLabel(timelineDurationMs)}</span>
               </div>
               <div className={styles.toolbarDivider} />
               <div className={styles.timelineActions}>

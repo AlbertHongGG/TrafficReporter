@@ -659,6 +659,70 @@
   color: rgba(212, 175, 55, 0.86);
 }
 
+/* TARGETS ROW */
+.targetRowBtn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 12px 16px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  outline: none;
+  overflow: hidden;
+  cursor: pointer;
+  text-align: left;
+  flex-shrink: 0;
+}
+
+.targetRowBtn:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.targetRowBtnActive {
+  background: rgba(212, 175, 55, 0.06);
+  border-color: rgba(212, 175, 55, 0.4);
+}
+
+.targetRowContent {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.targetRowHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.targetRowTitle {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.targetRowConfidence {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent-primary);
+  background: rgba(212, 175, 55, 0.1);
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.targetRowFrame {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 /* INFO ITEMS (Samples/History) */
 .infoItemRow {
   justify-content: flex-start;
@@ -759,7 +823,8 @@
 
 .evidenceListHeader {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 12px;
 }
 
@@ -782,12 +847,31 @@
   color: #fff;
 }
 
-.evidenceRowButton {
+.evidenceJumpIconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.evidenceJumpIconBtn:hover {
+  background: rgba(212, 175, 55, 0.15);
+  color: var(--accent-primary);
+}
+
+.evidenceRowContentBtn {
   display: flex;
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
   padding: 0;
   border: none;
   background: transparent;
@@ -795,10 +879,9 @@
   cursor: pointer;
 }
 
-.evidenceChipTopRow {
+.evidencePlateRow {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
 }
 
@@ -808,16 +891,21 @@
   color: var(--accent-primary);
 }
 
-.evidenceChipBadge {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--text-muted);
-}
-
 .evidenceChipText {
   color: #fff;
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+}
+
+.evidenceChipBadge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
 }
 
 .evidenceChipReason {
@@ -829,8 +917,7 @@
 .evidenceExpanded {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding-left: 70px;
+  gap: 16px;
 }
 
 .evidencePreviewGrid {
@@ -865,7 +952,7 @@
   background: rgba(0, 0, 0, 0.38);
 }
 
-.evidenceMetaGrid {
+.evidenceMetaRail {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 12px;
@@ -881,6 +968,18 @@
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
+.evidenceMetaHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.metaIcon {
+  color: var(--accent-primary);
+  opacity: 0.8;
+}
+
 .evidenceMetaTitle {
   font-size: 11px;
   font-weight: 700;
@@ -893,32 +992,85 @@
 .evidenceCandidateList {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
 }
 
 .evidenceMetricRow,
 .evidenceCandidateRow {
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.metricHeader,
+.candidateHeader {
+  display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+}
+
+.metricLabel {
   font-size: 12px;
   color: var(--text-secondary);
 }
 
-.evidenceMetricRow strong,
-.evidenceCandidateRow strong {
+.metricValue,
+.candidateScore {
+  font-family: var(--font-mono);
+  font-size: 12px;
   color: #fff;
+  font-weight: 600;
+}
+
+.metricTrack {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.metricFill {
+  height: 100%;
+  background: var(--text-secondary);
+  border-radius: 2px;
+}
+
+.metricFillTop {
+  background: var(--accent-primary);
+  box-shadow: 0 0 8px rgba(212, 175, 55, 0.4);
+}
+
+.candidateHeader {
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+.candidateRank {
   font-family: var(--font-mono);
   font-size: 11px;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.08);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.candidateText {
+  flex: 1;
+  font-size: 13px;
+  color: #fff;
+}
+
+.candidateRowTop .candidateText {
+  font-weight: 700;
+  color: var(--accent-primary);
+}
+
+.candidateRowTop .candidateRank {
+  color: #000;
+  background: var(--accent-primary);
 }
 
 @media (max-width: 860px) {
-  .evidenceListHeader {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
   .evidenceExpanded {
     padding-left: 0;
   }

@@ -51,6 +51,7 @@ export const AiEvidenceWindow: React.FC = () => {
   const [promptDraft, setPromptDraft] = React.useState('');
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const [isFocused, setIsFocused] = React.useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = React.useState(0);
 
   const aiState = snapshot?.ai ?? buildDefaultAiEvidenceState();
   const result = aiState.result;
@@ -90,6 +91,20 @@ export const AiEvidenceWindow: React.FC = () => {
       removeSessionListener?.();
     };
   }, []);
+
+  React.useEffect(() => {
+    let intervalId: ReturnType<typeof setInterval>;
+    if (isRunning) {
+      intervalId = setInterval(() => {
+        const startedAt = aiState.job.updatedAt ? new Date(aiState.job.updatedAt).getTime() : Date.now();
+        const elapsed = (Date.now() - startedAt) / 1000;
+        setElapsedSeconds(elapsed);
+      }, 100);
+    } else {
+      setElapsedSeconds(0);
+    }
+    return () => clearInterval(intervalId);
+  }, [isRunning, aiState.job.updatedAt]);
 
   React.useEffect(() => {
     setPromptDraft(snapshot?.ai.prompt ?? '');
@@ -200,6 +215,7 @@ export const AiEvidenceWindow: React.FC = () => {
                     <div className={styles.progressStatusRow}>
                       <Brain size={14} className={styles.spinningIcon} />
                       <span>{statusMessage || 'Analyzing...'}</span>
+                      <span className={styles.elapsedTimer}>{elapsedSeconds.toFixed(1)}s</span>
                     </div>
                     <span className={styles.progressPercent}>{Math.round(progress * 100)}%</span>
                   </div>
@@ -238,13 +254,13 @@ export const AiEvidenceWindow: React.FC = () => {
                         <span className={styles.metricValue}>Clip</span>
                       </a>
                     )}
-                    {snapshot?.playheadMs !== undefined && (
-                      <div className={styles.metricPill}>
-                        <PlayCircle size={14} className={styles.metricIcon} />
-                        <span className={styles.metricValue}>{formatRulerLabel(snapshot.playheadMs)}</span>
-                      </div>
-                    )}
                   </div>
+                  
+                  {result.summary && (
+                    <div className={styles.resultSummary}>
+                      <p>{result.summary}</p>
+                    </div>
+                  )}
 
                   {keyframes.length > 0 && (
                     <div className={styles.framesGrid}>
