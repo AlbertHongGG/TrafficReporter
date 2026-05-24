@@ -7,8 +7,9 @@ Build benchmarks around target-centric hard cases from moving-camera footage.
 - `benchmarks/scripts/` stores generator entrypoints and shared helpers.
 - `benchmarks/manifests/templates/` stores hand-authored templates such as the local sample manifest.
 - `benchmarks/manifests/public/` stores committed public benchmark manifests.
-- `.runtime/benchmarks/cache/` stores disposable download caches.
-- `.runtime/benchmarks/datasets/` stores materialized benchmark images referenced by generated manifests.
+- `../.runtime/cache/benchmark/cache/` stores disposable download caches.
+- `../.runtime/cache/benchmark/datasets/` stores materialized benchmark images referenced by generated manifests.
+- `../.runtime/cache/benchmark/manifests/local/` stores generated machine-local manifests.
 
 Keep only reusable benchmark definitions under `benchmarks/`. Smoke outputs, extracted images, transient downloads, and one-off analysis artifacts belong under `.runtime/` and can be deleted safely.
 
@@ -50,7 +51,7 @@ cd traffic-lpr-runtime
 .\.venv\Scripts\python.exe benchmarks\scripts\prepare_public_benchmark.py --per-category 25
 ```
 
-The script downloads the public `zenitsu09/ccpd-subset-30k` archive from Hugging Face into `.runtime/benchmarks/cache/hf-hub/`, samples a balanced hard-case mix, extracts only the sampled images into `.runtime/benchmarks/datasets/ccpd-hardcases/`, and writes `benchmarks/manifests/public/ccpd-hardcases.json`.
+The script downloads the public `zenitsu09/ccpd-subset-30k` archive from Hugging Face into `../.runtime/cache/benchmark/cache/hf-hub/`, samples a balanced hard-case mix, extracts only the sampled images into `../.runtime/cache/benchmark/datasets/ccpd-hardcases/`, and writes `benchmarks/manifests/public/ccpd-hardcases.json`.
 
 The generated manifest emphasizes these categories:
 
@@ -88,7 +89,7 @@ This workflow:
 - emits a combined manifest plus three stratified manifests under `benchmarks/manifests/public/multisource/`:
 development, holdout, and challenge
 
-The combined output is written to `benchmarks/manifests/public/multisource/all.json`, and sampled images are extracted under `.runtime/benchmarks/datasets/multisource-hardcases/`.
+The combined output is written to `benchmarks/manifests/public/multisource/all.json`, and sampled images are extracted under `../.runtime/cache/benchmark/datasets/multisource-hardcases/`.
 
 Run the resulting benchmark exactly the same way:
 
@@ -117,15 +118,15 @@ This local workflow:
 
 - parses AOLP `Subset_AC|LE|RP` images plus localization / recognition text files directly from disk
 - preserves AOLP subset identity as `subset-ac`, `subset-le`, and `subset-rp` instead of flattening them into one score
-- materializes UFPR tracks into short local interval videos under `.runtime/benchmarks/datasets/local-multisource/ufpr-alpr/tracks/`
-- emits machine-local manifests under `.runtime/benchmarks/manifests/local/multisource/`
+- materializes UFPR tracks into short local interval videos under `../.runtime/cache/benchmark/datasets/local-multisource/ufpr-alpr/tracks/`
+- emits machine-local manifests under `../.runtime/cache/benchmark/manifests/local/multisource/`
 - writes `groundTruthPlateBox`, `groundTruthTargetBox`, and `groundTruthFrames` into the manifest so `benchmark-run` can score localization and interval stability
 
 Run the resulting suite with:
 
 ```powershell
 cd traffic-lpr-runtime
-.\.venv\Scripts\python.exe -m traffic_lpr_runtime benchmark-run < .runtime\benchmarks\manifests\local\multisource\all.json
+.\.venv\Scripts\python.exe -m traffic_lpr_runtime benchmark-run < ..\.runtime\cache\benchmark\manifests\local\multisource\all.json
 ```
 
 Recommended usage:

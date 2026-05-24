@@ -93,9 +93,21 @@ Prohibited:
 
 Raw and derived artifacts are separated:
 - raw local datasets stay under `datasets/`
-- benchmark artifacts live under `.runtime/benchmark-tool/`
-- runtime transient artifacts live under runtime-owned `.runtime/` areas
+- run-scoped outputs live under `.runtime/runs/<run-id>/`
+- benchmark cache state lives under `.runtime/cache/benchmark/`
+- reusable runtime vendor/cache state lives under `.runtime/cache/vendor/`
 - exported user-facing evidence bundles remain explicit user outputs, not hidden benchmark state
+
+Run-id policy:
+- user-facing LPR and AI requests should reuse a stable run id for the whole execution
+- benchmark profile sweeps may create nested per-profile folders, but they still belong under one top-level run id
+- run ids use local time plus random suffix: `yymmdd-hhmmss-randomhex`
+
+AI evidence stage policy:
+- `coarse` means sparse full-clip localization, not OCR
+- `fine` means denser interval refinement plus keyframe selection
+- `target` means anchor-frame vehicle resolution, not interval tracking
+- final tracking/OCR semantics still come from the deterministic `analyze-interval` runtime workflow
 
 ## Job Lifecycle Policy
 

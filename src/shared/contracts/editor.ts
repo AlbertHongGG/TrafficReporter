@@ -37,11 +37,14 @@ export type VideoQuality = 'source' | '2160p' | '1440p' | '1080p' | '720p' | '48
 
 export type AudioBitrateKbps = 320 | 256 | 192 | 128 | 96;
 
+export type OutputCompressionMode = 'standard' | 'compact';
+
 export interface RenderProfile {
   format: ExportFormat;
   fps: number;
   videoQuality?: VideoQuality;
   audioBitrateKbps?: AudioBitrateKbps;
+  compressionMode?: OutputCompressionMode;
 }
 
 export interface VideoMarkerRect {

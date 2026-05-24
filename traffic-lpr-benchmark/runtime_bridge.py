@@ -60,6 +60,9 @@ def run_benchmark_suite(
     suite_payload: dict[str, Any],
     runtime_root: Path | None = None,
     python_executable: str | None = None,
+    run_id: str | None = None,
+    artifact_root: Path | None = None,
+    request_id: str | None = None,
     progress_path: Path | None = None,
     checkpoint_path: Path | None = None,
     resume_from_checkpoint: bool = False,
@@ -77,9 +80,13 @@ def run_benchmark_suite(
         request_payload['progressPath'] = str(resolved_progress_path)
     if resolved_checkpoint_path is not None:
         request_payload['checkpointPath'] = str(resolved_checkpoint_path)
+    if run_id:
+        request_payload['runId'] = run_id
+    if artifact_root is not None:
+        request_payload['artifactRoot'] = str(artifact_root.resolve())
     if resume_from_checkpoint:
         request_payload['resumeFromCheckpoint'] = True
-    request_envelope = build_runtime_request_envelope('benchmark-run', request_payload)
+    request_envelope = build_runtime_request_envelope('benchmark-run', request_payload, request_id=request_id or run_id)
 
     with tempfile.TemporaryFile(mode='w+t', encoding='utf-8') as stdout_file, tempfile.TemporaryFile(mode='w+t', encoding='utf-8') as stderr_file:
         completed = subprocess.Popen(

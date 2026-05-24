@@ -140,11 +140,10 @@ def command_print_summary(args: argparse.Namespace) -> int:
 
 def command_run(args: argparse.Namespace) -> int:
     payload = validate_suite_file(args.suite)
-    workspace_root = ensure_workspace()
+    ensure_workspace(runtime_root=args.runtime_root)
     run_id = args.run_id or create_run_id(payload['suiteId'])
-    run_root = (workspace_root / 'runs').resolve()
-    report_root = (workspace_root / 'reports').resolve()
-    run_dir = run_root / run_id
+    run_root = default_run_root(args.runtime_root).resolve()
+    run_dir = (run_root / run_id / 'benchmark').resolve()
     progress_path = (args.progress_file or (run_dir / 'progress.json')).resolve()
     checkpoint_path = (args.checkpoint_file or (run_dir / 'checkpoint.json')).resolve()
     if not args.resume and any(path.exists() for path in (run_dir / 'result.json', progress_path, checkpoint_path)):
@@ -162,12 +161,15 @@ def command_run(args: argparse.Namespace) -> int:
         suite_payload=payload,
         runtime_root=args.runtime_root,
         python_executable=args.python,
+        run_id=run_id,
+        artifact_root=run_dir,
+        request_id=run_id,
         progress_path=progress_path,
         checkpoint_path=checkpoint_path,
         resume_from_checkpoint=bool(args.resume),
         progress_reporter=None if args.no_progress_log else _print_progress_update,
     )
-    artifact_paths = write_run_artifacts(payload, runtime_result, run_id, run_root=run_root, report_root=report_root, suite_base_dir=args.suite.parent)
+    artifact_paths = write_run_artifacts(payload, runtime_result, run_id, suite_base_dir=args.suite.parent, artifact_root=run_dir)
     thresholds = build_gate_thresholds(args)
     gate_result = evaluate_runtime_result_gate(runtime_result, thresholds)
     gate_path = write_gate_result(run_dir / 'gate.json', gate_result) if gate_result is not None else None
@@ -187,19 +189,20 @@ def command_run(args: argparse.Namespace) -> int:
 def command_profile_sweep(args: argparse.Namespace) -> int:
     suite_payload = validate_suite_file(args.suite)
     _validate_requested_profiles(args.profiles)
-    workspace_root = ensure_workspace()
-    run_root = (workspace_root / 'runs').resolve()
-    report_root = (workspace_root / 'reports').resolve()
+    ensure_workspace(runtime_root=args.runtime_root)
+    run_root = default_run_root(args.runtime_root).resolve()
     comparison_id = args.comparison_id or create_run_id(f'{suite_payload["suiteId"]}-profile-sweep')
     run_id_prefix = args.run_id_prefix or comparison_id
+    comparison_dir = (run_root / comparison_id / 'benchmark').resolve()
+    profiles_root = comparison_dir / 'profiles'
     thresholds = build_gate_thresholds(args)
     profile_runs: list[dict[str, Any]] = []
     gate_failed = False
 
     for profile_id in args.profiles:
         profile_suite = apply_analysis_profile_to_suite(suite_payload, profile_id)
-        run_id = f'{run_id_prefix}-{profile_id}'
-        run_dir = run_root / run_id
+        run_id = profile_id if run_id_prefix == comparison_id else f'{run_id_prefix}-{profile_id}'
+        run_dir = (profiles_root / run_id).resolve()
         if (run_dir / 'result.json').exists():
             raise ValidationError(f'Run artifacts already exist for profile sweep run ID {run_id}. Choose a different --run-id-prefix or clean the existing run.')
 
@@ -218,11 +221,14 @@ def command_profile_sweep(args: argparse.Namespace) -> int:
             suite_payload=profile_suite,
             runtime_root=args.runtime_root,
             python_executable=args.python,
+            run_id=comparison_id,
+            artifact_root=run_dir,
+            request_id=f'{comparison_id}-{run_id}',
             progress_path=progress_path,
             checkpoint_path=checkpoint_path,
             progress_reporter=None if args.no_progress_log else _make_progress_reporter(profile_id),
         )
-        artifact_paths = write_run_artifacts(profile_suite, runtime_result, run_id, run_root=run_root, report_root=report_root, suite_base_dir=args.suite.parent)
+        artifact_paths = write_run_artifacts(profile_suite, runtime_result, run_id, suite_base_dir=args.suite.parent, artifact_root=run_dir)
         gate_result = evaluate_runtime_result_gate(runtime_result, thresholds)
         gate_path = write_gate_result(run_dir / 'gate.json', gate_result) if gate_result is not None else None
         if gate_result is not None and not gate_result.get('passed'):
@@ -242,7 +248,7 @@ def command_profile_sweep(args: argparse.Namespace) -> int:
         )
 
     comparison_payload = build_profile_sweep_payload(comparison_id, suite_payload, profile_runs)
-    comparison_artifacts = write_profile_sweep_artifacts(report_root, comparison_payload)
+    comparison_artifacts = write_profile_sweep_artifacts(comparison_dir, comparison_payload)
     print(json.dumps({
         'comparisonId': comparison_id,
         'suiteId': suite_payload['suiteId'],

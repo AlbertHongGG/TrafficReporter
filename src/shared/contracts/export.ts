@@ -1,11 +1,12 @@
 import type {
+  OutputCompressionMode,
   RenderProfile,
   TimelineClip,
   TimelineTrack,
   VideoMarkerRect,
 } from './editor';
 
-export type { AudioBitrateKbps, ExportFormat, RenderProfile, VideoQuality } from './editor';
+export type { AudioBitrateKbps, ExportFormat, OutputCompressionMode, RenderProfile, VideoQuality } from './editor';
 
 export interface ExportSource {
   id: string;
@@ -51,6 +52,7 @@ export interface FrameExportRequest {
   sourcePath: string;
   timeMs: number;
   markerRect: VideoMarkerRect | null;
+  compressionMode?: OutputCompressionMode;
 }
 
 export interface ExportProgressPayload {

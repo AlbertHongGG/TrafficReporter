@@ -5,6 +5,7 @@ import {
   DEFAULT_ZOOM,
   buildDefaultWorkspaceState,
   buildEditorFileState,
+  createRunFolderId,
   findClosestTrackFrame,
 } from './model'
 import { buildLprTargetAnchor, resolveLprAnalysisTargetVehicleKind } from './lprState'
@@ -68,6 +69,10 @@ describe('editor model', () => {
     expect(findClosestTrackFrame(track, 260)?.id).toBe('f2')
     expect(findClosestTrackFrame(track, 280)?.id).toBe('f2')
     expect(findClosestTrackFrame(track, 800, 100)).toBeNull()
+  })
+
+  it('creates run folder ids in the shared local-time format', () => {
+    expect(createRunFolderId()).toMatch(/^\d{6}-\d{6}-[0-9a-f]{8}$/)
   })
 
   it('narrows analysis vehicle kind to the selected target class', () => {

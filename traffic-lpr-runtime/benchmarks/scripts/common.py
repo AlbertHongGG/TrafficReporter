@@ -1,9 +1,17 @@
 from __future__ import annotations
 
 import re
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+
+RUNTIME_PACKAGE_ROOT = Path(__file__).resolve().parents[2]
+if str(RUNTIME_PACKAGE_ROOT) not in sys.path:
+    sys.path.insert(0, str(RUNTIME_PACKAGE_ROOT))
+
+from traffic_lpr_runtime.infrastructure.runtime_layout import benchmark_workspace_root
 
 
 CCPD_REPO_ID = 'zenitsu09/ccpd-subset-30k'
@@ -106,7 +114,7 @@ class BenchmarkSourceSample:
 def resolve_benchmark_paths(runtime_root: Path) -> BenchmarkPaths:
     benchmark_root = runtime_root / 'benchmarks'
     manifest_root = benchmark_root / 'manifests'
-    runtime_benchmark_root = runtime_root / '.runtime' / 'benchmarks'
+    runtime_benchmark_root = benchmark_workspace_root(runtime_root)
     return BenchmarkPaths(
         runtime_root=runtime_root,
         benchmark_root=benchmark_root,

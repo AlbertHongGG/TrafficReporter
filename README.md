@@ -39,15 +39,15 @@ The benchmark workflow now has its own repo-level entrance and does not live ins
 
 ```bash
 npm run benchmark -- init-workspace
-npm run benchmark -- validate --suite .runtime/benchmark-tool/suites/sample-template.json
-npm run benchmark -- doctor --suite .runtime/benchmark-tool/suites/sample-template.json
-npm run benchmark -- run --suite .runtime/benchmark-tool/suites/smoke-one.json --run-id smoke-gate --min-exact-rate 1.0 --min-top3-rate 1.0 --max-mean-cer 0.0 --min-plate-iou 1.0 --max-p95-latency-ms 60000
-npm run benchmark -- profile-sweep --suite .runtime/benchmark-tool/suites/smoke-one.json --profiles balanced precision recovery
+npm run benchmark -- validate --suite .runtime/cache/benchmark/suites/sample-template.json
+npm run benchmark -- doctor --suite .runtime/cache/benchmark/suites/sample-template.json
+npm run benchmark -- run --suite .runtime/cache/benchmark/suites/smoke-one.json --run-id smoke-gate --min-exact-rate 1.0 --min-top3-rate 1.0 --max-mean-cer 0.0 --min-plate-iou 1.0 --max-p95-latency-ms 60000
+npm run benchmark -- profile-sweep --suite .runtime/cache/benchmark/suites/smoke-one.json --profiles balanced precision recovery
 npm run benchmark -- validate-profile-catalog --file src/shared/config/lpr-analysis-profiles.json
 npm run benchmark:test
 ```
 
-Longer benchmark runs now emit resumable `progress.json` / `checkpoint.json` artifacts and can enforce benchmark gates directly from the CLI. Runtime-backed reports also include `analysis.json` / `analysis.md` so AOLP and UFPR results can be read by dataset, split, category, and broad failure source instead of only by merged averages.
+Longer benchmark runs now emit resumable `progress.json` / `checkpoint.json` artifacts under `.runtime/runs/<run-id>/benchmark/` and can enforce benchmark gates directly from the CLI. Runtime-backed reports also include `analysis.json` / `analysis.md` so AOLP and UFPR results can be read by dataset, split, category, and broad failure source instead of only by merged averages.
 
 Shared benchmark and LPR profile schemas now live under `schemas/` so the benchmark tool and runtime-facing JSON assets can evolve from one repo-level source of truth.
 
@@ -74,6 +74,30 @@ datasets/
 ```
 
 `schemas/` stays at the repo root because it is shared by the frontend, Rust host, Python runtime, and benchmark tool. The old root-level `scripts/` folder is not needed for a single LPR contract generator, so that generator lives next to its owning LPR schema files instead.
+
+### Runtime Data Layout
+
+All generated runtime data now lives under the repo-root `.runtime/` tree:
+
+```text
+.runtime/
+    runs/
+        <run-id>/
+            ai-evidence/
+            analysis/
+            benchmark/
+    cache/
+        benchmark/
+            suites/
+            imports/
+            datasets/
+            manifests/
+        vendor/
+```
+
+`<run-id>` uses local time plus random suffix: `yymmdd-hhmmss-randomhex`. The desktop editor reuses that run id for LPR requests and AI evidence runs so logs, clips, keyframes, and analysis artifacts from one execution stay grouped together.
+
+The editor toolbar now includes a `Compact` toggle. It controls current-frame export size and seeds the default compression mode shown in the export window for timeline media.
 
 ---
 

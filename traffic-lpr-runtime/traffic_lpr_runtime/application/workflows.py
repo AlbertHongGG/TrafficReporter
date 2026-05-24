@@ -34,6 +34,13 @@ def _resolve_interval_anchor_box(
     return anchor_frame.box if anchor_frame is not None else None
 
 
+def _request_run_id(payload: dict[str, Any]) -> str | None:
+    value = payload.get('requestId')
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
 class TargetScanWorkflow:
     def __init__(
         self,
@@ -88,7 +95,7 @@ class FrameAnalysisWorkflow:
         self._ensure_ready()
         time_ms = int(payload['timeMs'])
         options = AnalysisOptions.from_payload(payload)
-        artifact_root = options.resolve_artifact_root(self._runtime_root(), f'frame-{time_ms}')
+        artifact_root = options.resolve_artifact_root(self._runtime_root(), f'frame-{time_ms}', _request_run_id(payload))
         marker_rect = NormalizedRect.from_payload(payload.get('markerRect'))
         selected_target_box = NormalizedRect.from_payload(payload.get('selectedTargetBox'))
         frame = self._frame_reader.read_frame(payload['sourcePath'], time_ms)
@@ -166,7 +173,7 @@ class IntervalAnalysisWorkflow:
     def run(self, payload: dict[str, Any]) -> dict[str, Any]:
         self._ensure_ready()
         options = AnalysisOptions.from_payload(payload)
-        artifact_root = options.resolve_artifact_root(self._runtime_root(), 'interval')
+        artifact_root = options.resolve_artifact_root(self._runtime_root(), 'interval', _request_run_id(payload))
         interval = payload['interval']
         anchor_time_ms = int(payload['anchorTimeMs'])
         start_ms = int(interval['startMs'])

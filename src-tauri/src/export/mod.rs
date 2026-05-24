@@ -284,21 +284,25 @@ fn build_filter_graph(request: &TimelineExportRequest) -> Result<(Vec<String>, S
 fn codec_args_for_profile(profile: &RenderProfilePayload) -> Vec<String> {
     let format = profile.format.to_lowercase();
     let bitrate = profile.audio_bitrate_kbps.unwrap_or(320).clamp(96, 320);
+    let compact_mode = matches!(profile.compression_mode.as_deref(), Some("compact"));
+    let video_preset = if compact_mode { "slow" } else { "medium" };
+    let video_crf = if compact_mode { "22" } else { "18" };
+    let audio_bitrate_cap = if compact_mode { 128 } else { 192 };
 
     match format.as_str() {
         "mp4" => vec![
             "-c:v".to_string(),
             "libx264".to_string(),
             "-preset".to_string(),
-            "medium".to_string(),
+            video_preset.to_string(),
             "-crf".to_string(),
-            "18".to_string(),
+            video_crf.to_string(),
             "-pix_fmt".to_string(),
             "yuv420p".to_string(),
             "-c:a".to_string(),
             "aac".to_string(),
             "-b:a".to_string(),
-            format!("{}k", bitrate.min(192)),
+            format!("{}k", bitrate.min(audio_bitrate_cap)),
             "-movflags".to_string(),
             "+faststart".to_string(),
         ],
@@ -306,15 +310,15 @@ fn codec_args_for_profile(profile: &RenderProfilePayload) -> Vec<String> {
             "-c:v".to_string(),
             "libx264".to_string(),
             "-preset".to_string(),
-            "medium".to_string(),
+            video_preset.to_string(),
             "-crf".to_string(),
-            "18".to_string(),
+            video_crf.to_string(),
             "-pix_fmt".to_string(),
             "yuv420p".to_string(),
             "-c:a".to_string(),
             "aac".to_string(),
             "-b:a".to_string(),
-            format!("{}k", bitrate.min(192)),
+            format!("{}k", bitrate.min(audio_bitrate_cap)),
         ],
         "mp3" => vec![
             "-c:a".to_string(),
@@ -333,15 +337,15 @@ fn codec_args_for_profile(profile: &RenderProfilePayload) -> Vec<String> {
             "-c:v".to_string(),
             "libx264".to_string(),
             "-preset".to_string(),
-            "medium".to_string(),
+            video_preset.to_string(),
             "-crf".to_string(),
-            "18".to_string(),
+            video_crf.to_string(),
             "-pix_fmt".to_string(),
             "yuv420p".to_string(),
             "-c:a".to_string(),
             "aac".to_string(),
             "-b:a".to_string(),
-            "192k".to_string(),
+            format!("{}k", audio_bitrate_cap),
             "-movflags".to_string(),
             "+faststart".to_string(),
         ],
@@ -489,5 +493,20 @@ mod tests {
     #[test]
     fn keeps_source_dimensions_when_requested() {
         assert_eq!(scaled_dimensions_for_quality(1921, 1081, Some("source")), (1920, 1080));
+    }
+
+    #[test]
+    fn compact_profile_prefers_smaller_x264_settings() {
+        let args = codec_args_for_profile(&RenderProfilePayload {
+            format: "mp4".to_string(),
+            fps: 60,
+            video_quality: Some("1080p".to_string()),
+            audio_bitrate_kbps: Some(320),
+            compression_mode: Some("compact".to_string()),
+        });
+
+        assert!(args.windows(2).any(|window| window == ["-preset", "slow"]));
+        assert!(args.windows(2).any(|window| window == ["-crf", "22"]));
+        assert!(args.windows(2).any(|window| window == ["-b:a", "128k"]));
     }
 }

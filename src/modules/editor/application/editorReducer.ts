@@ -55,6 +55,7 @@ export type EditorAction =
   | { type: 'set-zoom'; zoom: number }
   | { type: 'set-preview-volume'; previewVolume: number }
   | { type: 'set-preview-muted'; previewMuted: boolean }
+  | { type: 'set-render-profile'; renderProfile: Partial<EditorWorkspaceState['files'][number]['renderProfile']> }
   | { type: 'set-marker-rect'; markerRect: VideoMarkerRect }
   | { type: 'clear-marker' }
   | { type: 'set-lpr-runtime-status'; runtimeStatus: LprRuntimeStatus | null }
@@ -260,6 +261,24 @@ export function editorReducer(state: EditorWorkspaceState, action: EditorAction)
         ...fileState,
         previewMuted: action.previewMuted,
       }));
+
+    case 'set-render-profile':
+      return updateActiveFile(state, (fileState) => {
+        const hasChange = Object.entries(action.renderProfile).some(([key, value]) => (
+          fileState.renderProfile[key as keyof typeof fileState.renderProfile] !== value
+        ));
+        if (!hasChange) {
+          return fileState;
+        }
+
+        return {
+          ...fileState,
+          renderProfile: {
+            ...fileState.renderProfile,
+            ...action.renderProfile,
+          },
+        };
+      });
 
     case 'set-marker-rect':
       return updateActiveFile(

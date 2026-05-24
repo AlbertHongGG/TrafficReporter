@@ -145,7 +145,7 @@ class MambaIrV2LightRestorer:
         return module
 
     def _ensure_vendor_arch(self) -> Path:
-        vendor_dir = self._dependencies.runtime_root() / '.runtime' / 'vendor' / 'mambair'
+        vendor_dir = self._dependencies.vendor_cache_root() / 'mambair'
         vendor_dir.mkdir(parents=True, exist_ok=True)
         arch_path = vendor_dir / 'mambairv2light_arch.py'
         if arch_path.exists() and arch_path.stat().st_size > 0:

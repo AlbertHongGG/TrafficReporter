@@ -10,7 +10,14 @@ This folder is the standalone Python runtime project for the Traffic desktop app
 - `traffic_lpr_runtime/infrastructure/` - OpenCV, Ultralytics, and Fast-ALPR adapters.
 - `models/` - auto-downloaded detector weights used by the runtime.
 - `.venv/` - optional local virtual environment for the runtime project.
-- `.runtime/` - optional transient runtime cache area.
+- `../.runtime/` - repo-level runtime data root shared with the desktop host and benchmark tool.
+
+The runtime now separates package assets from generated data:
+
+- `traffic-lpr-runtime/models/` stores reusable model weights.
+- `../.runtime/runs/<run-id>/` stores one execution's AI evidence, analysis artifacts, and benchmark outputs.
+- `../.runtime/cache/vendor/` stores reusable vendor shims such as the downloaded `mambair` architecture.
+- `../.runtime/cache/benchmark/` stores benchmark suites, imports, materialized datasets, and generated local manifests.
 
 ## Local Setup
 
@@ -72,7 +79,7 @@ Each case can target either `frame` or `interval` mode and may include `analysis
 - `trackerMode`: `legacy`, `botsort`, or `bytetrack`
 - `fusionMode`: `legacy` or `aligned-char`
 - `restorationMode`: `off`, `gated`, `mambairv2`, `mambairv2-x2`, or `mambairv2-x4`
-- `persistArtifacts`: store cropped / rectified / restored intermediate images under `.runtime/analysis/`
+- `persistArtifacts`: store cropped / rectified / restored intermediate images under `../.runtime/runs/<run-id>/analysis/`
 - `ocrModelNames`: compare multiple OCR heads on the same plate crop
 
 Start by copying [benchmarks/manifests/templates/sample-manifest.json](benchmarks/manifests/templates/sample-manifest.json) and replacing the placeholder `sourcePath`, `selectedTargetBox`, and `expectedText` values with your own difficult cases.
@@ -95,7 +102,27 @@ cd traffic-lpr-runtime
 .\.venv\Scripts\python.exe benchmarks\scripts\prepare_multisource_benchmark.py --datasets aolp ufpr-alpr --per-category 12 --ufpr-split testing
 ```
 
-That command writes machine-local manifests under `.runtime/benchmarks/manifests/local/multisource/` and materializes any needed UFPR interval videos under `.runtime/benchmarks/datasets/local-multisource/`.
+That command writes machine-local manifests under `../.runtime/cache/benchmark/manifests/local/multisource/` and materializes any needed UFPR interval videos under `../.runtime/cache/benchmark/datasets/local-multisource/`.
+
+## AI Evidence Workflow
+
+The AI Evidence pipeline has three LLM-guided stages before the deterministic interval analysis pass:
+
+- `coarse`: sample a sparse storyboard across the full source clip so the model can localize the rough event interval.
+- `fine`: sample a denser storyboard inside the padded coarse interval so the model can tighten the start/end points, choose the primary anchor frame, and pick the narrative keyframes.
+- `target`: inspect the anchor frame plus candidate crops so the model can decide which detected vehicle actually matches the user's description.
+
+When the desktop user presses `Run` in the AI Evidence window, the full flow is:
+
+1. The desktop host creates a run id in the shared `yymmdd-hhmmss-randomhex` format.
+2. The Rust host sends the AI request to `python -m traffic_lpr_runtime` and reserves `../.runtime/runs/<run-id>/ai-evidence/` for the run.
+3. Python renders the `coarse/` storyboard, asks the AI model to localize the rough interval, then renders the `fine/` storyboard.
+4. Python asks the AI model to select the refined interval, anchor frame, and keyframes.
+5. Python renders target-reference crops under `target-resolution/` and asks the AI model to resolve the intended vehicle.
+6. Python runs the deterministic `analyze-interval` workflow over the refined interval to get target tracks, OCR candidates, review/provenance payloads, and accepted candidate state.
+7. Python renders final keyframes under `keyframes/` and returns the structured response.
+8. Rust exports the resolved clip into the same run folder as `../.runtime/runs/<run-id>/ai-evidence/clip.mp4`.
+9. AI call logs for `coarse`, `fine`, and `target` are written under `../.runtime/runs/<run-id>/ai-logs/`.
 
 ## Evidence Export
 

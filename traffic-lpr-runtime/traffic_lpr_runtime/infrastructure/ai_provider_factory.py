@@ -6,6 +6,7 @@ from traffic_lpr_runtime.application.ai_provider import VisionLlmProvider
 from traffic_lpr_runtime.domain.errors import RuntimeFailure
 from traffic_lpr_runtime.infrastructure.ai_logging import JsonFileAiCallLogger, LoggingVisionLlmProvider
 from traffic_lpr_runtime.infrastructure.ollama_provider import OllamaVisionProvider
+from traffic_lpr_runtime.infrastructure.runtime_layout import runs_root
 from traffic_lpr_runtime.infrastructure.runtime_settings import DEFAULT_AI_PROVIDER, get_runtime_settings
 
 
@@ -19,5 +20,5 @@ def build_ai_provider(*, runtime_root: Path) -> VisionLlmProvider:
 
     return LoggingVisionLlmProvider(
         inner=provider,
-        logger=JsonFileAiCallLogger(runtime_root / '.runtime' / 'ai-logs'),
+        logger=JsonFileAiCallLogger(runs_root(runtime_root)),
     )

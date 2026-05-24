@@ -7,6 +7,7 @@ export type {
   ExportSnapshot,
   ExportSource,
   ExportTrack,
+  OutputCompressionMode,
   RenderProfile,
   TimelineExportRequest,
   VideoQuality,

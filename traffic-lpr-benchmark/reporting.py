@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import html
 import json
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -11,8 +11,9 @@ from evaluation import build_evaluation_markdown, build_run_evaluation
 from ledger import build_run_ledger
 from models import BenchmarkRunBundle, BenchmarkSuite
 from registry import build_suite_registry
+from traffic_lpr_runtime.infrastructure.runtime_layout import build_run_id
 from validation import validate_run_bundle_payload
-from workspace import default_report_root, default_run_root
+from workspace import default_run_root
 
 
 def _format_rate(value: Any) -> str:
@@ -31,9 +32,9 @@ def _safe_text(value: Any) -> str:
     return html.escape(str(value)) if value is not None else '--'
 
 
-def create_run_id(suite_id: str) -> str:
-    timestamp = datetime.now(UTC).strftime('%Y%m%d-%H%M%S')
-    return f'{timestamp}-{suite_id}'
+def create_run_id(suite_id: str | None = None) -> str:
+  del suite_id
+  return build_run_id()
 
 
 def write_run_artifacts(
@@ -42,21 +43,21 @@ def write_run_artifacts(
     run_id: str,
     run_root: Path | None = None,
     report_root: Path | None = None,
-  suite_base_dir: Path | None = None,
+    suite_base_dir: Path | None = None,
+    artifact_root: Path | None = None,
 ) -> dict[str, str]:
-    resolved_run_root = (run_root or default_run_root()).resolve() / run_id
-    resolved_report_root = (report_root or default_report_root()).resolve()
+    del report_root
+    resolved_run_root = (artifact_root or ((run_root or default_run_root()).resolve() / run_id / 'benchmark')).resolve()
     resolved_run_root.mkdir(parents=True, exist_ok=True)
-    resolved_report_root.mkdir(parents=True, exist_ok=True)
 
     suite = BenchmarkSuite.from_payload(suite_payload)
     bundle = BenchmarkRunBundle(
-      run_id=run_id,
-      generated_at=datetime.now(UTC).isoformat(),
-      suite_id=suite.suite_id,
-      suite_title=suite.title,
-      suite_case_count=len(suite.cases),
-      result=runtime_result,
+        run_id=run_id,
+        generated_at=datetime.now().astimezone().isoformat(timespec='seconds'),
+        suite_id=suite.suite_id,
+        suite_title=suite.title,
+        suite_case_count=len(suite.cases),
+        result=runtime_result,
     ).to_payload()
     validate_run_bundle_payload(bundle, source=f'run-bundle:{run_id}')
 
@@ -69,7 +70,6 @@ def write_run_artifacts(
     evaluation_json_path = resolved_run_root / 'evaluation.json'
     evaluation_markdown_path = resolved_run_root / 'evaluation.md'
     report_path = resolved_run_root / 'report.html'
-    latest_report_path = resolved_report_root / f'{suite_payload.get("suiteId") or "benchmark"}-latest.html'
     suite_registry = build_suite_registry(suite_payload, base_dir=suite_base_dir)
     analysis_payload = build_run_analysis(bundle)
     run_ledger = build_run_ledger(run_id, bundle['generatedAt'], suite_registry, runtime_result)
@@ -85,7 +85,6 @@ def write_run_artifacts(
     evaluation_markdown_path.write_text(build_evaluation_markdown(evaluation_payload), encoding='utf-8')
     report_html = build_report_html(bundle)
     report_path.write_text(report_html, encoding='utf-8')
-    latest_report_path.write_text(report_html, encoding='utf-8')
 
     return {
         'runDir': str(resolved_run_root),
@@ -98,7 +97,6 @@ def write_run_artifacts(
         'evaluationJson': str(evaluation_json_path),
         'evaluationMarkdown': str(evaluation_markdown_path),
         'reportHtml': str(report_path),
-        'latestReportHtml': str(latest_report_path),
     }
 
 

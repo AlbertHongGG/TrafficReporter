@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -10,6 +9,7 @@ from traffic_lpr_runtime.application.analysis_profiles import resolve_analysis_p
 from traffic_lpr_runtime.domain.models import TrackedRegion
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect, clamp
 from traffic_lpr_runtime.infrastructure.dependencies import DependencyRegistry
+from traffic_lpr_runtime.infrastructure.runtime_layout import build_run_id, run_child
 
 
 DEFAULT_OCR_MODEL_NAMES = [
@@ -78,15 +78,16 @@ class AnalysisOptions:
             min_interval_support_frames=max(1, min(int(raw.get('minIntervalSupportFrames') or 2), 8)),
         )
 
-    def resolve_artifact_root(self, runtime_root: Path, suffix: str | None = None) -> Path | None:
+    def resolve_artifact_root(self, runtime_root: Path, suffix: str | None = None, run_id: str | None = None) -> Path | None:
         if not self.persist_artifacts:
             return None
         if self.artifact_dir:
             root = Path(self.artifact_dir)
         else:
-            timestamp = datetime.now(UTC).strftime('%Y%m%d-%H%M%S')
-            base_name = self.debug_tag or 'analysis'
-            root = runtime_root / '.runtime' / 'analysis' / f'{timestamp}-{base_name}'
+            resolved_run_id = run_id or build_run_id()
+            root = run_child(runtime_root, resolved_run_id, 'analysis')
+            if self.debug_tag:
+                root = root / self.debug_tag
         if suffix:
             root = root / suffix
         root.mkdir(parents=True, exist_ok=True)

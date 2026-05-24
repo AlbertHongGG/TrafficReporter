@@ -32,7 +32,7 @@
     {
       "id": "ccpd-blur-001",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0165-4_8-248,479_443,550-430,550_248,537_261,479_443,492-0_0_10_13_24_29_29-85-5_ccpd_blur_003535.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0165-4_8-248,479_443,550-430,550_248,537_261,479_443,492-0_0_10_13_24_29_29-85-5_ccpd_blur_003535.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.34444444444444444,
@@ -75,7 +75,7 @@
     {
       "id": "ccpd-blur-002",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/029633620689655173-90_242-240,520_570,602-570,602_276,599_240,525_538,520-10_2_3_24_29_27_24_30-109-135_ccpd_green_017312.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/029633620689655173-90_242-240,520_570,602-570,602_276,599_240,525_538,520-10_2_3_24_29_27_24_30-109-135_ccpd_green_017312.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3333333333333333,
@@ -120,7 +120,7 @@
     {
       "id": "ccpd-blur-003",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0331-25_31-335,385_510,543-502,462_335,543_343,466_510,385-4_0_32_27_32_15_26-93-217_ccpd_tilt_016494.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0331-25_31-335,385_510,543-502,462_335,543_343,466_510,385-4_0_32_27_32_15_26-93-217_ccpd_tilt_016494.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.4652777777777778,
@@ -166,7 +166,7 @@
     {
       "id": "ccpd-blur-004",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0389-1_23-179,441_504,541-504,541_219,536_179,441_464,446-0_0_5_25_20_31_32-67-3_ccpd_blur_015269.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0389-1_23-179,441_504,541-504,541_219,536_179,441_464,446-0_0_5_25_20_31_32-67-3_ccpd_blur_015269.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.24861111111111112,
@@ -209,7 +209,7 @@
     {
       "id": "ccpd-blur-005",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/3042493489583333335-90_96-197,428_563,546-563,542_204,546_197,434_553,428-10_2_3_24_27_26_31_29-208-339_ccpd_green_004168.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/3042493489583333335-90_96-197,428_563,546-563,542_204,546_197,434_553,428-10_2_3_24_27_26_31_29-208-339_ccpd_green_004168.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.27361111111111114,
@@ -255,7 +255,7 @@
     {
       "id": "ccpd-blur-006",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0228-3_15-226,454_453,538-453,538_242,526_226,454_437,466-0_0_15_15_30_28_29-30-3_ccpd_blur_025699.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0228-3_15-226,454_453,538-453,538_242,526_226,454_437,466-0_0_15_15_30_28_29-30-3_ccpd_blur_025699.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3138888888888889,
@@ -299,7 +299,7 @@
     {
       "id": "ccpd-blur-007",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0492313218391-106_69-258,445_544,614-531,626_249,539_252,436_534,523-0_0_17_17_33_27_30-141-128_ccpd_base_024320.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0492313218391-106_69-258,445_544,614-531,626_249,539_252,436_534,523-0_0_17_17_33_27_30-141-128_ccpd_base_024320.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.35833333333333334,
@@ -344,7 +344,7 @@
     {
       "id": "ccpd-blur-008",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0438146551724-94_81-114,431_449,568-459,568_117,534_113,427_455,461-0_0_18_7_25_27_24-146-121_ccpd_base_016088.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0438146551724-94_81-114,431_449,568-459,568_117,534_113,427_455,461-0_0_18_7_25_27_24-146-121_ccpd_base_016088.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.15833333333333333,
@@ -389,7 +389,7 @@
     {
       "id": "ccpd-blur-009",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0476412835249-95_70-142,444_513,593-515,597_166,554_143,451_492,494-0_0_1_30_25_25_17-67-220_ccpd_base_023512.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0476412835249-95_70-142,444_513,593-515,597_166,554_143,451_492,494-0_0_1_30_25_25_17-67-220_ccpd_base_023512.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.19722222222222222,
@@ -434,7 +434,7 @@
     {
       "id": "ccpd-blur-010",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0357-1_9-152,446_454,545-454,545_164,535_152,446_442,456-0_0_19_24_10_26_32-74-264_ccpd_weather_019582.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0357-1_9-152,446_454,545-454,545_164,535_152,446_442,456-0_0_19_24_10_26_32-74-264_ccpd_weather_019582.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.2111111111111111,
@@ -479,7 +479,7 @@
     {
       "id": "ccpd-blur-011",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0336-0_1-213,498_481,603-479,599_213,603_215,502_481,498-0_0_20_30_32_27_15-100-3_ccpd_blur_023211.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0336-0_1-213,498_481,603-479,599_213,603_215,502_481,498-0_0_20_30_32_27_15-100-3_ccpd_blur_023211.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.29583333333333334,
@@ -522,7 +522,7 @@
     {
       "id": "ccpd-blur-012",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0237-24_0-215,477_383,595-383,529_239,595_215,543_359,477-0_0_31_30_33_7_32-83-143_ccpd_challenge_000883.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0237-24_0-215,477_383,595-383,529_239,595_215,543_359,477-0_0_31_30_33_7_32-83-143_ccpd_challenge_000883.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.2986111111111111,
@@ -567,7 +567,7 @@
     {
       "id": "ccpd-blur-013",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0302-17_38-375,481_568,612-536,562_375,612_407,531_568,481-0_0_7_32_8_33_33-103-152_ccpd_tilt_004198.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0302-17_38-375,481_568,612-536,562_375,612_407,531_568,481-0_0_7_32_8_33_33-103-152_ccpd_tilt_004198.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.5208333333333334,
@@ -613,7 +613,7 @@
     {
       "id": "ccpd-blur-014",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0048-3_3-324,502_419,545-419,539_324,545_324,508_419,502-10_8_25_31_24_31_20-96-3_ccpd_blur_014083.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0048-3_3-324,502_419,545-419,539_324,545_324,508_419,502-10_8_25_31_24_31_20-96-3_ccpd_blur_014083.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.45,
@@ -656,7 +656,7 @@
     {
       "id": "ccpd-blur-015",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0279-1_1-228,454_464,553-464,553_228,546_228,454_464,461-16_8_29_32_2_24_32-36-5_ccpd_blur_020308.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0279-1_1-228,454_464,553-464,553_228,546_228,454_464,461-16_8_29_32_2_24_32-36-5_ccpd_blur_020308.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.31666666666666665,
@@ -700,7 +700,7 @@
     {
       "id": "ccpd-blur-016",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0268-1_5-179,508_428,598-418,598_179,591_189,508_428,515-0_0_27_1_31_31_27-71-4_ccpd_blur_028281.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0268-1_5-179,508_428,598-418,598_179,591_189,508_428,515-0_0_27_1_31_31_27-71-4_ccpd_blur_028281.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.24861111111111112,
@@ -743,7 +743,7 @@
     {
       "id": "ccpd-blur-017",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0653-19_37-194,430_489,615-489,615_223,521_194,430_460,524-0_0_5_27_28_29_10-105-614_ccpd_tilt_009900.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0653-19_37-194,430_489,615-489,615_223,521_194,430_460,524-0_0_5_27_28_29_10-105-614_ccpd_tilt_009900.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.26944444444444443,
@@ -789,7 +789,7 @@
     {
       "id": "ccpd-blur-018",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0519-27_17-141,309_343,524-343,430_161,524_141,403_323,309-0_0_2_0_29_29_29-87-137_ccpd_rotate_013493.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0519-27_17-141,309_343,524-343,430_161,524_141,403_323,309-0_0_2_0_29_29_29-87-137_ccpd_rotate_013493.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.19583333333333333,
@@ -835,7 +835,7 @@
     {
       "id": "ccpd-blur-019",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0239-2_11-216,433_449,519-449,519_228,509_216,433_437,443-18_3_14_30_30_28_29-88-5_ccpd_blur_017333.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0239-2_11-216,433_449,519-449,519_228,509_216,433_437,443-18_3_14_30_30_28_29-88-5_ccpd_blur_017333.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3,
@@ -878,7 +878,7 @@
     {
       "id": "ccpd-blur-020",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0365625-89_73-119,486_517,606-518,598_133,591_88,495_473,502-0_0_18_30_30_24_3-86-129_ccpd_base_007246.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0365625-89_73-119,486_517,606-518,598_133,591_88,495_473,502-0_0_18_30_30_24_3-86-129_ccpd_base_007246.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.16527777777777777,
@@ -923,7 +923,7 @@
     {
       "id": "ccpd-blur-021",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0484-9_54-146,468_492,585-421,539_146,585_217,514_492,468-0_0_3_5_29_28_32-37-230_ccpd_db_002809.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0484-9_54-146,468_492,585-421,539_146,585_217,514_492,468-0_0_3_5_29_28_32-37-230_ccpd_db_002809.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.20277777777777778,
@@ -969,7 +969,7 @@
     {
       "id": "ccpd-blur-022",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0544-16_19-151,505_430,668-430,668_156,589_151,505_425,584-0_0_25_4_33_28_29-162-213_ccpd_tilt_014435.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0544-16_19-151,505_430,668-430,668_156,589_151,505_425,584-0_0_25_4_33_28_29-162-213_ccpd_tilt_014435.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.20972222222222223,
@@ -1016,7 +1016,7 @@
     {
       "id": "ccpd-blur-023",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0407-6_24-183,475_464,596-464,596_211,565_183,475_436,506-0_0_24_31_15_24_25-29-5_ccpd_blur_019800.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0407-6_24-183,475_464,596-464,596_211,565_183,475_436,506-0_0_24_31_15_24_25-29-5_ccpd_blur_019800.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.25416666666666665,
@@ -1060,7 +1060,7 @@
     {
       "id": "ccpd-blur-024",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0290-5_10-297,476_526,582-519,560_297,582_304,498_526,476-0_0_30_31_27_30_26-82-4_ccpd_blur_003825.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0290-5_10-297,476_526,582-519,560_297,582_304,498_526,476-0_0_30_31_27_30_26-82-4_ccpd_blur_003825.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.4125,
@@ -1103,7 +1103,7 @@
     {
       "id": "ccpd-blur-025",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0670-1_2-133,486_522,630-520,619_133,630_135,497_522,486-0_0_12_27_24_25_33-199-165_ccpd_db_002712.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0670-1_2-133,486_522,630-520,619_133,630_135,497_522,486-0_0_12_27_24_25_33-199-165_ccpd_db_002712.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.18472222222222223,
@@ -1149,7 +1149,7 @@
     {
       "id": "ccpd-angle-001",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0522-20_7-362,575_603,756-603,673_385,756_362,658_580,575-12_12_31_14_3_30_30-68-95_ccpd_rotate_005220.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0522-20_7-362,575_603,756-603,673_385,756_362,658_580,575-12_12_31_14_3_30_30-68-95_ccpd_rotate_005220.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.5027777777777778,
@@ -1193,7 +1193,7 @@
     {
       "id": "ccpd-angle-002",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0729-32_11-282,393_536,633-496,633_282,495_322,393_536,531-0_0_7_26_7_24_33-111-99_ccpd_rotate_003892.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0729-32_11-282,393_536,633-496,633_282,495_322,393_536,531-0_0_7_26_7_24_33-111-99_ccpd_rotate_003892.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.39166666666666666,
@@ -1237,7 +1237,7 @@
     {
       "id": "ccpd-angle-003",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0276-20_19-280,341_444,482-444,420_282,482_280,403_442,341-0_0_0_10_29_25_29-42-9_ccpd_tilt_007857.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0276-20_19-280,341_444,482-444,420_282,482_280,403_442,341-0_0_0_10_29_25_29-42-9_ccpd_tilt_007857.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3888888888888889,
@@ -1282,7 +1282,7 @@
     {
       "id": "ccpd-angle-004",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0353-23_28-288,453_476,610-476,610_295,532_288,453_469,531-0_0_20_32_29_25_17-67-4_ccpd_tilt_017503.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0353-23_28-288,453_476,610-476,610_295,532_288,453_469,531-0_0_20_32_29_25_17-67-4_ccpd_tilt_017503.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.4,
@@ -1326,7 +1326,7 @@
     {
       "id": "ccpd-angle-005",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0856-14_40-204,421_571,616-571,616_261,537_204,421_514,500-0_0_0_25_25_26_27-117-29_ccpd_tilt_007427.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0856-14_40-204,421_571,616-571,616_261,537_204,421_514,500-0_0_0_25_25_26_27-117-29_ccpd_tilt_007427.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.2833333333333333,
@@ -1370,7 +1370,7 @@
     {
       "id": "ccpd-angle-006",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0695-27_37-263,422_503,664-481,549_263,664_285,537_503,422-0_0_15_24_24_27_10-102-73_ccpd_tilt_006163.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0695-27_37-263,422_503,664-481,549_263,664_285,537_503,422-0_0_15_24_24_27_10-102-73_ccpd_tilt_006163.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.36527777777777776,
@@ -1414,7 +1414,7 @@
     {
       "id": "ccpd-angle-007",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0777-27_46-238,433_511,671-511,671_278,550_238,433_471,554-0_3_15_31_32_29_31-61-105_ccpd_tilt_019460.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0777-27_46-238,433_511,671-511,671_278,550_238,433_471,554-0_3_15_31_32_29_31-61-105_ccpd_tilt_019460.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.33055555555555555,
@@ -1458,7 +1458,7 @@
     {
       "id": "ccpd-angle-008",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0368-22_1-237,466_437,620-437,552_275,620_237,534_399,466-0_0_20_4_32_27_26-123-110_ccpd_rotate_007940.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0368-22_1-237,466_437,620-437,552_275,620_237,534_399,466-0_0_20_4_32_27_26-123-110_ccpd_rotate_007940.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.32916666666666666,
@@ -1502,7 +1502,7 @@
     {
       "id": "ccpd-angle-009",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0649-20_54-226,456_536,631-536,631_283,538_226,456_479,549-0_0_33_26_20_25_30-88-154_ccpd_tilt_020483.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0649-20_54-226,456_536,631-536,631_283,538_226,456_479,549-0_0_33_26_20_25_30-88-154_ccpd_tilt_020483.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3138888888888889,
@@ -1547,7 +1547,7 @@
     {
       "id": "ccpd-angle-010",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0608-29_19-254,350_484,571-484,453_272,571_254,468_466,350-0_0_3_32_21_30_29-142-65_ccpd_tilt_026876.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0608-29_19-254,350_484,571-484,453_272,571_254,468_466,350-0_0_3_32_21_30_29-142-65_ccpd_tilt_026876.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3527777777777778,
@@ -1591,7 +1591,7 @@
     {
       "id": "ccpd-angle-011",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0272-19_32-174,367_333,510-312,461_174,510_195,416_333,367-0_0_33_0_24_33_27-195-73_ccpd_tilt_008190.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0272-19_32-174,367_333,510-312,461_174,510_195,416_333,367-0_0_33_0_24_33_27-195-73_ccpd_tilt_008190.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.24166666666666667,
@@ -1636,7 +1636,7 @@
     {
       "id": "ccpd-angle-012",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0333-16_19-289,384_460,547-454,499_289,547_295,432_460,384-0_0_23_25_10_29_25-133-71_ccpd_tilt_008072.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0333-16_19-289,384_460,547-454,499_289,547_295,432_460,384-0_0_23_25_10_29_25-133-71_ccpd_tilt_008072.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.4013888888888889,
@@ -1680,7 +1680,7 @@
     {
       "id": "ccpd-angle-013",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0258-30_24-186,406_322,565-322,491_195,565_186,480_313,406-0_0_19_27_7_32_24-170-60_ccpd_tilt_001951.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0258-30_24-186,406_322,565-322,491_195,565_186,480_313,406-0_0_19_27_7_32_24-170-60_ccpd_tilt_001951.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.25833333333333336,
@@ -1725,7 +1725,7 @@
     {
       "id": "ccpd-angle-014",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0321-31_20-282,453_444,619-429,619_282,530_297,453_444,542-1_1_15_0_33_26_30-68-13_ccpd_tilt_002045.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0321-31_20-282,453_444,619-429,619_282,530_297,453_444,542-1_1_15_0_33_26_30-68-13_ccpd_tilt_002045.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.39166666666666666,
@@ -1769,7 +1769,7 @@
     {
       "id": "ccpd-angle-015",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0417-21_38-132,479_341,646-313,574_132,646_160,551_341,479-0_0_7_18_30_24_26-94-126_ccpd_tilt_022029.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0417-21_38-132,479_341,646-313,574_132,646_160,551_341,479-0_0_7_18_30_24_26-94-126_ccpd_tilt_022029.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.18333333333333332,
@@ -1814,7 +1814,7 @@
     {
       "id": "ccpd-angle-016",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0402-27_46-183,522_373,699-373,699_214,615_183,522_342,606-0_0_3_25_10_32_32-196-71_ccpd_tilt_017060.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0402-27_46-183,522_373,699-373,699_214,615_183,522_342,606-0_0_3_25_10_32_32-196-71_ccpd_tilt_017060.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.25416666666666665,
@@ -1859,7 +1859,7 @@
     {
       "id": "ccpd-angle-017",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0742-24_17-190,444_467,668-454,668_190,548_203,444_467,564-15_22_26_24_5_26_30-114-344_ccpd_tilt_006974.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0742-24_17-190,444_467,668-454,668_190,548_203,444_467,564-15_22_26_24_5_26_30-114-344_ccpd_tilt_006974.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.2638888888888889,
@@ -1904,7 +1904,7 @@
     {
       "id": "ccpd-angle-018",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0127-31_22-429,361_523,474-523,422_439,474_429,413_513,361-0_0_7_33_25_29_7-111-33_ccpd_tilt_029693.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0127-31_22-429,361_523,474-523,422_439,474_429,413_513,361-0_0_7_33_25_29_7-111-33_ccpd_tilt_029693.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.5958333333333333,
@@ -1948,7 +1948,7 @@
     {
       "id": "ccpd-angle-019",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0623-17_4-216,491_512,667-474,667_216,588_254,491_512,570-0_0_26_32_27_16_25-131-36_ccpd_rotate_010466.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0623-17_4-216,491_512,667-474,667_216,588_254,491_512,570-0_0_26_32_27_16_25-131-36_ccpd_rotate_010466.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3,
@@ -1992,7 +1992,7 @@
     {
       "id": "ccpd-angle-020",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0495-19_23-204,420_446,591-446,591_211,510_204,420_439,501-0_0_21_0_33_27_30-86-9_ccpd_tilt_004142.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0495-19_23-204,420_446,591-446,591_211,510_204,420_439,501-0_0_21_0_33_27_30-86-9_ccpd_tilt_004142.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.2833333333333333,
@@ -2036,7 +2036,7 @@
     {
       "id": "ccpd-angle-021",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0298-24_27-225,450_384,607-384,607_230,537_225,450_379,520-0_0_22_25_17_24_32-124-52_ccpd_tilt_002072.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0298-24_27-225,450_384,607-384,607_230,537_225,450_379,520-0_0_22_25_17_24_32-124-52_ccpd_tilt_002072.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3125,
@@ -2080,7 +2080,7 @@
     {
       "id": "ccpd-angle-022",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0325-17_14-272,473_437,638-437,587_278,638_272,524_431,473-0_0_24_32_30_3_26-123-177_ccpd_rotate_000085.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0325-17_14-272,473_437,638-437,587_278,638_272,524_431,473-0_0_24_32_30_3_26-123-177_ccpd_rotate_000085.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.37777777777777777,
@@ -2125,7 +2125,7 @@
     {
       "id": "ccpd-angle-023",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0404-16_46-186,442_431,580-384,522_186,580_233,500_431,442-0_0_25_21_32_24_33-79-88_ccpd_tilt_012199.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0404-16_46-186,442_431,580-384,522_186,580_233,500_431,442-0_0_25_21_32_24_33-79-88_ccpd_tilt_012199.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.25833333333333336,
@@ -2169,7 +2169,7 @@
     {
       "id": "ccpd-angle-024",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0844-18_46-207,446_556,648-556,648_265,553_207,446_498,541-0_0_22_11_24_29_24-102-93_ccpd_tilt_019253.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0844-18_46-207,446_556,648-556,648_265,553_207,446_498,541-0_0_22_11_24_29_24-102-93_ccpd_tilt_019253.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.2875,
@@ -2213,7 +2213,7 @@
     {
       "id": "ccpd-angle-025",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0420-17_17-189,449_414,605-413,605_189,533_190,449_414,521-26_4_26_29_25_29_5-160-202_ccpd_rotate_000032.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0420-17_17-189,449_414,605-413,605_189,533_190,449_414,521-26_4_26_29_25_29_5-160-202_ccpd_rotate_000032.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.2625,
@@ -2259,7 +2259,7 @@
     {
       "id": "ccpd-challenge-001",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0176-2_1-346,339_533,418-533,410_347,418_346,347_532,339-0_0_10_25_27_27_10-105-11_ccpd_challenge_005501.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0176-2_1-346,339_533,418-533,410_347,418_346,347_532,339-0_0_10_25_27_27_10-105-11_ccpd_challenge_005501.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.48055555555555557,
@@ -2302,7 +2302,7 @@
     {
       "id": "ccpd-challenge-002",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0525-19_0-278,423_522,603-484,603_278,529_316,423_522,497-0_0_7_24_29_31_23-91-35_ccpd_challenge_004469.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0525-19_0-278,423_522,603-484,603_278,529_316,423_522,497-0_0_7_24_29_31_23-91-35_ccpd_challenge_004469.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3861111111111111,
@@ -2345,7 +2345,7 @@
     {
       "id": "ccpd-challenge-003",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0045-1_1-245,544_350,580-350,580_245,578_245,544_350,546-0_0_21_17_31_32_27-97-7_ccpd_challenge_004035.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0045-1_1-245,544_350,580-350,580_245,578_245,544_350,546-0_0_21_17_31_32_27-97-7_ccpd_challenge_004035.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3402777777777778,
@@ -2388,7 +2388,7 @@
     {
       "id": "ccpd-challenge-004",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0135-0_5-224,470_406,532-406,529_231,532_224,473_399,470-0_0_8_1_25_31_25-177-22_ccpd_challenge_017598.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0135-0_5-224,470_406,532-406,529_231,532_224,473_399,470-0_0_8_1_25_31_25-177-22_ccpd_challenge_017598.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3111111111111111,
@@ -2432,7 +2432,7 @@
     {
       "id": "ccpd-challenge-005",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0351-16_0-246,460_450,604-450,551_272,604_246,513_424,460-0_0_23_0_33_30_25-137-46_ccpd_challenge_014492.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0351-16_0-246,460_450,604-450,551_272,604_246,513_424,460-0_0_23_0_33_30_25-137-46_ccpd_challenge_014492.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3416666666666667,
@@ -2475,7 +2475,7 @@
     {
       "id": "ccpd-challenge-006",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0165-2_6-313,517_505,589-501,581_313,589_317,525_505,517-0_0_3_31_25_25_11-98-15_ccpd_challenge_000855.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0165-2_6-313,517_505,589-501,581_313,589_317,525_505,517-0_0_3_31_25_25_11-98-15_ccpd_challenge_000855.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.43472222222222223,
@@ -2518,7 +2518,7 @@
     {
       "id": "ccpd-challenge-007",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0226-10_7-281,474_453,584-453,554_284,584_281,504_450,474-0_0_16_31_13_27_25-131-24_ccpd_challenge_026952.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0226-10_7-281,474_453,584-453,554_284,584_281,504_450,474-0_0_16_31_13_27_25-131-24_ccpd_challenge_026952.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3902777777777778,
@@ -2561,7 +2561,7 @@
     {
       "id": "ccpd-challenge-008",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0301-11_2-404,343_623,458-605,458_404,418_422,343_623,383-0_0_7_31_22_29_30-129-18_ccpd_challenge_029204.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0301-11_2-404,343_623,458-605,458_404,418_422,343_623,383-0_0_7_31_22_29_30-129-18_ccpd_challenge_029204.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.5611111111111111,
@@ -2604,7 +2604,7 @@
     {
       "id": "ccpd-challenge-009",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0294-9_20-207,485_423,599-423,599_222,564_207,485_408,520-10_4_9_28_17_33_32-41-3_ccpd_challenge_003121.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0294-9_20-207,485_423,599-423,599_222,564_207,485_408,520-10_4_9_28_17_33_32-41-3_ccpd_challenge_003121.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.2875,
@@ -2648,7 +2648,7 @@
     {
       "id": "ccpd-challenge-010",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0188-2_9-258,499_462,576-462,576_267,568_258,499_453,507-0_0_11_24_33_24_7-80-4_ccpd_challenge_021913.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0188-2_9-258,499_462,576-462,576_267,568_258,499_453,507-0_0_11_24_33_24_7-80-4_ccpd_challenge_021913.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.35833333333333334,
@@ -2691,7 +2691,7 @@
     {
       "id": "ccpd-challenge-011",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0051-2_3-427,535_534,575-533,571_427,575_428,539_534,535-0_14_2_31_33_33_10-70-8_ccpd_challenge_003582.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0051-2_3-427,535_534,575-533,571_427,575_428,539_534,535-0_14_2_31_33_33_10-70-8_ccpd_challenge_003582.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.5930555555555556,
@@ -2734,7 +2734,7 @@
     {
       "id": "ccpd-challenge-012",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0265-3_2-351,380_577,478-568,478_351,463_360,380_577,395-0_0_21_25_27_32_2-136-70_ccpd_challenge_021617.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0265-3_2-351,380_577,478-568,478_351,463_360,380_577,395-0_0_21_25_27_32_2-136-70_ccpd_challenge_021617.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.4875,
@@ -2777,7 +2777,7 @@
     {
       "id": "ccpd-challenge-013",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0041-1_3-292,482_388,518-385,518_292,515_295,482_388,485-13_6_3_2_24_32_31-127-13_ccpd_challenge_003906.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0041-1_3-292,482_388,518-385,518_292,515_295,482_388,485-13_6_3_2_24_32_31-127-13_ccpd_challenge_003906.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.40555555555555556,
@@ -2820,7 +2820,7 @@
     {
       "id": "ccpd-challenge-014",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0067-1_2-311,344_436,389-433,389_311,385_314,344_436,348-0_0_24_14_26_31_31-89-7_ccpd_challenge_016490.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0067-1_2-311,344_436,389-433,389_311,385_314,344_436,348-0_0_24_14_26_31_31-89-7_ccpd_challenge_016490.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.43194444444444446,
@@ -2863,7 +2863,7 @@
     {
       "id": "ccpd-challenge-015",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0114-0_0-330,349_495,407-495,407_330,406_330,349_495,350-0_0_15_3_27_30_32-144-15_ccpd_challenge_011879.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0114-0_0-330,349_495,407-495,407_330,406_330,349_495,350-0_0_15_3_27_30_32-144-15_ccpd_challenge_011879.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.4583333333333333,
@@ -2906,7 +2906,7 @@
     {
       "id": "ccpd-challenge-016",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0309-8_8-270,329_469,459-469,459_270,431_270,329_469,357-0_0_11_19_31_25_31-63-35_ccpd_challenge_029036.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0309-8_8-270,329_469,459-469,459_270,431_270,329_469,357-0_0_11_19_31_25_31-63-35_ccpd_challenge_029036.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.375,
@@ -2949,7 +2949,7 @@
     {
       "id": "ccpd-challenge-017",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0161-0_2-275,455_480,521-480,521_277,519_275,455_478,457-0_14_30_24_32_25_25-134-6_ccpd_challenge_017771.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0161-0_2-275,455_480,521-480,521_277,519_275,455_478,457-0_14_30_24_32_25_25-134-6_ccpd_challenge_017771.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3819444444444444,
@@ -2992,7 +2992,7 @@
     {
       "id": "ccpd-challenge-018",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0116-1_2-287,494_449,554-448,549_287,554_288,499_449,494-0_0_19_26_29_29_23-104-3_ccpd_challenge_008361.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0116-1_2-287,494_449,554-448,549_287,554_288,499_449,494-0_0_19_26_29_29_23-104-3_ccpd_challenge_008361.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.39861111111111114,
@@ -3035,7 +3035,7 @@
     {
       "id": "ccpd-challenge-019",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0381-3_2-247,401_524,516-524,501_248,516_247,416_523,401-0_0_27_26_27_20_32-89-3_ccpd_challenge_026263.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0381-3_2-247,401_524,516-524,501_248,516_247,416_523,401-0_0_27_26_27_20_32-89-3_ccpd_challenge_026263.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.34305555555555556,
@@ -3078,7 +3078,7 @@
     {
       "id": "ccpd-challenge-020",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0119-12_18-392,485_518,564-518,564_397,537_392,485_513,512-0_0_24_24_29_0_27-43-27_ccpd_challenge_007129.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0119-12_18-392,485_518,564-518,564_397,537_392,485_513,512-0_0_24_24_29_0_27-43-27_ccpd_challenge_007129.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.5444444444444444,
@@ -3122,7 +3122,7 @@
     {
       "id": "ccpd-challenge-021",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0170-2_5-406,504_556,599-552,592_406,599_410,511_556,504-0_0_5_11_30_29_26-102-52_ccpd_challenge_024568.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0170-2_5-406,504_556,599-552,592_406,599_410,511_556,504-0_0_5_11_30_29_26-102-52_ccpd_challenge_024568.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.5638888888888889,
@@ -3165,7 +3165,7 @@
     {
       "id": "ccpd-challenge-022",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0071-0_3-266,607_399,652-397,650_266,652_268,609_399,607-10_0_11_18_27_33_30-34-10_ccpd_challenge_005831.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0071-0_3-266,607_399,652-397,650_266,652_268,609_399,607-10_0_11_18_27_33_30-34-10_ccpd_challenge_005831.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.36944444444444446,
@@ -3209,7 +3209,7 @@
     {
       "id": "ccpd-challenge-023",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0165-0_0-230,541_427,611-427,611_230,610_230,541_427,542-0_0_4_26_30_31_31-125-2_ccpd_challenge_019898.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0165-0_0-230,541_427,611-427,611_230,610_230,541_427,542-0_0_4_26_30_31_31-125-2_ccpd_challenge_019898.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3194444444444444,
@@ -3252,7 +3252,7 @@
     {
       "id": "ccpd-challenge-024",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0204-1_1-315,502_514,588-514,582_316,588_315,508_513,502-0_0_22_30_5_30_30-205-13_ccpd_challenge_024832.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0204-1_1-315,502_514,588-514,582_316,588_315,508_513,502-0_0_22_30_5_30_30-205-13_ccpd_challenge_024832.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.4375,
@@ -3296,7 +3296,7 @@
     {
       "id": "ccpd-challenge-025",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0320-11_15-298,450_504,580-498,540_298,580_304,490_504,450-0_0_6_30_2_24_24-24-5_ccpd_challenge_028521.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0320-11_15-298,450_504,580-498,540_298,580_304,490_504,450-0_0_6_30_2_24_24-24-5_ccpd_challenge_028521.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.41388888888888886,
@@ -3340,7 +3340,7 @@
     {
       "id": "ccpd-small-plate-001",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0070-3_0-312,430_434,478-431,478_312,471_315,430_434,437-0_0_2_30_17_25_29-133-25_ccpd_fn_006801.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0070-3_0-312,430_434,478-431,478_312,471_315,430_434,437-0_0_2_30_17_25_29-133-25_ccpd_fn_006801.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.43333333333333335,
@@ -3384,7 +3384,7 @@
     {
       "id": "ccpd-small-plate-002",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0064-3_1-293,382_410,428-410,422_296,428_293,388_407,382-0_0_4_17_24_25_30-81-8_ccpd_fn_000489.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0064-3_1-293,382_410,428-410,422_296,428_293,388_407,382-0_0_4_17_24_25_30-81-8_ccpd_fn_000489.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.40694444444444444,
@@ -3428,7 +3428,7 @@
     {
       "id": "ccpd-small-plate-003",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/1111-22_33-193,268_560,521-560,521_213,376_193,268_540,413-0_0_26_16_24_24_33-101-64_ccpd_fn_000384.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/1111-22_33-193,268_560,521-560,521_213,376_193,268_540,413-0_0_26_16_24_24_33-101-64_ccpd_fn_000384.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.26805555555555555,
@@ -3472,7 +3472,7 @@
     {
       "id": "ccpd-small-plate-004",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0656-21_47-278,415_555,613-555,613_332,525_278,415_501,503-0_0_1_28_33_33_2-146-52_ccpd_fn_020038.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0656-21_47-278,415_555,613-555,613_332,525_278,415_501,503-0_0_1_28_33_33_2-146-52_ccpd_fn_020038.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3861111111111111,
@@ -3516,7 +3516,7 @@
     {
       "id": "ccpd-small-plate-005",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0023-0_0-290,386_367,412-367,412_290,411_290,386_367,387-0_0_23_26_5_31_24-69-2_ccpd_fn_021489.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0023-0_0-290,386_367,412-367,412_290,411_290,386_367,387-0_0_23_26_5_31_24-69-2_ccpd_fn_021489.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.4027777777777778,
@@ -3560,7 +3560,7 @@
     {
       "id": "ccpd-small-plate-006",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/1030-7_48-78,447_616,607-616,607_169,550_78,447_525,504-0_7_22_21_33_33_30-117-162_ccpd_fn_024260.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/1030-7_48-78,447_616,607-616,607_169,550_78,447_525,504-0_7_22_21_33_33_30-117-162_ccpd_fn_024260.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.10833333333333334,
@@ -3605,7 +3605,7 @@
     {
       "id": "ccpd-small-plate-007",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0802-14_22-131,440_429,665-408,592_131,665_152,513_429,440-0_0_3_16_27_29_24-69-18_ccpd_fn_000395.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0802-14_22-131,440_429,665-408,592_131,665_152,513_429,440-0_0_3_16_27_29_24-69-18_ccpd_fn_000395.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.18194444444444444,
@@ -3649,7 +3649,7 @@
     {
       "id": "ccpd-small-plate-008",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0835-1_3-174,454_613,613-601,613_174,604_186,454_613,463-0_0_31_12_32_32_24-212-123_ccpd_fn_000471.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0835-1_3-174,454_613,613-601,613_174,604_186,454_613,463-0_0_31_12_32_32_24-212-123_ccpd_fn_000471.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.24166666666666667,
@@ -3695,7 +3695,7 @@
     {
       "id": "ccpd-small-plate-009",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0060-9_3-370,403_466,456-462,456_370,441_374,403_466,418-0_0_12_26_32_30_5-99-32_ccpd_fn_007113.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0060-9_3-370,403_466,456-462,456_370,441_374,403_466,418-0_0_12_26_32_30_5-99-32_ccpd_fn_007113.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.5138888888888888,
@@ -3739,7 +3739,7 @@
     {
       "id": "ccpd-small-plate-010",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0079-1_1-334,486_459,539-459,539_334,536_334,486_459,489-0_0_22_32_26_25_20-145-13_ccpd_fn_029949.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0079-1_1-334,486_459,539-459,539_334,536_334,486_459,489-0_0_22_32_26_25_20-145-13_ccpd_fn_029949.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.4638888888888889,
@@ -3783,7 +3783,7 @@
     {
       "id": "ccpd-small-plate-011",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0933-6_11-172,390_562,590-562,590_184,546_172,390_550,434-0_0_8_33_25_24_5-18-3_ccpd_fn_011314.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0933-6_11-172,390_562,590-562,590_184,546_172,390_550,434-0_0_8_33_25_24_5-18-3_ccpd_fn_011314.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.2388888888888889,
@@ -3828,7 +3828,7 @@
     {
       "id": "ccpd-small-plate-012",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0072-1_25-270,574_394,623-370,623_270,620_294,574_394,577-0_0_33_6_27_30_25-109-52_ccpd_fn_026480.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0072-1_25-270,574_394,623-370,623_270,620_294,574_394,577-0_0_33_6_27_30_25-109-52_ccpd_fn_026480.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.375,
@@ -3872,7 +3872,7 @@
     {
       "id": "ccpd-small-plate-013",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/1206-23_37-214,421_590,689-590,689_244,538_214,421_560,572-0_0_11_31_31_31_3-91-193_ccpd_fn_009850.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/1206-23_37-214,421_590,689-590,689_244,538_214,421_560,572-0_0_11_31_31_31_3-91-193_ccpd_fn_009850.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.2972222222222222,
@@ -3917,7 +3917,7 @@
     {
       "id": "ccpd-small-plate-014",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0047-0_1-292,507_399,544-398,544_292,543_293,507_399,508-0_0_3_25_33_33_3-72-6_ccpd_fn_025965.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0047-0_1-292,507_399,544-398,544_292,543_293,507_399,508-0_0_3_25_33_33_3-72-6_ccpd_fn_025965.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.40555555555555556,
@@ -3961,7 +3961,7 @@
     {
       "id": "ccpd-small-plate-015",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0055-0_6-263,471_360,519-355,518_263,519_268,472_360,471-0_0_3_8_30_26_27-59-10_ccpd_fn_000443.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0055-0_6-263,471_360,519-355,518_263,519_268,472_360,471-0_0_3_8_30_26_27-59-10_ccpd_fn_000443.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.36527777777777776,
@@ -4005,7 +4005,7 @@
     {
       "id": "ccpd-small-plate-016",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0917-8_3-104,447_491,645-462,645_104,594_133,447_491,498-0_0_22_32_33_31_18-101-287_ccpd_fn_016835.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0917-8_3-104,447_491,645-462,645_104,594_133,447_491,498-0_0_22_32_33_31_18-101-287_ccpd_fn_016835.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.14444444444444443,
@@ -4050,7 +4050,7 @@
     {
       "id": "ccpd-small-plate-017",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0872-10_51-187,495_618,664-618,664_277,600_187,495_528,559-0_0_17_13_29_28_32-33-79_ccpd_fn_003373.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0872-10_51-187,495_618,664-618,664_277,600_187,495_528,559-0_0_17_13_29_28_32-33-79_ccpd_fn_003373.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.25972222222222224,
@@ -4095,7 +4095,7 @@
     {
       "id": "ccpd-small-plate-018",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/1066-18_45-238,448_632,674-577,558_238,674_293,564_632,448-0_0_22_30_2_27_24-101-173_ccpd_fn_008303.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/1066-18_45-238,448_632,674-577,558_238,674_293,564_632,448-0_0_22_30_2_27_24-101-173_ccpd_fn_008303.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.33055555555555555,
@@ -4140,7 +4140,7 @@
     {
       "id": "ccpd-small-plate-019",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0065-0_1-380,533_497,580-497,580_381,579_380,533_496,534-0_0_16_0_32_29_32-142-30_ccpd_fn_017636.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0065-0_1-380,533_497,580-497,580_381,579_380,533_496,534-0_0_16_0_32_29_32-142-30_ccpd_fn_017636.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.5277777777777778,
@@ -4184,7 +4184,7 @@
     {
       "id": "ccpd-small-plate-020",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0969-46_49-219,352_435,727-435,727_227,506_219,352_427,573-0_1_4_26_31_27_29-124-362_ccpd_fn_019903.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0969-46_49-219,352_435,727-435,727_227,506_219,352_427,573-0_1_4_26_31_27_29-124-362_ccpd_fn_019903.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.30416666666666664,
@@ -4229,7 +4229,7 @@
     {
       "id": "ccpd-small-plate-021",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0669-3_0-208,456_492,653-483,653_208,637_217,456_492,472-0_0_23_16_24_28_27-160-90_ccpd_fn_013902.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0669-3_0-208,456_492,653-483,653_208,637_217,456_492,472-0_0_23_16_24_28_27-160-90_ccpd_fn_013902.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.28888888888888886,
@@ -4274,7 +4274,7 @@
     {
       "id": "ccpd-small-plate-022",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0070-3_1-361,307_484,355-484,348_362,355_361,314_483,307-0_0_32_27_33_31_29-57-10_ccpd_fn_003958.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0070-3_1-361,307_484,355-484,348_362,355_361,314_483,307-0_0_32_27_33_31_29-57-10_ccpd_fn_003958.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.5013888888888889,
@@ -4318,7 +4318,7 @@
     {
       "id": "ccpd-small-plate-023",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0822-2_5-165,434_614,587-607,565_165,587_172,456_614,434-0_0_1_24_16_29_30-134-217_ccpd_fn_000545.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0822-2_5-165,434_614,587-607,565_165,587_172,456_614,434-0_0_1_24_16_29_30-134-217_ccpd_fn_000545.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.22916666666666666,
@@ -4363,7 +4363,7 @@
     {
       "id": "ccpd-small-plate-024",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/1133-4_37-95,480_714,633-714,633_164,588_95,480_645,525-10_0_29_22_27_4_32-99-168_ccpd_fn_022092.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/1133-4_37-95,480_714,633-714,633_164,588_95,480_645,525-10_0_29_22_27_4_32-99-168_ccpd_fn_022092.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.13194444444444445,
@@ -4408,7 +4408,7 @@
     {
       "id": "ccpd-small-plate-025",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0057-4_4-302,338_407,384-407,375_302,384_302,347_407,338-0_0_30_27_24_31_28-102-16_ccpd_fn_000317.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0057-4_4-302,338_407,384-407,375_302,384_302,347_407,338-0_0_30_27_24_31_28-102-16_ccpd_fn_000317.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.41944444444444445,
@@ -4452,7 +4452,7 @@
     {
       "id": "ccpd-weather-001",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0556-0_14-118,492_537,603-537,597_146,603_118,498_509,492-0_0_32_16_31_32_30-69-68_ccpd_weather_002189.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0556-0_14-118,492_537,603-537,597_146,603_118,498_509,492-0_0_32_16_31_32_30-69-68_ccpd_weather_002189.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.1638888888888889,
@@ -4495,7 +4495,7 @@
     {
       "id": "ccpd-weather-002",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0287-3_1-350,449_600,545-593,545_350,532_357,449_600,462-10_4_25_0_32_11_31-84-21_ccpd_weather_026192.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0287-3_1-350,449_600,545-593,545_350,532_357,449_600,462-10_4_25_0_32_11_31-84-21_ccpd_weather_026192.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.4861111111111111,
@@ -4538,7 +4538,7 @@
     {
       "id": "ccpd-weather-003",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0380-18_15-273,429_488,577-484,577_273,507_277,429_488,499-0_0_22_29_26_32_26-114-81_ccpd_weather_002224.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0380-18_15-273,429_488,577-484,577_273,507_277,429_488,499-0_0_22_29_26_32_26-114-81_ccpd_weather_002224.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.37916666666666665,
@@ -4581,7 +4581,7 @@
     {
       "id": "ccpd-weather-004",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0389-0_0-179,495_511,593-511,588_180,593_179,500_510,495-11_2_8_24_1_25_26-91-118_ccpd_weather_002351.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0389-0_0-179,495_511,593-511,588_180,593_179,500_510,495-11_2_8_24_1_25_26-91-118_ccpd_weather_002351.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.24861111111111112,
@@ -4625,7 +4625,7 @@
     {
       "id": "ccpd-weather-005",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0359-5_9-263,561_501,687-501,687_271,665_263,561_493,583-0_0_22_16_33_27_27-52-15_ccpd_weather_015612.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0359-5_9-263,561_501,687-501,687_271,665_263,561_493,583-0_0_22_16_33_27_27-52-15_ccpd_weather_015612.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.36527777777777776,
@@ -4668,7 +4668,7 @@
     {
       "id": "ccpd-weather-006",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0196-3_1-264,444_472,523-472,512_269,523_264,455_467,444-0_0_29_13_26_33_32-115-61_ccpd_weather_002160.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0196-3_1-264,444_472,523-472,512_269,523_264,455_467,444-0_0_29_13_26_33_32-115-61_ccpd_weather_002160.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.36666666666666664,
@@ -4711,7 +4711,7 @@
     {
       "id": "ccpd-weather-007",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0544-12_34-91,553_388,706-388,706_129,649_91,553_350,610-0_0_6_18_32_29_29-112-54_ccpd_weather_002219.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0544-12_34-91,553_388,706-388,706_129,649_91,553_350,610-0_0_6_18_32_29_29-112-54_ccpd_weather_002219.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.12638888888888888,
@@ -4754,7 +4754,7 @@
     {
       "id": "ccpd-weather-008",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0293-1_4-334,523_609,612-609,607_342,612_334,528_601,523-0_0_23_26_33_26_12-103-56_ccpd_weather_022044.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0293-1_4-334,523_609,612-609,607_342,612_334,528_601,523-0_0_23_26_33_26_12-103-56_ccpd_weather_022044.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.4638888888888889,
@@ -4797,7 +4797,7 @@
     {
       "id": "ccpd-weather-009",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0400-2_6-194,513_501,622-501,622_200,607_194,513_495,528-0_0_24_26_28_28_33-62-14_ccpd_weather_029552.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0400-2_6-194,513_501,622-501,622_200,607_194,513_495,528-0_0_24_26_28_28_33-62-14_ccpd_weather_029552.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.26944444444444443,
@@ -4840,7 +4840,7 @@
     {
       "id": "ccpd-weather-010",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0227-3_7-370,566_594,651-594,651_375,637_370,566_589,580-0_0_7_24_33_33_29-51-101_ccpd_weather_022776.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0227-3_7-370,566_594,651-594,651_375,637_370,566_589,580-0_0_7_24_33_33_29-51-101_ccpd_weather_022776.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.5138888888888888,
@@ -4883,7 +4883,7 @@
     {
       "id": "ccpd-weather-011",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0209-2_3-413,504_616,590-615,580_413,590_414,514_616,504-0_0_22_25_18_30_26-157-19_ccpd_weather_015455.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0209-2_3-413,504_616,590-615,580_413,590_414,514_616,504-0_0_22_25_18_30_26-157-19_ccpd_weather_015455.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.5736111111111111,
@@ -4926,7 +4926,7 @@
     {
       "id": "ccpd-weather-012",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0300-0_1-157,531_430,623-430,623_158,620_157,531_429,534-0_0_32_24_32_19_30-59-21_ccpd_weather_010032.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0300-0_1-157,531_430,623-430,623_158,620_157,531_429,534-0_0_32_24_32_19_30-59-21_ccpd_weather_010032.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.21805555555555556,
@@ -4969,7 +4969,7 @@
     {
       "id": "ccpd-weather-013",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0531-0_8-166,396_513,524-493,524_166,523_186,396_513,397-0_0_17_13_25_26_27-32-72_ccpd_weather_018245.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0531-0_8-166,396_513,524-493,524_166,523_186,396_513,397-0_0_17_13_25_26_27-32-72_ccpd_weather_018245.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.23055555555555557,
@@ -5013,7 +5013,7 @@
     {
       "id": "ccpd-weather-014",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0383-0_6-197,528_514,629-514,625_209,629_197,532_502,528-0_0_33_29_4_32_27-109-29_ccpd_weather_002119.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0383-0_6-197,528_514,629-514,625_209,629_197,532_502,528-0_0_33_29_4_32_27-109-29_ccpd_weather_002119.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.27361111111111114,
@@ -5056,7 +5056,7 @@
     {
       "id": "ccpd-weather-015",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0381-6_10-201,392_452,519-445,492_201,519_208,419_452,392-0_0_19_32_22_26_24-83-52_ccpd_weather_015813.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0381-6_10-201,392_452,519-445,492_201,519_208,419_452,392-0_0_19_32_22_26_24-83-52_ccpd_weather_015813.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.2791666666666667,
@@ -5099,7 +5099,7 @@
     {
       "id": "ccpd-weather-016",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0334-17_18-385,497_586,636-585,572_385,636_386,561_586,497-0_0_32_29_5_29_25-63-27_ccpd_weather_028309.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0334-17_18-385,497_586,636-585,572_385,636_386,561_586,497-0_0_32_29_5_29_25-63-27_ccpd_weather_028309.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.5347222222222222,
@@ -5142,7 +5142,7 @@
     {
       "id": "ccpd-weather-017",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0170-0_3-311,518_506,591-502,591_311,591_315,518_506,518-0_0_2_3_24_24_24-116-25_ccpd_weather_021724.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0170-0_3-311,518_506,591-502,591_311,591_315,518_506,518-0_0_2_3_24_24_24-116-25_ccpd_weather_021724.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.43194444444444446,
@@ -5185,7 +5185,7 @@
     {
       "id": "ccpd-weather-018",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0247-0_2-288,467_523,555-520,552_288,555_291,470_523,467-0_0_19_1_27_26_26-79-46_ccpd_weather_014095.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0247-0_2-288,467_523,555-520,552_288,555_291,470_523,467-0_0_19_1_27_26_26-79-46_ccpd_weather_014095.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.4,
@@ -5228,7 +5228,7 @@
     {
       "id": "ccpd-weather-019",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0262-0_10-257,491_512,577-512,577_272,575_257,491_497,493-0_0_24_25_29_6_25-112-15_ccpd_weather_002230.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0262-0_10-257,491_512,577-512,577_272,575_257,491_497,493-0_0_24_25_29_6_25-112-15_ccpd_weather_002230.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.35694444444444445,
@@ -5271,7 +5271,7 @@
     {
       "id": "ccpd-weather-020",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0382-8_24-266,474_532,594-508,558_266,594_290,510_532,474-22_0_17_31_31_24_23-63-26_ccpd_weather_013065.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0382-8_24-266,474_532,594-508,558_266,594_290,510_532,474-22_0_17_31_31_24_23-63-26_ccpd_weather_013065.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.36944444444444446,
@@ -5314,7 +5314,7 @@
     {
       "id": "ccpd-weather-021",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0301-0_1-214,552_488,644-485,644_214,641_217,552_488,555-0_0_7_32_21_25_32-96-180_ccpd_weather_018381.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0301-0_1-214,552_488,644-485,644_214,641_217,552_488,555-0_0_7_32_21_25_32-96-180_ccpd_weather_018381.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.2972222222222222,
@@ -5358,7 +5358,7 @@
     {
       "id": "ccpd-weather-022",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0495-3_6-172,495_517,615-517,615_179,597_172,495_510,513-0_0_28_17_29_32_29-57-98_ccpd_weather_009318.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0495-3_6-172,495_517,615-517,615_179,597_172,495_510,513-0_0_28_17_29_32_29-57-98_ccpd_weather_009318.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.2388888888888889,
@@ -5401,7 +5401,7 @@
     {
       "id": "ccpd-weather-023",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0527-3_3-157,420_493,551-492,533_157,551_158,438_493,420-0_0_29_32_22_25_30-62-21_ccpd_weather_014051.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0527-3_3-157,420_493,551-492,533_157,551_158,438_493,420-0_0_29_32_22_25_30-62-21_ccpd_weather_014051.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.21805555555555556,
@@ -5444,7 +5444,7 @@
     {
       "id": "ccpd-weather-024",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0234-2_1-206,463_434,549-434,538_208,549_206,474_432,463-0_0_32_32_31_9_28-103-28_ccpd_weather_024885.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0234-2_1-206,463_434,549-434,538_208,549_206,474_432,463-0_0_32_32_31_9_28-103-28_ccpd_weather_024885.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.2861111111111111,
@@ -5487,7 +5487,7 @@
     {
       "id": "ccpd-weather-025",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0155-0_0-295,521_475,593-475,592_295,593_295,522_475,521-0_0_5_20_29_25_30-62-18_ccpd_weather_014136.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0155-0_0-295,521_475,593-475,592_295,593_295,522_475,521-0_0_5_20_29_25_30-62-18_ccpd_weather_014136.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.4097222222222222,
@@ -5530,7 +5530,7 @@
     {
       "id": "ccpd-low-light-001",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0746-22_18-178,453_455,678-447,678_178,564_186,453_455,567-0_6_30_29_31_24_30-19-5_ccpd_rotate_018047.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0746-22_18-178,453_455,678-447,678_178,564_186,453_455,567-0_6_30_29_31_24_30-19-5_ccpd_rotate_018047.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.24722222222222223,
@@ -5575,7 +5575,7 @@
     {
       "id": "ccpd-low-light-002",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0175-0_0-224,476_433,546-433,543_225,546_224,479_432,476-0_0_19_33_22_29_32-44-2_ccpd_challenge_003579.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0175-0_0-224,476_433,546-433,543_225,546_224,479_432,476-0_0_19_33_22_29_32-44-2_ccpd_challenge_003579.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3111111111111111,
@@ -5619,7 +5619,7 @@
     {
       "id": "ccpd-low-light-003",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0259-2_15-124,654_379,739-379,739_140,727_124,654_363,666-0_0_6_25_10_29_25-31-36_ccpd_weather_009445.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0259-2_15-124,654_379,739-379,739_140,727_124,654_363,666-0_0_6_25_10_29_25-31-36_ccpd_weather_009445.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.17222222222222222,
@@ -5663,7 +5663,7 @@
     {
       "id": "ccpd-low-light-004",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0261-5_16-219,450_444,547-444,547_234,527_219,450_429,470-0_0_1_31_33_24_2-27-3_ccpd_blur_012909.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0261-5_16-219,450_444,547-444,547_234,527_219,450_429,470-0_0_1_31_33_24_2-27-3_ccpd_blur_012909.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.30416666666666664,
@@ -5707,7 +5707,7 @@
     {
       "id": "ccpd-low-light-005",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0366-0_0-244,478_553,577-553,577_245,577_244,478_552,478-0_0_8_32_32_32_25-29-2_ccpd_db_002711.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0366-0_0-244,478_553,577-553,577_245,577_244,478_552,478-0_0_8_32_32_32_25-29-2_ccpd_db_002711.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3388888888888889,
@@ -5751,7 +5751,7 @@
     {
       "id": "ccpd-low-light-006",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0276-12_18-300,488_488,611-480,571_300,611_308,528_488,488-0_0_2_33_2_25_31-26-18_ccpd_db_002838.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0276-12_18-300,488_488,611-480,571_300,611_308,528_488,488-0_0_2_33_2_25_31-26-18_ccpd_db_002838.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.4166666666666667,
@@ -5795,7 +5795,7 @@
     {
       "id": "ccpd-low-light-007",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0771-33_22-92,420_328,693-328,556_119,693_92,557_301,420-10_0_21_30_30_29_20-29-46_ccpd_db_008008.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0771-33_22-92,420_328,693-328,556_119,693_92,557_301,420-10_0_21_30_30_29_20-29-46_ccpd_db_008008.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.12777777777777777,
@@ -5839,7 +5839,7 @@
     {
       "id": "ccpd-low-light-008",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/1080-40_54-343,352_610,690-610,690_379,496_343,352_574,546-0_0_13_0_24_24_31-16-198_ccpd_fn_024129.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/1080-40_54-343,352_610,690-610,690_379,496_343,352_574,546-0_0_13_0_24_24_31-16-198_ccpd_fn_024129.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.47638888888888886,
@@ -5884,7 +5884,7 @@
     {
       "id": "ccpd-low-light-009",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0400-2_1-193,503_484,618-484,606_195,618_193,515_482,503-0_0_30_33_10_28_32-231-29_ccpd_db_012160.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0400-2_1-193,503_484,618-484,606_195,618_193,515_482,503-0_0_30_33_10_28_32-231-29_ccpd_db_012160.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.26805555555555555,
@@ -5929,7 +5929,7 @@
     {
       "id": "ccpd-low-light-010",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0384-4_15-266,325_555,436-538,413_266,436_283,348_555,325-26_0_32_27_27_11_5-43-8_ccpd_db_003492.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0384-4_15-266,325_555,436-538,413_266,436_283,348_555,325-26_0_32_27_27_11_5-43-8_ccpd_db_003492.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.36944444444444446,
@@ -5973,7 +5973,7 @@
     {
       "id": "ccpd-low-light-011",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0528-0_22-198,493_596,604-551,604_198,604_243,493_596,493-0_0_33_24_30_32_24-201-61_ccpd_db_002992.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0528-0_22-198,493_596,604-551,604_198,604_243,493_596,493-0_0_33_24_30_32_24-201-61_ccpd_db_002992.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.275,
@@ -6018,7 +6018,7 @@
     {
       "id": "ccpd-low-light-012",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0231-0_0-230,458_455,544-454,544_230,544_231,458_455,458-0_0_7_32_25_31_27-29-2_ccpd_blur_027313.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0231-0_0-230,458_455,544-454,544_230,544_231,458_455,458-0_0_7_32_25_31_27-29-2_ccpd_blur_027313.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3194444444444444,
@@ -6062,7 +6062,7 @@
     {
       "id": "ccpd-low-light-013",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0468-3_7-124,497_442,620-442,620_130,599_124,497_436,518-0_0_33_33_21_26_25-30-10_ccpd_challenge_000801.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0468-3_7-124,497_442,620-442,620_130,599_124,497_436,518-0_0_33_33_21_26_25-30-10_ccpd_challenge_000801.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.17222222222222222,
@@ -6106,7 +6106,7 @@
     {
       "id": "ccpd-low-light-014",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0124-0_7-279,516_465,572-465,571_287,572_279,517_457,516-0_9_29_4_33_30_30-38-6_ccpd_blur_017401.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0124-0_7-279,516_465,572-465,571_287,572_279,517_457,516-0_9_29_4_33_30_30-38-6_ccpd_blur_017401.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3875,
@@ -6150,7 +6150,7 @@
     {
       "id": "ccpd-low-light-015",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0411-31_39-242,433_425,621-412,518_242,621_255,536_425,433-0_0_1_30_31_31_4-43-138_ccpd_db_011500.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0411-31_39-242,433_425,621-412,518_242,621_255,536_425,433-0_0_1_30_31_31_4-43-138_ccpd_db_011500.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.33611111111111114,
@@ -6195,7 +6195,7 @@
     {
       "id": "ccpd-low-light-016",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0275-0_0-101,412_365,499-365,496_101,499_101,415_365,412-0_0_0_24_31_29_3-30-43_ccpd_db_023762.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0275-0_0-101,412_365,499-365,496_101,499_101,415_365,412-0_0_0_24_31_29_3-30-43_ccpd_db_023762.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.14027777777777778,
@@ -6239,7 +6239,7 @@
     {
       "id": "ccpd-low-light-017",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0308-11_20-213,441_416,568-416,568_227,530_213,441_402,479-0_0_9_2_25_32_32-26-4_ccpd_challenge_026767.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0308-11_20-213,441_416,568-416,568_227,530_213,441_402,479-0_0_9_2_25_32_32-26-4_ccpd_challenge_026767.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.29583333333333334,
@@ -6283,7 +6283,7 @@
     {
       "id": "ccpd-low-light-018",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0263541666667-89_89-220,466_506,589-503,563_245,584_244,488_502,467-0_0_22_26_12_25_27-44-18_ccpd_base_020336.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0263541666667-89_89-220,466_506,589-503,563_245,584_244,488_502,467-0_0_22_26_12_25_27-44-18_ccpd_base_020336.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3055555555555556,
@@ -6327,7 +6327,7 @@
     {
       "id": "ccpd-low-light-019",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0262-1_0-275,461_536,545-535,545_275,539_276,461_536,467-15_1_29_32_32_16_4-37-4_ccpd_blur_001717.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0262-1_0-275,461_536,545-535,545_275,539_276,461_536,467-15_1_29_32_32_16_4-37-4_ccpd_blur_001717.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3819444444444444,
@@ -6371,7 +6371,7 @@
     {
       "id": "ccpd-low-light-020",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0217313218391-92_75-180,313_444,415-433,411_196,392_178,306_415,325-0_0_5_25_31_27_10-48-58_ccpd_base_005822.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0217313218391-92_75-180,313_444,415-433,411_196,392_178,306_415,325-0_0_5_25_31_27_10-48-58_ccpd_base_005822.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.25,
@@ -6415,7 +6415,7 @@
     {
       "id": "ccpd-low-light-021",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0296120689655-80_102-294,500_547,617-546,575_297,627_301,542_550,490-0_0_22_22_28_26_30-39-34_ccpd_base_021120.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0296120689655-80_102-294,500_547,617-546,575_297,627_301,542_550,490-0_0_22_22_28_26_30-39-34_ccpd_base_021120.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.4083333333333333,
@@ -6459,7 +6459,7 @@
     {
       "id": "ccpd-low-light-022",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/015628591954-90_86-258,615_507,699-520,692_273,697_251,625_498,620-0_0_13_23_26_25_28-38-15_ccpd_base_018749.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/015628591954-90_86-258,615_507,699-520,692_273,697_251,625_498,620-0_0_13_23_26_25_28-38-15_ccpd_base_018749.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.35833333333333334,
@@ -6503,7 +6503,7 @@
     {
       "id": "ccpd-low-light-023",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0058-6_17-254,503_348,555-348,555_262,545_254,503_340,513-0_0_21_29_21_30_24-43-15_ccpd_fn_029896.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0058-6_17-254,503_348,555-348,555_262,545_254,503_340,513-0_0_21_29_21_30_24-43-15_ccpd_fn_029896.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3527777777777778,
@@ -6547,7 +6547,7 @@
     {
       "id": "ccpd-low-light-024",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0219755747126-90_91-218,545_496,643-499,621_231,635_234,550_502,536-0_0_1_30_15_32_26-41-15_ccpd_base_005173.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0219755747126-90_91-218,545_496,643-499,621_231,635_234,550_502,536-0_0_1_30_15_32_26-41-15_ccpd_base_005173.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.30277777777777776,
@@ -6591,7 +6591,7 @@
     {
       "id": "ccpd-low-light-025",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0526-3_7-231,331_513,487-513,487_240,469_231,331_504,349-0_0_0_30_7_32_24-14-1_ccpd_db_002966.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0526-3_7-231,331_513,487-513,487_240,469_231,331_504,349-0_0_0_30_7_32_24-14-1_ccpd_db_002966.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.32083333333333336,
@@ -6635,7 +6635,7 @@
     {
       "id": "ccpd-high-exposure-001",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0247844827586-90_85-200,462_496,556-506,569_188,569_191,462_509,462-0_0_23_25_22_29_27-172-46_ccpd_base_000900.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0247844827586-90_85-200,462_496,556-506,569_188,569_191,462_509,462-0_0_23_25_22_29_27-172-46_ccpd_base_000900.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.2777777777777778,
@@ -6679,7 +6679,7 @@
     {
       "id": "ccpd-high-exposure-002",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/00751077586207-90_85-326,463_487,523-489,522_322,523_318,467_485,466-0_0_17_24_11_29_26-172-26_ccpd_base_009207.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/00751077586207-90_85-326,463_487,523-489,522_322,523_318,467_485,466-0_0_17_24_11_29_26-172-26_ccpd_base_009207.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.4527777777777778,
@@ -6723,7 +6723,7 @@
     {
       "id": "ccpd-high-exposure-003",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0389-0_0-157,473_476,575-476,572_158,575_157,476_475,473-0_0_23_33_5_33_32-225-11_ccpd_db_002858.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0389-0_0-157,473_476,575-476,572_158,575_157,476_475,473-0_0_23_33_5_33_32-225-11_ccpd_db_002858.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.21805555555555556,
@@ -6767,7 +6767,7 @@
     {
       "id": "ccpd-high-exposure-004",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/1108-0_1-143,385_633,574-633,568_149,574_143,391_627,385-0_0_6_7_32_32_32-222-22_ccpd_db_002700.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/1108-0_1-143,385_633,574-633,568_149,574_143,391_627,385-0_0_6_7_32_32_32-222-22_ccpd_db_002700.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.1986111111111111,
@@ -6811,7 +6811,7 @@
     {
       "id": "ccpd-high-exposure-005",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0112356321839-90_89-244,514_441,577-449,578_244,581_242,511_447,508-0_0_9_25_24_33_7-186-19_ccpd_base_008939.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0112356321839-90_89-244,514_441,577-449,578_244,581_242,511_447,508-0_0_9_25_24_33_7-186-19_ccpd_base_008939.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3388888888888889,
@@ -6855,7 +6855,7 @@
     {
       "id": "ccpd-high-exposure-006",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0577-2_5-158,452_484,600-477,584_158,600_165,468_484,452-0_0_19_26_30_32_11-184-5_ccpd_challenge_000603.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0577-2_5-158,452_484,600-477,584_158,600_165,468_484,452-0_0_19_26_30_32_11-184-5_ccpd_challenge_000603.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.21944444444444444,
@@ -6899,7 +6899,7 @@
     {
       "id": "ccpd-high-exposure-007",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0443-3_4-210,453_493,584-477,584_210,570_226,453_493,467-0_0_3_29_24_29_13-203-17_ccpd_challenge_011618.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0443-3_4-210,453_493,584-477,584_210,570_226,453_493,467-0_0_3_29_24_29_13-203-17_ccpd_challenge_011618.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.2916666666666667,
@@ -6943,7 +6943,7 @@
     {
       "id": "ccpd-high-exposure-008",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0093-1_1-265,567_412,620-412,617_265,620_265,570_412,567-11_4_21_8_25_32_33-173-17_ccpd_challenge_016136.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0093-1_1-265,567_412,620-412,617_265,620_265,570_412,567-11_4_21_8_25_32_33-173-17_ccpd_challenge_016136.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3680555555555556,
@@ -6987,7 +6987,7 @@
     {
       "id": "ccpd-high-exposure-009",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0440-0_2-238,483_550,601-543,601_238,597_245,483_550,487-0_0_19_27_19_33_24-227-19_ccpd_db_002933.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0440-0_2-238,483_550,601-543,601_238,597_245,483_550,487-0_0_19_27_19_33_24-227-19_ccpd_db_002933.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.33055555555555555,
@@ -7031,7 +7031,7 @@
     {
       "id": "ccpd-high-exposure-010",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0282-3_3-191,488_437,584-437,584_192,571_191,488_436,501-0_0_2_0_24_26_32-170-4_ccpd_blur_028518.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0282-3_3-191,488_437,584-437,584_192,571_191,488_436,501-0_0_2_0_24_26_32-170-4_ccpd_blur_028518.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.2652777777777778,
@@ -7075,7 +7075,7 @@
     {
       "id": "ccpd-high-exposure-011",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0173060344828-90_89-137,511_371,600-382,600_143,604_147,517_386,513-0_0_22_30_27_24_6-179-49_ccpd_base_014404.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0173060344828-90_89-137,511_371,600-382,600_143,604_147,517_386,513-0_0_22_30_27_24_6-179-49_ccpd_base_014404.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.19027777777777777,
@@ -7119,7 +7119,7 @@
     {
       "id": "ccpd-high-exposure-012",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0142-17_2-456,342_598,426-582,426_456,387_472,342_598,381-0_0_19_32_25_29_1-175-11_ccpd_challenge_003470.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0142-17_2-456,342_598,426-582,426_456,387_472,342_598,381-0_0_19_32_25_29_1-175-11_ccpd_challenge_003470.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.6333333333333333,
@@ -7163,7 +7163,7 @@
     {
       "id": "ccpd-high-exposure-013",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0153879310345-90_88-260,506_472,582-469,585_261,590_268,505_476,500-0_0_5_23_24_31_25-164-10_ccpd_base_004103.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0153879310345-90_88-260,506_472,582-469,585_261,590_268,505_476,500-0_0_5_23_24_31_25-164-10_ccpd_base_004103.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3611111111111111,
@@ -7207,7 +7207,7 @@
     {
       "id": "ccpd-high-exposure-014",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0216235632184-83_89-368,625_592,727-595,700_376,732_369,642_588,610-0_0_5_29_29_29_1-160-71_ccpd_base_009550.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0216235632184-83_89-368,625_592,727-595,700_376,732_369,642_588,610-0_0_5_29_29_29_1-160-71_ccpd_base_009550.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.5111111111111111,
@@ -7251,7 +7251,7 @@
     {
       "id": "ccpd-high-exposure-015",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0230124521073-90_79-228,463_551,543-548,563_236,548_221,462_533,477-0_0_7_17_31_26_30-159-48_ccpd_base_022179.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0230124521073-90_79-228,463_551,543-548,563_236,548_221,462_533,477-0_0_7_17_31_26_30-159-48_ccpd_base_022179.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.31666666666666665,
@@ -7295,7 +7295,7 @@
     {
       "id": "ccpd-high-exposure-016",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0269162326389-90_257-225,418_539,504-539,504_241,499_225,418_533,418-0_0_3_25_32_25_25_30-175-256_ccpd_green_029011.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0269162326389-90_257-225,418_539,504-539,504_241,499_225,418_533,418-0_0_3_25_32_25_25_30-175-256_ccpd_green_029011.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.3125,
@@ -7340,7 +7340,7 @@
     {
       "id": "ccpd-high-exposure-017",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0719109195402-90_83-105,455_603,593-587,599_121,606_117,457_583,450-11_0_33_8_17_30_33-167-92_ccpd_base_008667.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0719109195402-90_83-105,455_603,593-587,599_121,606_117,457_583,450-11_0_33_8_17_30_33-167-92_ccpd_base_008667.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.14583333333333334,
@@ -7384,7 +7384,7 @@
     {
       "id": "ccpd-high-exposure-018",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0117816091954-89_91-305,531_481,599-484,599_305,605_305,534_484,528-0_0_12_33_25_26_23-180-23_ccpd_base_029670.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0117816091954-89_91-305,531_481,599-484,599_305,605_305,534_484,528-0_0_12_33_25_26_23-180-23_ccpd_base_029670.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.4236111111111111,
@@ -7428,7 +7428,7 @@
     {
       "id": "ccpd-high-exposure-019",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0193-3_0-200,498_400,579-400,567_205,579_200,510_395,498-10_1_6_32_7_25_32-160-22_ccpd_challenge_019044.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0193-3_0-200,498_400,579-400,567_205,579_200,510_395,498-10_1_6_32_7_25_32-160-22_ccpd_challenge_019044.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.2777777777777778,
@@ -7472,7 +7472,7 @@
     {
       "id": "ccpd-high-exposure-020",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0511470306514-90_85-150,466_570,588-571,603_147,597_155,457_579,463-0_0_24_6_32_29_30-160-187_ccpd_base_029558.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0511470306514-90_85-150,466_570,588-571,603_147,597_155,457_579,463-0_0_24_6_32_29_30-160-187_ccpd_base_029558.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.20833333333333334,
@@ -7517,7 +7517,7 @@
     {
       "id": "ccpd-high-exposure-021",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0306752873564-90_85-290,419_608,529-609,519_294,542_289,431_604,408-0_0_5_29_24_32_22-176-94_ccpd_base_022643.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0306752873564-90_85-290,419_608,529-609,519_294,542_289,431_604,408-0_0_5_29_24_32_22-176-94_ccpd_base_022643.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.4027777777777778,
@@ -7561,7 +7561,7 @@
     {
       "id": "ccpd-high-exposure-022",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0149952107279-92_90-192,581_415,654-417,664_198,656_203,581_422,589-0_0_18_13_24_32_24-169-20_ccpd_base_019031.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0149952107279-92_90-192,581_415,654-417,664_198,656_203,581_422,589-0_0_18_13_24_32_24-169-20_ccpd_base_019031.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.26666666666666666,
@@ -7605,7 +7605,7 @@
     {
       "id": "ccpd-high-exposure-023",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0272294061303-91_90-232,438_515,537-518,543_243,537_249,440_524,446-0_0_11_26_22_30_32-185-67_ccpd_base_015570.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0272294061303-91_90-232,438_515,537-518,543_243,537_249,440_524,446-0_0_11_26_22_30_32-185-67_ccpd_base_015570.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.32222222222222224,
@@ -7649,7 +7649,7 @@
     {
       "id": "ccpd-high-exposure-024",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/016871408046-85_101-147,475_349,562-332,539_147,560_175,485_360,464-0_0_24_0_29_27_26-162-21_ccpd_base_010271.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/016871408046-85_101-147,475_349,562-332,539_147,560_175,485_360,464-0_0_24_0_29_27_26-162-21_ccpd_base_010271.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.20416666666666666,
@@ -7693,7 +7693,7 @@
     {
       "id": "ccpd-high-exposure-025",
       "mode": "frame",
-      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/traffic-lpr-runtime/.runtime/benchmarks/datasets/ccpd-hardcases/0874-1_1-137,455_577,621-571,621_137,612_143,455_577,464-0_8_9_27_30_29_30-217-55_ccpd_fn_013781.jpg",
+      "sourcePath": "C:/Users/JasonHong/Desktop/CODE/_Project/Traffic/.runtime/cache/benchmark/datasets/ccpd-hardcases/0874-1_1-137,455_577,621-571,621_137,612_143,455_577,464-0_8_9_27_30_29_30-217-55_ccpd_fn_013781.jpg",
       "timeMs": 0,
       "markerRect": {
         "x": 0.19027777777777777,

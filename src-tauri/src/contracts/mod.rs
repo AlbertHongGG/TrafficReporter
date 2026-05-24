@@ -52,6 +52,7 @@ pub struct RenderProfilePayload {
     pub fps: u32,
     pub video_quality: Option<String>,
     pub audio_bitrate_kbps: Option<u32>,
+    pub compression_mode: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -112,6 +113,7 @@ pub struct FrameExportRequest {
     pub source_path: String,
     pub time_ms: u64,
     pub marker_rect: Option<VideoMarkerRectPayload>,
+    pub compression_mode: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]

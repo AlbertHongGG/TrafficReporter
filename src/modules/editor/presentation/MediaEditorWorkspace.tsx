@@ -4,9 +4,9 @@ import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import {
   AlertCircle,
+  Archive,
   Brain,
   FileOutput,
-  FilePlus2,
   Film,
   ImageDown,
   Import,
@@ -28,6 +28,7 @@ import {
   clamp,
   clipDurationMs,
   createId,
+  createRunFolderId,
   DEFAULT_MARKER_RECT,
   DEFAULT_ZOOM,
   findClipAtPlayhead,
@@ -186,10 +187,15 @@ function replaceExtension(fileName: string, extension: string) {
   return `${fileName.slice(0, dotIndex)}.${extension}`;
 }
 
+function frameExportExtension(fileState: EditorFileState) {
+  return fileState.renderProfile.compressionMode === 'compact' ? 'jpg' : 'png';
+}
+
 function defaultFrameFileName(fileState: EditorFileState, playheadMs: number) {
-  const baseName = replaceExtension(fileState.asset.name, 'png');
+  const extension = frameExportExtension(fileState);
+  const baseName = replaceExtension(fileState.asset.name, extension);
   const timeLabel = formatTransportTime(playheadMs).replace(/[:.]/g, '-');
-  return replaceExtension(baseName, `${timeLabel}.png`);
+  return replaceExtension(baseName, `${timeLabel}.${extension}`);
 }
 
 function defaultLprEvidenceFileName(fileState: EditorFileState, playheadMs: number, candidateText: string | null) {
@@ -460,7 +466,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
   }, [dispatch]);
 
   const beginLprRequest = useCallback((stage: string, detail: string, progress: number) => {
-    const requestId = createId('lpr-request');
+    const requestId = createRunFolderId();
     activeLprRequestIdRef.current = requestId;
     cancelledLprRequestIdsRef.current.delete(requestId);
     updateLprJob({
@@ -1104,6 +1110,15 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     }
   };
 
+  const handleToggleCompactExports = useCallback(() => {
+    if (!activeFile) {
+      return;
+    }
+
+    const compressionMode = activeFile.renderProfile.compressionMode === 'compact' ? 'standard' : 'compact';
+    dispatch({ type: 'set-render-profile', renderProfile: { compressionMode } });
+  }, [activeFile, dispatch]);
+
   const handleExportCurrentFrame = async () => {
     const fileState = activeFile;
     if (!fileState || fileState.asset.status !== 'ready') {
@@ -1119,17 +1134,19 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       return;
     }
 
+    const extension = frameExportExtension(fileState);
+    const filterName = extension === 'jpg' ? 'JPEG Image' : 'PNG Image';
     const selectedPath = await save({
       title: 'Export current frame',
       defaultPath: defaultFrameFileName(fileState, playheadMs),
-      filters: [{ name: 'PNG Image', extensions: ['png'] }],
+      filters: [{ name: filterName, extensions: [extension] }],
     });
 
     if (!selectedPath) {
       return;
     }
 
-    const outputPath = selectedPath.toLowerCase().endsWith('.png') ? selectedPath : `${selectedPath}.png`;
+    const outputPath = selectedPath.toLowerCase().endsWith(`.${extension}`) ? selectedPath : `${selectedPath}.${extension}`;
     const previewTimeMs = previewVideoRef.current;
     const exportTimeMs = previewTimeMs && Number.isFinite(previewTimeMs.currentTime)
       ? previewTimeMs.currentTime * 1000
@@ -1141,6 +1158,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         sourcePath: fileState.asset.path,
         timeMs: exportTimeMs,
         markerRect: fileState.markerRect,
+        compressionMode: fileState.renderProfile.compressionMode,
       });
       setWorkspaceFeedback(`Frame exported to ${outputPath}`);
     } catch (error) {
@@ -1276,7 +1294,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
   }, [dispatch]);
 
   const beginAiRequest = useCallback((fileId: string, prompt: string) => {
-    const requestId = createId('ai-evidence');
+    const requestId = createRunFolderId();
     activeAiRequestRef.current = { requestId, fileId };
     dispatch({ type: 'set-ai-prompt', fileId, prompt });
     dispatch({ type: 'set-ai-result', fileId, result: null });
@@ -2104,6 +2122,15 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
           >
             <ImageDown size={14} />
             Frame
+          </button>
+          <button
+            type="button"
+            className={`${styles.toolbarButton} ${activeFile?.renderProfile.compressionMode === 'compact' ? styles.toolbarButtonActive : ''}`}
+            onClick={handleToggleCompactExports}
+            disabled={!activeFile}
+          >
+            <Archive size={14} />
+            Compact
           </button>
           <button type="button" className={styles.toolbarButton} onClick={() => void handleOpenExportWindow()}>
             <FileOutput size={14} />

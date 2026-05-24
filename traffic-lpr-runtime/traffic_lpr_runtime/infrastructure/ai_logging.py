@@ -4,21 +4,22 @@ import hashlib
 import json
 import re
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from traffic_lpr_runtime.application.ai_provider import VisionChatImage, VisionLlmProvider
+from traffic_lpr_runtime.infrastructure.runtime_layout import build_run_id
 
 
 class JsonFileAiCallLogger:
-    def __init__(self, logs_root: Path) -> None:
-        self._logs_root = logs_root
+    def __init__(self, runs_root: Path) -> None:
+        self._runs_root = runs_root
 
-    def record(self, entry: dict[str, Any], *, started_at_ms: int, provider_kind: str) -> Path:
-        timestamp = datetime.fromtimestamp(started_at_ms / 1000.0, tz=timezone.utc)
-        day_dir = self._logs_root / timestamp.strftime('%Y-%m-%d')
+    def record(self, entry: dict[str, Any], *, started_at_ms: int, provider_kind: str, run_id: str) -> Path:
+        timestamp = datetime.fromtimestamp(started_at_ms / 1000.0)
+        day_dir = self._runs_root / run_id / 'ai-logs'
         day_dir.mkdir(parents=True, exist_ok=True)
         file_name = f'{timestamp.strftime("%H%M%S_%f")[:-3]}_{_slugify(provider_kind)}_{entry["callId"]}.json'
         output_path = day_dir / file_name
@@ -53,6 +54,7 @@ class LoggingVisionLlmProvider:
     ) -> dict[str, object]:
         started_at_ms = _now_ms()
         call_id = uuid4().hex
+        resolved_run_id = _extract_run_id(request_metadata)
         request_payload = {
             'systemPrompt': system_prompt,
             'userPrompt': user_prompt,
@@ -88,6 +90,7 @@ class LoggingVisionLlmProvider:
                 },
                 started_at_ms=started_at_ms,
                 provider_kind=self.kind,
+                run_id=resolved_run_id,
             )
             raise
 
@@ -105,6 +108,7 @@ class LoggingVisionLlmProvider:
             },
             started_at_ms=started_at_ms,
             provider_kind=self.kind,
+            run_id=resolved_run_id,
         )
         return response
 
@@ -138,6 +142,15 @@ def _json_safe(value: Any) -> Any:
     if isinstance(value, (list, tuple, set)):
         return [_json_safe(item) for item in value]
     return str(value)
+
+
+def _extract_run_id(request_metadata: dict[str, Any] | None) -> str:
+    if isinstance(request_metadata, dict):
+        for key in ('runId', 'requestId'):
+            value = request_metadata.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return build_run_id()
 
 
 def _slugify(value: str) -> str:

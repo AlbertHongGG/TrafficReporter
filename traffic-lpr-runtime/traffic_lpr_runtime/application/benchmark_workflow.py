@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import time
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
@@ -29,6 +29,8 @@ class BenchmarkRunWorkflow:
         manifest_path = payload.get('manifestPath')
         progress_path = _resolve_optional_path(payload.get('progressPath'))
         checkpoint_path = _resolve_optional_path(payload.get('checkpointPath'))
+        run_id = _resolve_optional_str(payload.get('runId'))
+        artifact_root = _resolve_optional_path(payload.get('artifactRoot'))
         resume_from_checkpoint = bool(payload.get('resumeFromCheckpoint'))
         if manifest_path:
             manifest_payload = json.loads(Path(str(manifest_path)).read_text(encoding='utf-8'))
@@ -40,7 +42,7 @@ class BenchmarkRunWorkflow:
             _write_execution_state(
                 suite_cases=[],
                 benchmark_results=[],
-                started_at=datetime.now(UTC).isoformat(),
+                started_at=_local_now_iso(),
                 runtime_status=runtime_status,
                 progress_path=progress_path,
                 checkpoint_path=checkpoint_path,
@@ -53,7 +55,7 @@ class BenchmarkRunWorkflow:
             for index, case_payload in enumerate(cases)
         }
         benchmark_results, started_at = _load_checkpoint_results(checkpoint_path, valid_case_ids) if resume_from_checkpoint else ([], None)
-        started_at = started_at or datetime.now(UTC).isoformat()
+        started_at = started_at or _local_now_iso()
         completed_case_ids = {
             str(result.get('id') or '')
             for result in benchmark_results
@@ -78,12 +80,13 @@ class BenchmarkRunWorkflow:
             expected_text = normalize_plate_text(case_payload.get('expectedText'))
             case_metadata = dict(case_payload.get('metadata') or {})
             timer_started = time.perf_counter()
+            request_payload = _build_case_request(case_payload, run_id=run_id, artifact_root=artifact_root, case_id=case_id)
 
             if mode == 'frame':
-                response = self._analyze_frame(case_payload)
+                response = self._analyze_frame(request_payload)
                 candidates = response.get('candidates') or []
             else:
-                response = self._analyze_interval(case_payload)
+                response = self._analyze_interval(request_payload)
                 candidates = response.get('candidates') or []
 
             latency_ms = max(0.0, (time.perf_counter() - timer_started) * 1000.0)
@@ -320,6 +323,40 @@ def _resolve_optional_path(value: Any) -> Path | None:
     return Path(str(value)).resolve()
 
 
+def _resolve_optional_str(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
+def _local_now_iso() -> str:
+    return datetime.now().astimezone().isoformat(timespec='seconds')
+
+
+def _build_case_request(
+    case_payload: dict[str, Any],
+    *,
+    run_id: str | None,
+    artifact_root: Path | None,
+    case_id: str,
+) -> dict[str, Any]:
+    request_payload = dict(case_payload)
+    analysis_options = dict(request_payload.get('analysisOptions') or {})
+
+    if run_id and not _resolve_optional_str(request_payload.get('requestId')):
+        request_payload['requestId'] = f'{run_id}-{case_id}'
+
+    if artifact_root is not None and not analysis_options.get('artifactDir'):
+        analysis_options['artifactDir'] = str((artifact_root / 'cases' / case_id).resolve())
+        analysis_options['persistArtifacts'] = True
+
+    if analysis_options:
+        request_payload['analysisOptions'] = analysis_options
+
+    return request_payload
+
+
 def _load_checkpoint_results(checkpoint_path: Path | None, valid_case_ids: set[str]) -> tuple[list[dict[str, Any]], str | None]:
     if checkpoint_path is None or not checkpoint_path.exists():
         return [], None
@@ -359,7 +396,7 @@ def _write_execution_state(
     partial_result = summarize_benchmark_results(benchmark_results, runtime_status)
     total_cases = len(suite_cases)
     completed_count = len(benchmark_results)
-    updated_at = datetime.now(UTC).isoformat()
+    updated_at = _local_now_iso()
     latest_case = benchmark_results[-1] if benchmark_results else None
 
     progress_payload: dict[str, Any] = {

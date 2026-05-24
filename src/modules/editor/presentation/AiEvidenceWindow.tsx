@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -12,7 +12,6 @@ import {
   Film,
   Image as ImageIcon,
   LocateFixed,
-  PlayCircle,
   RotateCcw,
   StopCircle,
   X,
@@ -186,7 +185,7 @@ export const AiEvidenceWindow: React.FC = () => {
                     </button>
                   ) : (
                     <button type="button" className={styles.runBtn} onClick={() => void handleRun()} disabled={!canRun}>
-                      <Brain size={14} /> Run
+                      <Brain size={14} /> Run AI Evidence
                     </button>
                   )}
                 </div>

@@ -457,6 +457,18 @@ fn seconds_from_ms(value: u64) -> String {
     format!("{:.3}", value as f64 / 1000.0)
 }
 
+fn runtime_data_root() -> Result<PathBuf, String> {
+    let runtime_root = find_lpr_runtime_root()?;
+    let repo_root = runtime_root
+        .parent()
+        .ok_or_else(|| "Failed to resolve the repository root for runtime artifacts.".to_string())?;
+    Ok(repo_root.join(".runtime"))
+}
+
+fn runtime_run_root(run_id: &str) -> Result<PathBuf, String> {
+    Ok(runtime_data_root()?.join("runs").join(run_id))
+}
+
 fn export_ai_evidence_clip(
     source_path: &str,
     start_ms: u64,
@@ -758,6 +770,7 @@ pub async fn probe_media_source(path: String) -> Result<MediaProbePayload, Strin
 fn export_frame_image_internal(request: &FrameExportRequest) -> Result<(), String> {
     let ffmpeg = find_bundled("ffmpeg")?;
     let output_path = PathBuf::from(&request.output_path);
+    let compact_mode = matches!(request.compression_mode.as_deref(), Some("compact"));
     if let Some(parent) = output_path.parent() {
         if !parent.as_os_str().is_empty() {
             fs::create_dir_all(parent)
@@ -783,8 +796,13 @@ fn export_frame_image_internal(request: &FrameExportRequest) -> Result<(), Strin
     args.extend([
         "-frames:v".to_string(),
         "1".to_string(),
-        output_path.to_string_lossy().to_string(),
     ]);
+
+    if compact_mode {
+        args.extend(["-q:v".to_string(), "2".to_string()]);
+    }
+
+    args.push(output_path.to_string_lossy().to_string());
 
     let output = hidden_command(&ffmpeg)
         .args(&args)
@@ -942,10 +960,8 @@ pub async fn analyze_ai_evidence(
                 .clone()
                 .or_else(|| request.request_id.clone())
                 .unwrap_or_else(|| format!("ai-evidence-{}", SystemTime::now().duration_since(UNIX_EPOCH).map(|value| value.as_millis()).unwrap_or(0)));
-            let clip_path = find_lpr_runtime_root()?
-                .join(".runtime")
+            let clip_path = runtime_run_root(&request_folder)?
                 .join("ai-evidence")
-                .join(request_folder)
                 .join("clip.mp4");
 
             emit_ai_evidence_progress(
@@ -1051,6 +1067,7 @@ pub async fn export_lpr_evidence(
             source_path: request.source_path.clone(),
             time_ms: request.time_ms,
             marker_rect: request.marker_rect.clone(),
+            compression_mode: None,
         })?;
 
         let decision_frames = select_decision_samples(&request.accepted_candidate, &request.samples);

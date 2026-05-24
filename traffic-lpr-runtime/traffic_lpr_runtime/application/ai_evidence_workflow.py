@@ -12,6 +12,7 @@ from traffic_lpr_runtime.application.ai_provider import VisionChatImage, VisionL
 from traffic_lpr_runtime.domain.errors import RuntimeFailure
 from traffic_lpr_runtime.domain.models import TrackedRegion
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect, crop_image
+from traffic_lpr_runtime.infrastructure.runtime_layout import build_run_id, run_child
 from traffic_lpr_runtime.infrastructure.runtime_settings import get_runtime_settings
 
 
@@ -83,7 +84,7 @@ class AiEvidenceWorkflow:
         if not description:
             raise RuntimeFailure('AI evidence analysis requires a non-empty natural-language description.')
 
-        request_id = _optional_string(payload.get('requestId')) or f'ai-evidence-{int(time.time() * 1000)}'
+        request_id = _optional_string(payload.get('requestId')) or build_run_id()
         artifact_root = self._resolve_artifact_root(request_id)
         source_path = str(payload['sourcePath'])
         marker_rect = NormalizedRect.from_payload(payload.get('markerRect'))
@@ -250,7 +251,7 @@ class AiEvidenceWorkflow:
             capture.release()
 
     def _resolve_artifact_root(self, request_id: str) -> Path:
-        artifact_root = self._runtime_root() / '.runtime' / 'ai-evidence' / request_id
+        artifact_root = run_child(self._runtime_root(), request_id, 'ai-evidence')
         artifact_root.mkdir(parents=True, exist_ok=True)
         return artifact_root
 
@@ -305,6 +306,7 @@ class AiEvidenceWorkflow:
             images=[self._frame_to_chat_image(frame) for frame in frames],
             request_metadata={
                 'workflow': 'ai-evidence',
+                'runId': request_id,
                 'requestId': request_id,
                 'stage': 'localize-coarse-interval',
                 'frameCount': len(frames),
@@ -343,6 +345,7 @@ class AiEvidenceWorkflow:
             images=[self._frame_to_chat_image(frame) for frame in frames],
             request_metadata={
                 'workflow': 'ai-evidence',
+                'runId': request_id,
                 'requestId': request_id,
                 'stage': 'select-keyframes',
                 'frameCount': len(frames),
@@ -475,6 +478,7 @@ class AiEvidenceWorkflow:
             images=chat_images,
             request_metadata={
                 'workflow': 'ai-evidence',
+                'runId': request_id,
                 'requestId': request_id,
                 'stage': 'resolve-target',
                 'anchorFrameId': anchor_frame.frame_id,

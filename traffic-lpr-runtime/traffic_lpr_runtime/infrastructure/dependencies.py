@@ -11,6 +11,13 @@ from typing import Any
 
 from traffic_lpr_runtime.domain.errors import RuntimeFailure
 from traffic_lpr_runtime.domain.models import RuntimeStatus
+from traffic_lpr_runtime.infrastructure.runtime_layout import (
+    cache_root as resolve_cache_root,
+    ensure_runtime_layout,
+    runtime_data_root as resolve_runtime_data_root,
+    runs_root as resolve_runs_root,
+    vendor_cache_root as resolve_vendor_cache_root,
+)
 
 
 DEPENDENCY_NAMES = [
@@ -57,6 +64,26 @@ class DependencyRegistry:
             if (candidate / 'pyproject.toml').exists():
                 return candidate
         return self.runtime_script.parent
+
+    def runtime_data_root(self) -> Path:
+        runtime_root = self.runtime_root()
+        ensure_runtime_layout(runtime_root)
+        return resolve_runtime_data_root(runtime_root)
+
+    def runtime_runs_root(self) -> Path:
+        runtime_root = self.runtime_root()
+        ensure_runtime_layout(runtime_root)
+        return resolve_runs_root(runtime_root)
+
+    def runtime_cache_root(self) -> Path:
+        runtime_root = self.runtime_root()
+        ensure_runtime_layout(runtime_root)
+        return resolve_cache_root(runtime_root)
+
+    def vendor_cache_root(self) -> Path:
+        runtime_root = self.runtime_root()
+        ensure_runtime_layout(runtime_root)
+        return resolve_vendor_cache_root(runtime_root)
 
     def models_root(self) -> Path:
         models_root = self.runtime_root() / 'models'

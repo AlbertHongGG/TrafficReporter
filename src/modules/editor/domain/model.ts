@@ -71,6 +71,7 @@ export const DEFAULT_RENDER_PROFILE: RenderProfile = {
   fps: 60,
   videoQuality: '1080p',
   audioBitrateKbps: 320,
+  compressionMode: 'standard',
 };
 
 export const DEFAULT_ZOOM = 96;
@@ -90,6 +91,22 @@ export const DEFAULT_MARKER_RECT: VideoMarkerRect = {
 
 export function createId(prefix: string) {
   return `${prefix}-${crypto.randomUUID()}`;
+}
+
+export function createRunFolderId() {
+  const now = new Date();
+  const year = (now.getFullYear() % 100).toString().padStart(2, '0');
+  const month = (now.getMonth() + 1).toString().padStart(2, '0');
+  const day = now.getDate().toString().padStart(2, '0');
+  const hours = now.getHours().toString().padStart(2, '0');
+  const minutes = now.getMinutes().toString().padStart(2, '0');
+  const seconds = now.getSeconds().toString().padStart(2, '0');
+  const randomBytes = crypto.getRandomValues(new Uint8Array(4));
+  const randomSuffix = Array.from(randomBytes)
+    .map((value) => value.toString(16).padStart(2, '0'))
+    .join('');
+
+  return `${year}${month}${day}-${hours}${minutes}${seconds}-${randomSuffix}`;
 }
 
 export function clamp(value: number, min: number, max: number) {

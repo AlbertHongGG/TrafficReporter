@@ -22,6 +22,7 @@ import type {
   ExportSnapshot,
   ExportFormat,
   ExportProgressPayload,
+  OutputCompressionMode,
   VideoQuality,
 } from '../application/exportTypes';
 import { formatTransportTime } from '../../editor/domain/model';
@@ -41,6 +42,7 @@ const FORMAT_OPTIONS: Array<{
 
 const VIDEO_QUALITY_OPTIONS: VideoQuality[] = ['source', '2160p', '1440p', '1080p', '720p', '480p'];
 const AUDIO_BITRATE_OPTIONS: AudioBitrateKbps[] = [320, 256, 192, 128, 96];
+const COMPRESSION_MODE_OPTIONS: OutputCompressionMode[] = ['standard', 'compact'];
 
 const DEFAULT_PROGRESS: ExportProgressPayload = {
   progress: 0,
@@ -77,6 +79,7 @@ export const ExportWindow: React.FC = () => {
   const [format, setFormat] = React.useState<ExportFormat>('mp4');
   const [videoQuality, setVideoQuality] = React.useState<VideoQuality>('1080p');
   const [audioBitrateKbps, setAudioBitrateKbps] = React.useState<AudioBitrateKbps>(320);
+  const [compressionMode, setCompressionMode] = React.useState<OutputCompressionMode>('standard');
   const [outputPath, setOutputPath] = React.useState('');
   const [progress, setProgress] = React.useState<ExportProgressPayload>(DEFAULT_PROGRESS);
   const [status, setStatus] = React.useState<ExportStatus>('loading');
@@ -97,6 +100,7 @@ export const ExportWindow: React.FC = () => {
     setFormat(defaultFormatForSession(nextSnapshot));
     setVideoQuality(nextSnapshot.renderProfile.videoQuality ?? '1080p');
     setAudioBitrateKbps(nextSnapshot.renderProfile.audioBitrateKbps ?? 320);
+    setCompressionMode(nextSnapshot.renderProfile.compressionMode ?? 'standard');
     setOutputPath('');
     setProgress(DEFAULT_PROGRESS);
     setStatus('idle');
@@ -248,6 +252,7 @@ export const ExportWindow: React.FC = () => {
           fps: snapshot.renderProfile.fps,
           videoQuality,
           audioBitrateKbps,
+          compressionMode,
         },
         snapshot,
       });
@@ -263,7 +268,7 @@ export const ExportWindow: React.FC = () => {
         failed: true,
       });
     }
-  }, [audioBitrateKbps, format, outputPath, pickOutputPath, snapshot, status, videoQuality]);
+  }, [audioBitrateKbps, compressionMode, format, outputPath, pickOutputPath, snapshot, status, videoQuality]);
 
   const handleClose = async () => {
     await getCurrentWindow().close();
@@ -367,6 +372,32 @@ export const ExportWindow: React.FC = () => {
                         label: opt === 'source' ? 'Source' : opt,
                       }))}
                     />
+                  </div>
+                </div>
+
+                <div className={styles.settingGroup}>
+                  <label>Size Mode</label>
+                  <div className={styles.formatSelector}>
+                    {COMPRESSION_MODE_OPTIONS.map((option) => {
+                      const isActive = compressionMode === option;
+                      return (
+                        <button
+                          key={option}
+                          onClick={() => setCompressionMode(option)}
+                          className={`${styles.formatPill} ${isActive ? styles.active : ''}`}
+                        >
+                          {isActive && (
+                            <motion.div
+                              layoutId="compressionPillBg"
+                              className={styles.pillBg}
+                              initial={false}
+                              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                            />
+                          )}
+                          <span className={styles.pillText}>{option === 'compact' ? 'Compact' : 'Standard'}</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
