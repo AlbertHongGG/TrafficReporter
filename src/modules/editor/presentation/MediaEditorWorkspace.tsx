@@ -64,7 +64,7 @@ import {
   scanLprTargets,
 } from '../infrastructure/lprApi';
 import { createLogger, getErrorMessage, getErrorSummary, serializeError } from '../../../utils/logger';
-import { openExportWindow } from '../../export/infrastructure/exportApi';
+import { openExportWindow, syncExportWindowSession } from '../../export/infrastructure/exportApi';
 import { preparePendingExportSession } from '../../export/application/exportSession';
 import {
   AI_PANEL_ACTION_EVENT,
@@ -1117,7 +1117,18 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
 
     const compressionMode = activeFile.renderProfile.compressionMode === 'compact' ? 'standard' : 'compact';
     dispatch({ type: 'set-render-profile', renderProfile: { compressionMode } });
-  }, [activeFile, dispatch]);
+
+    try {
+      const snapshot = preparePendingExportSession(state);
+      snapshot.renderProfile = {
+        ...snapshot.renderProfile,
+        compressionMode,
+      };
+      void syncExportWindowSession(snapshot);
+    } catch {
+      // Ignore export-session sync failures when no exportable timeline is available.
+    }
+  }, [activeFile, dispatch, state]);
 
   const handleExportCurrentFrame = async () => {
     const fileState = activeFile;
@@ -1433,6 +1444,8 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         sourcePath: activeFile.asset.path,
         description: trimmedPrompt,
         markerRect: activeFile.markerRect,
+        compressionMode: activeFile.renderProfile.compressionMode,
+        audioBitrateKbps: activeFile.renderProfile.audioBitrateKbps,
         targetVehicleKind: lprAnalysisVehicleKind,
         countryHints: lprState.countryHints,
         analysisProfileId: lprState.selectedAnalysisProfileId,

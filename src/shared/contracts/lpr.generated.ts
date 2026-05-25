@@ -384,6 +384,8 @@ export interface AiEvidenceRequest {
   sourcePath: string;
   description: string;
   markerRect: VideoMarkerRect | null;
+  compressionMode: OutputCompressionMode;
+  audioBitrateKbps?: number;
   targetVehicleKind: LprVehicleKind;
   countryHints: string[];
   analysisProfileId?: LprAnalysisProfileId | null;

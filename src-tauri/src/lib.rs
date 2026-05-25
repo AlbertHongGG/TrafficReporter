@@ -3,6 +3,7 @@ mod contracts;
 mod downloader;
 mod editor;
 mod export;
+mod media;
 mod platform;
 
 use std::sync::Mutex;

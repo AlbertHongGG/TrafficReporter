@@ -21,6 +21,11 @@ use crate::contracts::{
     LprTargetScanRequestPayload, LprTargetScanResponsePayload, MediaProbePayload,
     VideoMarkerRectPayload,
 };
+use crate::media::{
+    append_h264_aac_codec_args, resolve_audio_bitrate_kbps,
+    resolve_still_image_quantization_max_colors, resolve_video_compression_settings,
+    StillImageOutputTarget, VideoCompressionTarget,
+};
 use crate::platform::process::{find_bundled, find_lpr_runtime_root, find_python_runtime, hidden_command};
 
 const LPR_RUNTIME_RETRY_LIMIT: usize = 1;
@@ -454,6 +459,22 @@ fn parse_stream_resolution(line: &str) -> Option<(u32, u32)> {
     None
 }
 
+fn parse_stream_fps(line: &str) -> Option<u32> {
+    for segment in line.split(',') {
+        let trimmed = segment.trim();
+        let Some(value) = trimmed.strip_suffix(" fps") else {
+            continue;
+        };
+
+        let fps = value.trim().parse::<f64>().ok()?;
+        if fps.is_finite() && fps > 0.0 {
+            return Some(fps.round().clamp(1.0, 240.0) as u32);
+        }
+    }
+
+    None
+}
+
 fn seconds_from_ms(value: u64) -> String {
     format!("{:.3}", value as f64 / 1000.0)
 }
@@ -470,26 +491,110 @@ fn runtime_run_root(run_id: &str) -> Result<PathBuf, String> {
     Ok(runtime_data_root()?.join("runs").join(run_id))
 }
 
-fn export_ai_evidence_clip(
+fn parse_ffprobe_frame_rate(value: &str) -> Option<u32> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() || trimmed == "0/0" {
+        return None;
+    }
+
+    let fps = if let Some((numerator, denominator)) = trimmed.split_once('/') {
+        let numerator = numerator.trim().parse::<f64>().ok()?;
+        let denominator = denominator.trim().parse::<f64>().ok()?;
+        if denominator <= 0.0 {
+            return None;
+        }
+        numerator / denominator
+    } else {
+        trimmed.parse::<f64>().ok()?
+    };
+
+    if !fps.is_finite() || fps <= 0.0 {
+        return None;
+    }
+
+    Some(fps.round().clamp(1.0, 240.0) as u32)
+}
+
+fn probe_video_stream_profile(path: &str) -> Result<(u32, u32, u32), String> {
+    let ffprobe = find_bundled("ffprobe")?;
+    let output = hidden_command(&ffprobe)
+        .args([
+            "-v",
+            "error",
+            "-print_format",
+            "json",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=width,height,avg_frame_rate,r_frame_rate",
+            path,
+        ])
+        .output()
+        .map_err(|error| format!("Failed to execute ffprobe for video stream profile: {}", error))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if stderr.is_empty() {
+            "ffprobe failed to inspect the video stream profile.".to_string()
+        } else {
+            stderr
+        });
+    }
+
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout)
+        .map_err(|error| format!("Failed to parse video stream profile: {}", error))?;
+    let stream = value
+        .get("streams")
+        .and_then(|streams| streams.as_array())
+        .and_then(|streams| streams.first())
+        .ok_or_else(|| "ffprobe did not report a primary video stream.".to_string())?;
+
+    let width = stream
+        .get("width")
+        .and_then(|value| value.as_u64())
+        .and_then(|value| u32::try_from(value).ok())
+        .filter(|value| *value > 0)
+        .ok_or_else(|| "ffprobe did not report the video width.".to_string())?;
+    let height = stream
+        .get("height")
+        .and_then(|value| value.as_u64())
+        .and_then(|value| u32::try_from(value).ok())
+        .filter(|value| *value > 0)
+        .ok_or_else(|| "ffprobe did not report the video height.".to_string())?;
+    let fps = stream
+        .get("avg_frame_rate")
+        .and_then(|value| value.as_str())
+        .and_then(parse_ffprobe_frame_rate)
+        .or_else(|| {
+            stream
+                .get("r_frame_rate")
+                .and_then(|value| value.as_str())
+                .and_then(parse_ffprobe_frame_rate)
+        })
+        .unwrap_or(30);
+
+    Ok((width, height, fps))
+}
+
+fn build_ai_evidence_clip_args(
     source_path: &str,
     start_ms: u64,
     end_ms: u64,
     output_path: &Path,
-) -> Result<(), String> {
-    if end_ms <= start_ms {
-        return Err("AI evidence clip export requires a non-empty interval.".to_string());
-    }
-
-    if let Some(parent) = output_path.parent() {
-        if !parent.as_os_str().is_empty() {
-            fs::create_dir_all(parent)
-                .map_err(|error| format!("Failed to create AI evidence clip directory: {}", error))?;
-        }
-    }
-
-    let ffmpeg = find_bundled("ffmpeg")?;
+    compression_mode: OutputCompressionModePayload,
+    audio_bitrate_kbps: Option<u32>,
+    stream_profile: (u32, u32, u32),
+) -> Vec<String> {
     let duration_ms = end_ms.saturating_sub(start_ms);
-    let args = vec![
+    let (width, height, fps) = stream_profile;
+    let settings = resolve_video_compression_settings(
+        compression_mode,
+        VideoCompressionTarget::AiEvidenceClip,
+        width,
+        height,
+        fps,
+    );
+    let mut args = vec![
         "-y".to_string(),
         "-hide_banner".to_string(),
         "-loglevel".to_string(),
@@ -504,18 +609,47 @@ fn export_ai_evidence_clip(
         "0:v:0".to_string(),
         "-map".to_string(),
         "0:a?".to_string(),
-        "-c:v".to_string(),
-        "libx264".to_string(),
-        "-preset".to_string(),
-        "faster".to_string(),
-        "-pix_fmt".to_string(),
-        "yuv420p".to_string(),
-        "-c:a".to_string(),
-        "aac".to_string(),
-        "-movflags".to_string(),
-        "+faststart".to_string(),
-        output_path.to_string_lossy().to_string(),
     ];
+    append_h264_aac_codec_args(
+        &mut args,
+        settings,
+        resolve_audio_bitrate_kbps(audio_bitrate_kbps),
+        true,
+    );
+    args.push(output_path.to_string_lossy().to_string());
+    args
+}
+
+fn export_ai_evidence_clip(
+    source_path: &str,
+    start_ms: u64,
+    end_ms: u64,
+    output_path: &Path,
+    compression_mode: OutputCompressionModePayload,
+    audio_bitrate_kbps: Option<u32>,
+) -> Result<(), String> {
+    if end_ms <= start_ms {
+        return Err("AI evidence clip export requires a non-empty interval.".to_string());
+    }
+
+    if let Some(parent) = output_path.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent)
+                .map_err(|error| format!("Failed to create AI evidence clip directory: {}", error))?;
+        }
+    }
+
+    let ffmpeg = find_bundled("ffmpeg")?;
+    let stream_profile = probe_video_stream_profile(source_path)?;
+    let args = build_ai_evidence_clip_args(
+        source_path,
+        start_ms,
+        end_ms,
+        output_path,
+        compression_mode,
+        audio_bitrate_kbps,
+        stream_profile,
+    );
     let output = hidden_command(&ffmpeg)
         .args(&args)
         .output()
@@ -635,6 +769,7 @@ fn probe_with_ffprobe(path: &str) -> Result<MediaProbePayload, String> {
 
     let mut has_video = false;
     let mut has_audio = false;
+    let mut fps = None;
     let mut width = None;
     let mut height = None;
 
@@ -642,6 +777,17 @@ fn probe_with_ffprobe(path: &str) -> Result<MediaProbePayload, String> {
         match stream.get("codec_type").and_then(|codec_type| codec_type.as_str()) {
             Some("video") => {
                 has_video = true;
+                fps = fps.or_else(|| {
+                    stream
+                        .get("avg_frame_rate")
+                        .and_then(|value| value.as_str())
+                        .and_then(parse_ffprobe_frame_rate)
+                }).or_else(|| {
+                    stream
+                        .get("r_frame_rate")
+                        .and_then(|value| value.as_str())
+                        .and_then(parse_ffprobe_frame_rate)
+                });
                 width = width.or_else(|| {
                     stream
                         .get("width")
@@ -670,6 +816,7 @@ fn probe_with_ffprobe(path: &str) -> Result<MediaProbePayload, String> {
         duration_ms,
         has_video,
         has_audio,
+        fps,
         width,
         height,
     })
@@ -688,6 +835,7 @@ fn probe_with_ffmpeg(path: &str) -> Result<MediaProbePayload, String> {
     let mut duration_ms = 0;
     let mut has_video = false;
     let mut has_audio = false;
+    let mut fps = None;
     let mut width = None;
     let mut height = None;
 
@@ -704,6 +852,9 @@ fn probe_with_ffmpeg(path: &str) -> Result<MediaProbePayload, String> {
 
         if line.contains("Video:") {
             has_video = true;
+            if fps.is_none() {
+                fps = parse_stream_fps(line);
+            }
             if width.is_none() || height.is_none() {
                 if let Some((parsed_width, parsed_height)) = parse_stream_resolution(line) {
                     width = Some(parsed_width);
@@ -738,6 +889,7 @@ fn probe_with_ffmpeg(path: &str) -> Result<MediaProbePayload, String> {
         duration_ms: duration_ms.max(1000),
         has_video,
         has_audio,
+        fps,
         width,
         height,
     })
@@ -768,7 +920,10 @@ pub async fn probe_media_source(path: String) -> Result<MediaProbePayload, Strin
     }
 }
 
-fn export_frame_image_internal(request: &FrameExportRequest) -> Result<(), String> {
+fn export_frame_image_internal(
+    request: &FrameExportRequest,
+    output_target: StillImageOutputTarget,
+) -> Result<(), String> {
     let ffmpeg = find_bundled("ffmpeg")?;
     let output_path = PathBuf::from(&request.output_path);
     ensure_png_output_path(&output_path)?;
@@ -783,16 +938,9 @@ fn export_frame_image_internal(request: &FrameExportRequest) -> Result<(), Strin
     let export_result = (|| -> Result<(), String> {
         run_ffmpeg_command(&ffmpeg, &build_frame_export_args_for_output(request, &temp_png_path))?;
 
-        if let Some(max_colors) = request.compression_mode.still_image_quantization_max_colors() {
-            run_ffmpeg_command(&ffmpeg, &build_png_quantize_args(&temp_png_path, &output_path, max_colors))?;
-            fs::remove_file(&temp_png_path)
-                .map_err(|error| format!("Failed to clean temporary PNG export: {}", error))?;
-        } else {
-            fs::copy(&temp_png_path, &output_path)
-                .map_err(|error| format!("Failed to finalize PNG export: {}", error))?;
-            fs::remove_file(&temp_png_path)
-                .map_err(|error| format!("Failed to clean temporary PNG export: {}", error))?;
-        }
+        finalize_png_export(&ffmpeg, &temp_png_path, &output_path, request.compression_mode, output_target)?;
+        fs::remove_file(&temp_png_path)
+            .map_err(|error| format!("Failed to clean temporary PNG export: {}", error))?;
 
         Ok(())
     })();
@@ -820,6 +968,92 @@ fn run_ffmpeg_command(ffmpeg: &str, args: &[String]) -> Result<(), String> {
     } else {
         Ok(())
     }
+}
+
+fn finalize_png_export(
+    ffmpeg: &str,
+    staged_png_path: &Path,
+    output_path: &Path,
+    compression_mode: OutputCompressionModePayload,
+    output_target: StillImageOutputTarget,
+) -> Result<(), String> {
+    if let Some(max_colors) = resolve_still_image_quantization_max_colors(compression_mode, output_target) {
+        run_ffmpeg_command(ffmpeg, &build_png_quantize_args(staged_png_path, output_path, max_colors))
+    } else {
+        fs::copy(staged_png_path, output_path)
+            .map_err(|error| format!("Failed to finalize PNG export: {}", error))?;
+        Ok(())
+    }
+}
+
+fn finalize_existing_png_asset_in_place(
+    ffmpeg: &str,
+    output_path: &Path,
+    compression_mode: OutputCompressionModePayload,
+    output_target: StillImageOutputTarget,
+) -> Result<(), String> {
+    ensure_png_output_path(output_path)?;
+    let temp_png_path = build_temp_png_path(output_path);
+    fs::copy(output_path, &temp_png_path)
+        .map_err(|error| format!("Failed to stage PNG artifact for finalization: {}", error))?;
+
+    let result = finalize_png_export(ffmpeg, &temp_png_path, output_path, compression_mode, output_target);
+    let cleanup_result = fs::remove_file(&temp_png_path)
+        .map_err(|error| format!("Failed to clean temporary PNG artifact: {}", error));
+
+    match (result, cleanup_result) {
+        (Ok(()), Ok(())) => Ok(()),
+        (Err(error), _) => Err(error),
+        (Ok(()), Err(error)) => Err(error),
+    }
+}
+
+fn copy_png_asset_with_compression(
+    ffmpeg: &str,
+    source_path: &Path,
+    output_path: &Path,
+    compression_mode: OutputCompressionModePayload,
+    output_target: StillImageOutputTarget,
+) -> Result<(), String> {
+    ensure_png_output_path(output_path)?;
+    finalize_png_export(ffmpeg, source_path, output_path, compression_mode, output_target)
+}
+
+fn finalize_ai_keyframe_artifacts(
+    response: &mut AiEvidenceResponsePayload,
+    compression_mode: OutputCompressionModePayload,
+) -> Result<(), String> {
+    if response.keyframes.is_empty() {
+        return Ok(());
+    }
+
+    let ffmpeg = find_bundled("ffmpeg")?;
+    for keyframe in &response.keyframes {
+        let Some(image_path) = keyframe.frame.image_path.as_deref() else {
+            continue;
+        };
+
+        let path = PathBuf::from(image_path);
+        if !path.exists() {
+            continue;
+        }
+
+        let is_png = path
+            .extension()
+            .and_then(|value| value.to_str())
+            .map(|value| value.eq_ignore_ascii_case("png"))
+            .unwrap_or(false);
+        if is_png {
+            finalize_existing_png_asset_in_place(
+                &ffmpeg,
+                &path,
+                compression_mode,
+                StillImageOutputTarget::AiEvidenceKeyframe,
+            )?;
+        }
+    }
+
+    Ok(())
 }
 
 fn ensure_png_output_path(output_path: &Path) -> Result<(), String> {
@@ -928,7 +1162,7 @@ pub fn save_generated_media_asset(source_path: String, output_path: String) -> R
 
 #[tauri::command]
 pub fn export_frame_image(request: FrameExportRequest) -> Result<(), String> {
-    export_frame_image_internal(&request)
+    export_frame_image_internal(&request, StillImageOutputTarget::FrameExport)
 }
 
 #[tauri::command]
@@ -1037,10 +1271,11 @@ pub async fn analyze_ai_evidence(
             "info",
             "AiEvidenceRequest",
             format!(
-                "requestId={} description={} vehicleKind={}",
+                "requestId={} description={} vehicleKind={} compressionMode={}",
                 request.request_id.as_deref().unwrap_or("-"),
                 request.description.as_str(),
                 request.target_vehicle_kind.as_str(),
+                if request.compression_mode.is_compact() { "compact" } else { "standard" },
             ),
         );
         emit_ai_evidence_progress(
@@ -1058,6 +1293,7 @@ pub async fn analyze_ai_evidence(
             "ai-evidence",
             &request,
         )?;
+        finalize_ai_keyframe_artifacts(&mut response, request.compression_mode)?;
 
         if let Some(interval) = response.interval.clone() {
             let request_folder = response
@@ -1083,6 +1319,8 @@ pub async fn analyze_ai_evidence(
                 interval.start_ms,
                 interval.end_ms,
                 &clip_path,
+                request.compression_mode,
+                request.audio_bitrate_kbps,
             )?;
             response.clip_path = Some(clip_path.to_string_lossy().to_string());
         }
@@ -1173,11 +1411,16 @@ pub async fn export_lpr_evidence(
             time_ms: request.time_ms,
             marker_rect: request.marker_rect.clone(),
             compression_mode: request.compression_mode,
-        })?;
+        }, StillImageOutputTarget::EvidenceSourceFrame)?;
 
         let decision_frames = select_decision_samples(&request.accepted_candidate, &request.samples);
         let mut exported_file_count = 1usize;
-        let exported_decision_frames = export_decision_frames(&bundle_dir, &decision_frames, &mut exported_file_count)?;
+        let exported_decision_frames = export_decision_frames(
+            &bundle_dir,
+            &decision_frames,
+            request.compression_mode,
+            &mut exported_file_count,
+        )?;
 
         let exported_at_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -1351,12 +1594,19 @@ fn select_decision_samples<'a>(
 fn export_decision_frames(
     bundle_dir: &Path,
     decision_frames: &[DecisionSampleExport<'_>],
+    compression_mode: OutputCompressionModePayload,
     exported_file_count: &mut usize,
 ) -> Result<Vec<serde_json::Value>, String> {
     let decision_root = bundle_dir.join("decision-frames");
     fs::create_dir_all(&decision_root)
         .map_err(|error| format!("Failed to create decision frame directory: {}", error))?;
 
+    let compact_png_copy = compression_mode.is_compact();
+    let ffmpeg = if compact_png_copy {
+        Some(find_bundled("ffmpeg")?)
+    } else {
+        None
+    };
     let mut exported: Vec<serde_json::Value> = Vec::new();
     for (index, decision_frame) in decision_frames.iter().enumerate() {
         let frame_dir = decision_root.join(format!(
@@ -1375,8 +1625,19 @@ fn export_decision_frames(
                 .filter(|value| !value.is_empty())
                 .unwrap_or("png");
             let destination = frame_dir.join(format!("{}.{}", sanitize_path_component(artifact_key), extension));
-            fs::copy(source_path, &destination)
-                .map_err(|error| format!("Failed to copy evidence artifact {}: {}", source_path.display(), error))?;
+            let is_png = extension.eq_ignore_ascii_case("png");
+            if is_png && compact_png_copy {
+                copy_png_asset_with_compression(
+                    ffmpeg.as_deref().unwrap_or_default(),
+                    source_path,
+                    &destination,
+                    compression_mode,
+                    StillImageOutputTarget::EvidenceDecisionArtifact,
+                )?;
+            } else {
+                fs::copy(source_path, &destination)
+                    .map_err(|error| format!("Failed to copy evidence artifact {}: {}", source_path.display(), error))?;
+            }
             *exported_file_count += 1;
             artifact_paths.insert(
                 artifact_key.clone(),
@@ -1411,6 +1672,38 @@ fn export_decision_frames(
     }
 
     Ok(exported)
+}
+
+#[cfg(test)]
+mod ai_clip_tests {
+    use super::*;
+
+    #[test]
+    fn parse_ffprobe_frame_rate_handles_fractional_values() {
+        assert_eq!(parse_ffprobe_frame_rate("60000/1001"), Some(60));
+        assert_eq!(parse_ffprobe_frame_rate("30000/1001"), Some(30));
+        assert_eq!(parse_ffprobe_frame_rate("0/0"), None);
+    }
+
+    #[test]
+    fn compact_ai_clip_args_use_shared_video_policy_and_audio_bitrate() {
+        let args = build_ai_evidence_clip_args(
+            "demo.mp4",
+            1000,
+            4000,
+            Path::new("clip.mp4"),
+            OutputCompressionModePayload::Compact,
+            Some(256),
+            (1920, 1080, 60),
+        );
+
+        assert!(args.windows(2).any(|window| window == ["-preset", "veryslow"]));
+        assert!(args.windows(2).any(|window| window == ["-crf", "31"]));
+        assert!(args.windows(2).any(|window| window == ["-g", "240"]));
+        assert!(args.windows(2).any(|window| window == ["-maxrate", "1836k"]));
+        assert!(args.windows(2).any(|window| window == ["-b:a", "256k"]));
+        assert!(args.windows(2).any(|window| window == ["-movflags", "+faststart"]));
+    }
 }
 
 #[cfg(test)]

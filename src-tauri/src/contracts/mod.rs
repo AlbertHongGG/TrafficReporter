@@ -21,6 +21,7 @@ pub struct MediaProbePayload {
     pub duration_ms: u64,
     pub has_video: bool,
     pub has_audio: bool,
+    pub fps: Option<u32>,
     pub width: Option<u32>,
     pub height: Option<u32>,
 }
@@ -55,86 +56,6 @@ pub enum OutputCompressionModePayload {
 impl OutputCompressionModePayload {
     pub fn is_compact(self) -> bool {
         matches!(self, Self::Compact)
-    }
-
-    pub fn video_preset(self) -> &'static str {
-        if self.is_compact() {
-            "veryslow"
-        } else {
-            "medium"
-        }
-    }
-
-    pub fn video_crf(self) -> &'static str {
-        if self.is_compact() {
-            "30"
-        } else {
-            "18"
-        }
-    }
-
-    pub fn video_gop_size(self, fps: u32) -> u32 {
-        let safe_fps = fps.max(1);
-        if self.is_compact() {
-            safe_fps.saturating_mul(4)
-        } else {
-            safe_fps.saturating_mul(2)
-        }
-    }
-
-    pub fn video_min_keyframe_interval(self, fps: u32) -> u32 {
-        let safe_fps = fps.max(1);
-        if self.is_compact() {
-            safe_fps
-        } else {
-            safe_fps / 2
-        }
-        .max(1)
-    }
-
-    pub fn video_b_frames(self) -> u32 {
-        if self.is_compact() {
-            3
-        } else {
-            2
-        }
-    }
-
-    pub fn video_maxrate_kbps(self, width: u32, height: u32, fps: u32) -> Option<u32> {
-        if !self.is_compact() {
-            return None;
-        }
-
-        let longer_side = width.max(height);
-        let base_kbps: u32 = match longer_side {
-            0..=640 => 1200,
-            641..=960 => 2200,
-            961..=1280 => 3500,
-            1281..=1920 => 6000,
-            1921..=2560 => 9000,
-            _ => 14000,
-        };
-
-        let adjusted_kbps = if fps > 30 {
-            (base_kbps.saturating_mul(135).saturating_add(99)) / 100
-        } else {
-            base_kbps
-        };
-
-        Some(adjusted_kbps)
-    }
-
-    pub fn video_bufsize_kbps(self, width: u32, height: u32, fps: u32) -> Option<u32> {
-        self.video_maxrate_kbps(width, height, fps)
-            .map(|maxrate| maxrate.saturating_mul(2))
-    }
-
-    pub fn still_image_quantization_max_colors(self) -> Option<u32> {
-        if self.is_compact() {
-            Some(192)
-        } else {
-            None
-        }
     }
 }
 

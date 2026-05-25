@@ -20,6 +20,13 @@ export function processTimelineExport(request: TimelineExportRequest) {
   return invoke<void>('process_timeline_export', { request });
 }
 
+export async function syncExportWindowSession(snapshot: ExportSnapshot) {
+  await setPendingExportSession(snapshot);
+  await emitTo(EXPORT_WINDOW_LABEL, 'editor/export-session-updated', snapshot).catch((error) => {
+    log.debug('Skipped pushing export session to a closed export window.', serializeError(error));
+  });
+}
+
 function waitForWindowCreation(exportWindow: WebviewWindow) {
   return new Promise<WebviewWindow>((resolve, reject) => {
     let settled = false;
@@ -85,13 +92,10 @@ export async function openExportWindow(snapshot: ExportSnapshot) {
     trackCount: snapshot.tracks.length,
   });
 
-  await setPendingExportSession(snapshot);
+  await syncExportWindowSession(snapshot);
 
   const existingWindow = await WebviewWindow.getByLabel(EXPORT_WINDOW_LABEL);
   if (existingWindow) {
-    await emitTo(EXPORT_WINDOW_LABEL, 'editor/export-session-updated', snapshot).catch((error) => {
-      log.warn('Failed to push updated session to an existing export window.', serializeError(error));
-    });
     await existingWindow.setFocus().catch((error) => {
       log.warn('Failed to focus existing export window.', serializeError(error));
     });

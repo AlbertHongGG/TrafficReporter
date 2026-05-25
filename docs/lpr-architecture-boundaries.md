@@ -111,10 +111,12 @@ AI evidence stage policy:
 
 Export compression policy:
 - `compressionMode` is an explicit cross-layer contract field, not an optional host-side hint
-- timeline export, frame export, and evidence bundle source-frame export must use the same compression mode semantics
+- timeline export, AI evidence clip export, frame export, AI evidence keyframes, and evidence bundle user-facing images must use the same compression mode semantics
 - compression mode must not silently change output dimensions; timeline exports may scale only when the user explicitly selects a lower resolution, and they must never upscale beyond the source dimensions
+- audio bitrate remains a user-owned setting and must pass through unchanged on every user-facing video export surface that carries audio
 - `standard` keeps higher-fidelity timeline settings and full-color PNG still-image outputs
 - `compact` means lossy size reduction at the same dimensions: stronger H.264 inter-frame compression for timelines and lossy PNG quantization for user-facing still images
+- AI runtime storyboard assets and ai-log JSON remain diagnostic artifacts by default; host-side finalization is responsible for compact-aware clip and user-facing keyframe outputs
 - evidence bundles must not hardcode a still-image format that bypasses the selected compression mode, and user-facing still-image outputs must remain `.png`
 
 Target evidence policy:

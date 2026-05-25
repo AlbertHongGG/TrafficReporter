@@ -9,7 +9,88 @@ use crate::contracts::{
     ExportProgressPayload, ExportSnapshotPayload, ExportSource, RenderProfilePayload,
     TimelineClipPayload, TimelineExportRequest,
 };
+use crate::media::{
+    append_h264_aac_codec_args, resolve_audio_bitrate_kbps,
+    resolve_video_compression_settings, VideoCompressionTarget,
+};
 use crate::platform::process::{find_bundled, hidden_command};
+
+fn parse_ffprobe_frame_rate(value: &str) -> Option<u32> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() || trimmed == "0/0" {
+        return None;
+    }
+
+    let fps = if let Some((numerator, denominator)) = trimmed.split_once('/') {
+        let numerator = numerator.trim().parse::<f64>().ok()?;
+        let denominator = denominator.trim().parse::<f64>().ok()?;
+        if denominator <= 0.0 {
+            return None;
+        }
+        numerator / denominator
+    } else {
+        trimmed.parse::<f64>().ok()?
+    };
+
+    if !fps.is_finite() || fps <= 0.0 {
+        return None;
+    }
+
+    Some(fps.round().clamp(1.0, 240.0) as u32)
+}
+
+fn clamp_export_fps(requested_fps: u32, source_fps: Option<u32>) -> u32 {
+    let requested_fps = requested_fps.max(1);
+    source_fps.map(|fps| fps.max(1).min(requested_fps)).unwrap_or(requested_fps)
+}
+
+fn probe_source_video_fps(path: &str) -> Option<u32> {
+    let ffprobe = find_bundled("ffprobe").ok()?;
+    let output = hidden_command(&ffprobe)
+        .args([
+            "-v",
+            "error",
+            "-print_format",
+            "json",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=avg_frame_rate,r_frame_rate",
+            path,
+        ])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).ok()?;
+    let stream = value
+        .get("streams")
+        .and_then(|streams| streams.as_array())
+        .and_then(|streams| streams.first())?;
+
+    stream
+        .get("avg_frame_rate")
+        .and_then(|value| value.as_str())
+        .and_then(parse_ffprobe_frame_rate)
+        .or_else(|| {
+            stream
+                .get("r_frame_rate")
+                .and_then(|value| value.as_str())
+                .and_then(parse_ffprobe_frame_rate)
+        })
+}
+
+fn resolved_export_fps(request: &TimelineExportRequest) -> u32 {
+    let source_fps = request
+        .snapshot
+        .sources
+        .iter()
+        .find(|source| source.has_video)
+        .and_then(|source| probe_source_video_fps(&source.path));
+    clamp_export_fps(request.profile.fps, source_fps)
+}
 
 #[tauri::command]
 pub fn set_pending_export_session(
@@ -105,7 +186,7 @@ fn resolved_video_dimensions(request: &TimelineExportRequest) -> Option<(u32, u3
     ))
 }
 
-fn build_filter_graph(request: &TimelineExportRequest) -> Result<(Vec<String>, String, Option<String>), String> {
+fn build_filter_graph(request: &TimelineExportRequest, export_fps: u32) -> Result<(Vec<String>, String, Option<String>), String> {
     let snapshot = &request.snapshot;
     let format = request.profile.format.to_lowercase();
     let is_video_output = matches!(format.as_str(), "mp4" | "mkv");
@@ -131,7 +212,7 @@ fn build_filter_graph(request: &TimelineExportRequest) -> Result<(Vec<String>, S
                 width,
                 height,
                 total_seconds,
-                request.profile.fps.max(1)
+                export_fps.max(1)
             ),
             "-f".to_string(),
             "lavfi".to_string(),
@@ -289,90 +370,27 @@ fn build_filter_graph(request: &TimelineExportRequest) -> Result<(Vec<String>, S
     ))
 }
 
-fn codec_args_for_profile(profile: &RenderProfilePayload, video_dimensions: Option<(u32, u32)>) -> Vec<String> {
+fn codec_args_for_profile(profile: &RenderProfilePayload, video_dimensions: Option<(u32, u32)>, export_fps: u32) -> Vec<String> {
     let format = profile.format.to_lowercase();
-    let bitrate = profile.audio_bitrate_kbps.unwrap_or(320).clamp(96, 320);
-    let compression_mode = profile.compression_mode;
-    let fps = profile.fps.max(1);
-    let gop_size = compression_mode.video_gop_size(fps);
-    let min_keyframe_interval = compression_mode.video_min_keyframe_interval(fps);
-    let b_frames = compression_mode.video_b_frames();
-    let compact_video_maxrate = video_dimensions
-        .and_then(|(width, height)| compression_mode.video_maxrate_kbps(width, height, fps));
-    let compact_video_bufsize = video_dimensions
-        .and_then(|(width, height)| compression_mode.video_bufsize_kbps(width, height, fps));
+    let bitrate = resolve_audio_bitrate_kbps(profile.audio_bitrate_kbps);
+    let (width, height) = video_dimensions.unwrap_or((1280, 720));
+    let settings = resolve_video_compression_settings(
+        profile.compression_mode,
+        VideoCompressionTarget::TimelineExport,
+        width,
+        height,
+        export_fps.max(1),
+    );
 
     match format.as_str() {
         "mp4" => {
-            let mut args = vec![
-                "-c:v".to_string(),
-                "libx264".to_string(),
-                "-preset".to_string(),
-                compression_mode.video_preset().to_string(),
-                "-crf".to_string(),
-                compression_mode.video_crf().to_string(),
-                "-pix_fmt".to_string(),
-                "yuv420p".to_string(),
-                "-g".to_string(),
-                gop_size.to_string(),
-                "-keyint_min".to_string(),
-                min_keyframe_interval.to_string(),
-                "-bf".to_string(),
-                b_frames.to_string(),
-                "-sc_threshold".to_string(),
-                if compression_mode.is_compact() { "80" } else { "40" }.to_string(),
-            ];
-            if let (Some(maxrate), Some(bufsize)) = (compact_video_maxrate, compact_video_bufsize) {
-                args.extend([
-                    "-maxrate".to_string(),
-                    format!("{}k", maxrate),
-                    "-bufsize".to_string(),
-                    format!("{}k", bufsize),
-                ]);
-            }
-            args.extend([
-                "-c:a".to_string(),
-                "aac".to_string(),
-                "-b:a".to_string(),
-                format!("{}k", bitrate),
-                "-movflags".to_string(),
-                "+faststart".to_string(),
-            ]);
+            let mut args = Vec::new();
+            append_h264_aac_codec_args(&mut args, settings, bitrate, true);
             args
         }
         "mkv" => {
-            let mut args = vec![
-                "-c:v".to_string(),
-                "libx264".to_string(),
-                "-preset".to_string(),
-                compression_mode.video_preset().to_string(),
-                "-crf".to_string(),
-                compression_mode.video_crf().to_string(),
-                "-pix_fmt".to_string(),
-                "yuv420p".to_string(),
-                "-g".to_string(),
-                gop_size.to_string(),
-                "-keyint_min".to_string(),
-                min_keyframe_interval.to_string(),
-                "-bf".to_string(),
-                b_frames.to_string(),
-                "-sc_threshold".to_string(),
-                if compression_mode.is_compact() { "80" } else { "40" }.to_string(),
-            ];
-            if let (Some(maxrate), Some(bufsize)) = (compact_video_maxrate, compact_video_bufsize) {
-                args.extend([
-                    "-maxrate".to_string(),
-                    format!("{}k", maxrate),
-                    "-bufsize".to_string(),
-                    format!("{}k", bufsize),
-                ]);
-            }
-            args.extend([
-                "-c:a".to_string(),
-                "aac".to_string(),
-                "-b:a".to_string(),
-                format!("{}k", bitrate),
-            ]);
+            let mut args = Vec::new();
+            append_h264_aac_codec_args(&mut args, settings, bitrate, false);
             args
         }
         "mp3" => vec![
@@ -389,40 +407,8 @@ fn codec_args_for_profile(profile: &RenderProfilePayload, video_dimensions: Opti
         ],
         "wav" => vec!["-c:a".to_string(), "pcm_s16le".to_string()],
         _ => {
-            let mut args = vec![
-                "-c:v".to_string(),
-                "libx264".to_string(),
-                "-preset".to_string(),
-                compression_mode.video_preset().to_string(),
-                "-crf".to_string(),
-                compression_mode.video_crf().to_string(),
-                "-pix_fmt".to_string(),
-                "yuv420p".to_string(),
-                "-g".to_string(),
-                gop_size.to_string(),
-                "-keyint_min".to_string(),
-                min_keyframe_interval.to_string(),
-                "-bf".to_string(),
-                b_frames.to_string(),
-                "-sc_threshold".to_string(),
-                if compression_mode.is_compact() { "80" } else { "40" }.to_string(),
-            ];
-            if let (Some(maxrate), Some(bufsize)) = (compact_video_maxrate, compact_video_bufsize) {
-                args.extend([
-                    "-maxrate".to_string(),
-                    format!("{}k", maxrate),
-                    "-bufsize".to_string(),
-                    format!("{}k", bufsize),
-                ]);
-            }
-            args.extend([
-                "-c:a".to_string(),
-                "aac".to_string(),
-                "-b:a".to_string(),
-                format!("{}k", bitrate),
-                "-movflags".to_string(),
-                "+faststart".to_string(),
-            ]);
+            let mut args = Vec::new();
+            append_h264_aac_codec_args(&mut args, settings, bitrate, true);
             args
         }
     }
@@ -444,12 +430,13 @@ pub async fn process_timeline_export(app: AppHandle, request: TimelineExportRequ
         false,
     );
 
-    let (mut args, audio_map, video_map) = build_filter_graph(&request)?;
+    let export_fps = resolved_export_fps(&request);
+    let (mut args, audio_map, video_map) = build_filter_graph(&request, export_fps)?;
     if let Some(video_map) = video_map {
         args.extend(["-map".to_string(), video_map]);
     }
     args.extend(["-map".to_string(), audio_map]);
-    args.extend(codec_args_for_profile(&request.profile, resolved_video_dimensions(&request)));
+    args.extend(codec_args_for_profile(&request.profile, resolved_video_dimensions(&request), export_fps));
     args.push(request.output_path.clone());
 
     let mut child = hidden_command(&ffmpeg)
@@ -589,14 +576,21 @@ mod tests {
             video_quality: Some("1080p".to_string()),
             audio_bitrate_kbps: Some(320),
             compression_mode: crate::contracts::OutputCompressionModePayload::Compact,
-        }, Some((1920, 1080)));
+        }, Some((1920, 1080)), 60);
 
         assert!(args.windows(2).any(|window| window == ["-preset", "veryslow"]));
-        assert!(args.windows(2).any(|window| window == ["-crf", "30"]));
+        assert!(args.windows(2).any(|window| window == ["-crf", "31"]));
         assert!(args.windows(2).any(|window| window == ["-b:a", "320k"]));
-        assert!(args.windows(2).any(|window| window == ["-g", "240"]));
-        assert!(args.windows(2).any(|window| window == ["-bf", "3"]));
-        assert!(args.windows(2).any(|window| window == ["-maxrate", "8100k"]));
-        assert!(args.windows(2).any(|window| window == ["-bufsize", "16200k"]));
+        assert!(args.windows(2).any(|window| window == ["-g", "300"]));
+        assert!(args.windows(2).any(|window| window == ["-bf", "4"]));
+        assert!(args.windows(2).any(|window| window == ["-maxrate", "2160k"]));
+        assert!(args.windows(2).any(|window| window == ["-bufsize", "4320k"]));
+    }
+
+    #[test]
+    fn export_fps_is_clamped_to_source_rate() {
+        assert_eq!(clamp_export_fps(60, Some(30)), 30);
+        assert_eq!(clamp_export_fps(24, Some(30)), 24);
+        assert_eq!(clamp_export_fps(60, None), 60);
     }
 }

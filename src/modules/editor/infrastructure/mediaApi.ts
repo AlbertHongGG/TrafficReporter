@@ -123,6 +123,7 @@ export async function buildEditorAsset(path: string): Promise<EditorAsset> {
     durationMs: probe.durationMs,
     hasVideo: probe.hasVideo,
     hasAudio: probe.hasAudio,
+    fps: probe.fps,
     width: probe.width,
     height: probe.height,
     status: 'ready',

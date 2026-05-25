@@ -595,6 +595,8 @@
         { "name": "sourcePath", "type": "string" },
         { "name": "description", "type": "string" },
         { "name": "markerRect", "type": "VideoMarkerRect", "nullable": true },
+        { "name": "compressionMode", "type": "OutputCompressionMode" },
+        { "name": "audioBitrateKbps", "type": "number", "rustType": "u32", "optional": true },
         { "name": "targetVehicleKind", "type": "LprVehicleKind" },
         { "name": "countryHints", "type": "array", "items": "string" },
         { "name": "analysisProfileId", "type": "LprAnalysisProfileId", "optional": true, "nullable": true },

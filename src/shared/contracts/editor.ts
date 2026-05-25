@@ -4,6 +4,7 @@ export interface MediaProbeResult {
   durationMs: number;
   hasVideo: boolean;
   hasAudio: boolean;
+  fps?: number;
   width?: number;
   height?: number;
 }

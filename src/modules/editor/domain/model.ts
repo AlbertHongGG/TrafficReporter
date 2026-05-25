@@ -238,6 +238,7 @@ export function buildEditorFileState(asset: EditorAsset, options: BuildEditorFil
   const clips = options.clips?.length
     ? options.clips.map((clip) => ({ ...clip }))
     : [createDefaultClip(asset.id, track.id, asset.durationMs)];
+  const defaultFps = asset.fps ?? DEFAULT_RENDER_PROFILE.fps;
 
   return {
     id: options.id ?? createId('file'),
@@ -246,6 +247,7 @@ export function buildEditorFileState(asset: EditorAsset, options: BuildEditorFil
     clips,
     renderProfile: {
       ...DEFAULT_RENDER_PROFILE,
+      fps: defaultFps,
       ...options.renderProfile,
     },
     selectedClipIds: [],

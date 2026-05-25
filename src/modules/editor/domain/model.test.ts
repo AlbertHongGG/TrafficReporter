@@ -35,6 +35,7 @@ describe('editor model', () => {
       durationMs: 8000,
       hasVideo: true,
       hasAudio: true,
+      fps: 30,
       width: 1920,
       height: 1080,
       status: 'ready',
@@ -52,7 +53,10 @@ describe('editor model', () => {
       outPointMs: 8000,
       muted: false,
     })
-    expect(fileState.renderProfile).toEqual(DEFAULT_RENDER_PROFILE)
+    expect(fileState.renderProfile).toEqual({
+      ...DEFAULT_RENDER_PROFILE,
+      fps: 30,
+    })
     expect(fileState.zoom).toBe(DEFAULT_ZOOM)
     expect(fileState.markerRect).toBeNull()
   })

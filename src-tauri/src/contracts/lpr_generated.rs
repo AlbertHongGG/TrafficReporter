@@ -359,6 +359,8 @@ pub struct AiEvidenceRequestPayload {
     pub source_path: String,
     pub description: String,
     pub marker_rect: Option<VideoMarkerRectPayload>,
+    pub compression_mode: OutputCompressionModePayload,
+    pub audio_bitrate_kbps: Option<u32>,
     pub target_vehicle_kind: LprVehicleKind,
     pub country_hints: Vec<String>,
     pub analysis_profile_id: Option<LprAnalysisProfileId>,

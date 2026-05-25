@@ -22,7 +22,6 @@ import type {
   ExportSnapshot,
   ExportFormat,
   ExportProgressPayload,
-  OutputCompressionMode,
   VideoQuality,
 } from '../application/exportTypes';
 import { formatTransportTime } from '../../editor/domain/model';
@@ -42,7 +41,6 @@ const FORMAT_OPTIONS: Array<{
 
 const VIDEO_QUALITY_OPTIONS: VideoQuality[] = ['source', '2160p', '1440p', '1080p', '720p', '480p'];
 const AUDIO_BITRATE_OPTIONS: AudioBitrateKbps[] = [320, 256, 192, 128, 96];
-const COMPRESSION_MODE_OPTIONS: OutputCompressionMode[] = ['standard', 'compact'];
 const VIDEO_QUALITY_HEIGHTS: Record<Exclude<VideoQuality, 'source'>, number> = {
   '2160p': 2160,
   '1440p': 1440,
@@ -113,7 +111,7 @@ function buildVideoQualityOptions(snapshot: ExportSnapshot | null): Array<{ valu
   const sourceDimensions = scaledDimensionsForQuality(snapshot.dominantWidth, snapshot.dominantHeight, 'source');
   const options: Array<{ value: VideoQuality; label: string }> = [{
     value: 'source',
-    label: `${sourceDimensions.height}p (${sourceDimensions.width}x${sourceDimensions.height})`,
+    label: `${sourceDimensions.width}x${sourceDimensions.height}`,
   }];
 
   for (const quality of VIDEO_QUALITY_OPTIONS) {
@@ -145,7 +143,6 @@ export const ExportWindow: React.FC = () => {
   const [format, setFormat] = React.useState<ExportFormat>('mp4');
   const [videoQuality, setVideoQuality] = React.useState<VideoQuality>('source');
   const [audioBitrateKbps, setAudioBitrateKbps] = React.useState<AudioBitrateKbps>(320);
-  const [compressionMode, setCompressionMode] = React.useState<OutputCompressionMode>('standard');
   const [outputPath, setOutputPath] = React.useState('');
   const [progress, setProgress] = React.useState<ExportProgressPayload>(DEFAULT_PROGRESS);
   const [status, setStatus] = React.useState<ExportStatus>('loading');
@@ -164,9 +161,8 @@ export const ExportWindow: React.FC = () => {
 
     setSnapshot(nextSnapshot);
     setFormat(defaultFormatForSession(nextSnapshot));
-  setVideoQuality(normalizeVideoQuality(nextSnapshot, nextSnapshot.renderProfile.videoQuality ?? 'source'));
+    setVideoQuality(normalizeVideoQuality(nextSnapshot, nextSnapshot.renderProfile.videoQuality ?? 'source'));
     setAudioBitrateKbps(nextSnapshot.renderProfile.audioBitrateKbps ?? 320);
-    setCompressionMode(nextSnapshot.renderProfile.compressionMode);
     setOutputPath('');
     setProgress(DEFAULT_PROGRESS);
     setStatus('idle');
@@ -318,7 +314,7 @@ export const ExportWindow: React.FC = () => {
           fps: snapshot.renderProfile.fps,
           videoQuality,
           audioBitrateKbps,
-          compressionMode,
+          compressionMode: snapshot.renderProfile.compressionMode,
         },
         snapshot,
       });
@@ -334,7 +330,7 @@ export const ExportWindow: React.FC = () => {
         failed: true,
       });
     }
-  }, [audioBitrateKbps, compressionMode, format, outputPath, pickOutputPath, snapshot, status, videoQuality]);
+  }, [audioBitrateKbps, format, outputPath, pickOutputPath, snapshot, status, videoQuality]);
 
   const handleClose = async () => {
     await getCurrentWindow().close();
@@ -380,9 +376,8 @@ export const ExportWindow: React.FC = () => {
             >
               {/* Top Section: Overview */}
               <div className={styles.sessionOverview}>
-                <div className={styles.workspaceName}>{snapshot.workspaceName}</div>
+                <div className={styles.workspaceName}>{snapshot.fileName}</div>
                 <div className={styles.metaRow}>
-                  <div className={styles.metaBadge}>{snapshot.fileName}</div>
                   <div className={styles.metaBadge}>
                     <Video size={14} />
                     {snapshot.dominantWidth && snapshot.dominantHeight
@@ -438,32 +433,6 @@ export const ExportWindow: React.FC = () => {
                         label: option.label,
                       }))}
                     />
-                  </div>
-                </div>
-
-                <div className={styles.settingGroup}>
-                  <label>Size Mode</label>
-                  <div className={styles.formatSelector}>
-                    {COMPRESSION_MODE_OPTIONS.map((option) => {
-                      const isActive = compressionMode === option;
-                      return (
-                        <button
-                          key={option}
-                          onClick={() => setCompressionMode(option)}
-                          className={`${styles.formatPill} ${isActive ? styles.active : ''}`}
-                        >
-                          {isActive && (
-                            <motion.div
-                              layoutId="compressionPillBg"
-                              className={styles.pillBg}
-                              initial={false}
-                              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                            />
-                          )}
-                          <span className={styles.pillText}>{option === 'compact' ? 'Compact' : 'Standard'}</span>
-                        </button>
-                      );
-                    })}
                   </div>
                 </div>
 
