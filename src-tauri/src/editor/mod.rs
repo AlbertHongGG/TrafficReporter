@@ -16,6 +16,7 @@ use crate::contracts::{
     LprEvidenceExportRequestPayload, LprEvidenceExportResponsePayload,
     LprFrameAnalysisRequestPayload, LprFrameAnalysisResponsePayload,
     LprIntervalAnalysisRequestPayload, LprIntervalAnalysisResponsePayload,
+    OutputCompressionModePayload,
     LprReviewStatePayload, LprRuntimeStatusPayload,
     LprTargetScanRequestPayload, LprTargetScanResponsePayload, MediaProbePayload,
     VideoMarkerRectPayload,
@@ -770,13 +771,39 @@ pub async fn probe_media_source(path: String) -> Result<MediaProbePayload, Strin
 fn export_frame_image_internal(request: &FrameExportRequest) -> Result<(), String> {
     let ffmpeg = find_bundled("ffmpeg")?;
     let output_path = PathBuf::from(&request.output_path);
-    let compact_mode = matches!(request.compression_mode.as_deref(), Some("compact"));
     if let Some(parent) = output_path.parent() {
         if !parent.as_os_str().is_empty() {
             fs::create_dir_all(parent)
                 .map_err(|error| format!("Failed to create output directory: {}", error))?;
         }
     }
+
+    let args = build_frame_export_args(request);
+
+    let output = hidden_command(&ffmpeg)
+        .args(&args)
+        .output()
+        .map_err(|error| format!("Failed to execute ffmpeg: {}", error))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if stderr.is_empty() {
+            "ffmpeg failed to export the frame.".to_string()
+        } else {
+            stderr
+        });
+    }
+
+    Ok(())
+}
+
+fn build_frame_export_args(request: &FrameExportRequest) -> Vec<String> {
+    let output_path = PathBuf::from(&request.output_path);
+    let compression_mode = request.compression_mode;
+    let output_extension = output_path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.to_ascii_lowercase());
 
     let mut args = vec![
         "-y".to_string(),
@@ -798,27 +825,24 @@ fn export_frame_image_internal(request: &FrameExportRequest) -> Result<(), Strin
         "1".to_string(),
     ]);
 
-    if compact_mode {
-        args.extend(["-q:v".to_string(), "2".to_string()]);
+    if matches!(output_extension.as_deref(), Some("jpg") | Some("jpeg")) {
+        if let Some(frame_quality) = compression_mode.still_image_quality() {
+            args.extend(["-q:v".to_string(), frame_quality.to_string()]);
+        }
     }
 
     args.push(output_path.to_string_lossy().to_string());
+    args
+}
 
-    let output = hidden_command(&ffmpeg)
-        .args(&args)
-        .output()
-        .map_err(|error| format!("Failed to execute ffmpeg: {}", error))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        return Err(if stderr.is_empty() {
-            "ffmpeg failed to export the frame.".to_string()
-        } else {
-            stderr
-        });
-    }
-
-    Ok(())
+fn build_evidence_source_frame_path(
+    bundle_dir: &Path,
+    compression_mode: OutputCompressionModePayload,
+) -> PathBuf {
+    bundle_dir.join(format!(
+        "source-frame.{}",
+        compression_mode.still_image_extension()
+    ))
 }
 
 #[tauri::command]
@@ -1061,13 +1085,13 @@ pub async fn export_lpr_evidence(
         fs::create_dir_all(&bundle_dir)
             .map_err(|error| format!("Failed to create evidence bundle directory: {}", error))?;
 
-        let image_path = bundle_dir.join("source-frame.png");
+        let image_path = build_evidence_source_frame_path(&bundle_dir, request.compression_mode);
         export_frame_image_internal(&FrameExportRequest {
             output_path: image_path.to_string_lossy().to_string(),
             source_path: request.source_path.clone(),
             time_ms: request.time_ms,
             marker_rect: request.marker_rect.clone(),
-            compression_mode: None,
+            compression_mode: request.compression_mode,
         })?;
 
         let decision_frames = select_decision_samples(&request.accepted_candidate, &request.samples);
@@ -1085,6 +1109,7 @@ pub async fn export_lpr_evidence(
             "timeMs": request.time_ms,
             "interval": request.interval,
             "markerRect": request.marker_rect,
+            "compressionMode": request.compression_mode,
             "targetTrack": request.target_track,
             "acceptedCandidate": request.accepted_candidate,
             "candidates": request.candidates,
@@ -1310,7 +1335,10 @@ fn export_decision_frames(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contracts::{LprFrameSamplePayload, LprPlateCandidatePayload, LprQualityMetricsPayload};
+    use crate::contracts::{
+        LprFrameSamplePayload, LprPlateCandidatePayload, LprQualityMetricsPayload,
+        OutputCompressionModePayload,
+    };
 
     fn sample_quality(overall_score: f64) -> LprQualityMetricsPayload {
         LprQualityMetricsPayload {
@@ -1371,6 +1399,47 @@ mod tests {
     fn builds_bundle_directory_next_to_snapshot_json() {
         let bundle_dir = build_evidence_bundle_dir(Path::new("C:/tmp/review/evidence.json"));
         assert_eq!(bundle_dir, PathBuf::from("C:/tmp/review/evidence.bundle"));
+    }
+
+    #[test]
+    fn chooses_evidence_frame_extension_from_compression_mode() {
+        let compact_path = build_evidence_source_frame_path(
+            Path::new("C:/tmp/review/evidence.bundle"),
+            OutputCompressionModePayload::Compact,
+        );
+        let standard_path = build_evidence_source_frame_path(
+            Path::new("C:/tmp/review/evidence.bundle"),
+            OutputCompressionModePayload::Standard,
+        );
+
+        assert_eq!(compact_path, PathBuf::from("C:/tmp/review/evidence.bundle/source-frame.jpg"));
+        assert_eq!(standard_path, PathBuf::from("C:/tmp/review/evidence.bundle/source-frame.png"));
+    }
+
+    #[test]
+    fn adds_jpeg_quality_for_compact_frame_exports() {
+        let args = build_frame_export_args(&FrameExportRequest {
+            output_path: "C:/tmp/frame.jpg".to_string(),
+            source_path: "C:/tmp/source.mp4".to_string(),
+            time_ms: 1250,
+            marker_rect: None,
+            compression_mode: OutputCompressionModePayload::Compact,
+        });
+
+        assert!(args.windows(2).any(|window| window == ["-q:v", "6"]));
+    }
+
+    #[test]
+    fn keeps_standard_png_frame_exports_lossless() {
+        let args = build_frame_export_args(&FrameExportRequest {
+            output_path: "C:/tmp/frame.png".to_string(),
+            source_path: "C:/tmp/source.mp4".to_string(),
+            time_ms: 1250,
+            marker_rect: None,
+            compression_mode: OutputCompressionModePayload::Standard,
+        });
+
+        assert!(!args.windows(2).any(|window| window == ["-q:v", "6"]));
     }
 
     #[test]

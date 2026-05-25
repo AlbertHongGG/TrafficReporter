@@ -45,6 +45,59 @@ pub struct TimelineClipPayload {
     pub muted: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum OutputCompressionModePayload {
+    Standard,
+    Compact,
+}
+
+impl OutputCompressionModePayload {
+    pub fn is_compact(self) -> bool {
+        matches!(self, Self::Compact)
+    }
+
+    pub fn video_preset(self) -> &'static str {
+        if self.is_compact() {
+            "veryslow"
+        } else {
+            "medium"
+        }
+    }
+
+    pub fn video_crf(self) -> &'static str {
+        if self.is_compact() {
+            "30"
+        } else {
+            "18"
+        }
+    }
+
+    pub fn audio_bitrate_cap_kbps(self) -> u32 {
+        if self.is_compact() {
+            96
+        } else {
+            192
+        }
+    }
+
+    pub fn still_image_extension(self) -> &'static str {
+        if self.is_compact() {
+            "jpg"
+        } else {
+            "png"
+        }
+    }
+
+    pub fn still_image_quality(self) -> Option<&'static str> {
+        if self.is_compact() {
+            Some("6")
+        } else {
+            None
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RenderProfilePayload {
@@ -52,7 +105,7 @@ pub struct RenderProfilePayload {
     pub fps: u32,
     pub video_quality: Option<String>,
     pub audio_bitrate_kbps: Option<u32>,
-    pub compression_mode: Option<String>,
+    pub compression_mode: OutputCompressionModePayload,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -113,7 +166,7 @@ pub struct FrameExportRequest {
     pub source_path: String,
     pub time_ms: u64,
     pub marker_rect: Option<VideoMarkerRectPayload>,
-    pub compression_mode: Option<String>,
+    pub compression_mode: OutputCompressionModePayload,
 }
 
 #[derive(Debug, Clone, Serialize)]

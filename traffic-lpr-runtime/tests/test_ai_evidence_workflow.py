@@ -5,33 +5,53 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import numpy as np
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from traffic_lpr_runtime.application.ai_evidence_workflow import AiEvidenceWorkflow, RenderedFrame, SelectedKeyframe, StoryboardSelection, _normalize_keyframes
+from traffic_lpr_runtime.domain.models import TrackedRegion
+from traffic_lpr_runtime.domain.value_objects import NormalizedRect
 
 
 class AiEvidenceWorkflowTests(unittest.TestCase):
-    def _build_workflow(self, *, runtime_root: Path) -> AiEvidenceWorkflow:
+    def _build_workflow(
+        self,
+        *,
+        runtime_root: Path,
+        provider=None,
+        frame_reader=None,
+        detect_targets=None,
+        analyze_frame=None,
+        analyze_interval=None,
+        dependencies=None,
+    ) -> AiEvidenceWorkflow:
         class ProviderStub:
             kind = 'stub'
+
+            def generate_json(self, **kwargs):
+                del kwargs
+                return {'selectedTrackId': 'stub-track'}
 
         return AiEvidenceWorkflow(
             ensure_ready=lambda: None,
             status=lambda: {'available': True, 'detail': 'ok'},
             runtime_root=lambda: runtime_root,
-            dependencies=object(),
-            frame_reader=object(),
-            detect_targets=lambda *args, **kwargs: [],
-            analyze_frame=lambda payload: payload,
-            analyze_interval=lambda payload: {
-                'targetTracks': [],
-                'samples': [],
-                'candidates': [],
-                'acceptedCandidateId': None,
-                'review': None,
-                'provenance': None,
-            },
-            provider=ProviderStub(),
+            dependencies=dependencies or object(),
+            frame_reader=frame_reader or object(),
+            runtime_bridge=type('RuntimeBridgeStub', (), {
+                'detect_targets': staticmethod(detect_targets or (lambda *args, **kwargs: [])),
+                'analyze_frame': staticmethod(analyze_frame or (lambda payload: payload)),
+                'analyze_interval': staticmethod(analyze_interval or (lambda payload: {
+                    'targetTracks': [],
+                    'samples': [],
+                    'candidates': [],
+                    'acceptedCandidateId': None,
+                    'review': None,
+                    'provenance': None,
+                })),
+            })(),
+            provider=provider or ProviderStub(),
         )
 
     def test_normalize_keyframes_returns_selected_keyframe_objects(self) -> None:
@@ -161,6 +181,155 @@ class AiEvidenceWorkflowTests(unittest.TestCase):
             self.assertEqual(len(projection['targetTracks']), 2)
             self.assertEqual(projection['targetTracks'][1]['label'], 'candidate plate')
             self.assertEqual(projection['analysisTrack']['id'], 'analysis-track-1')
+
+    def test_resolve_target_still_invokes_provider_when_plate_hint_matches_exactly(self) -> None:
+        class ProviderStub:
+            kind = 'stub'
+
+            def __init__(self) -> None:
+                self.calls: list[dict[str, object] | None] = []
+
+            def generate_json(self, **kwargs):
+                self.calls.append(kwargs.get('request_metadata'))
+                return {
+                    'selectedTrackId': 'target-1500-0',
+                    'confidence': 0.61,
+                    'rationale': 'model selection',
+                }
+
+        class FrameReaderStub:
+            def read_frame(self, source_path: str, time_ms: int):
+                del source_path, time_ms
+                return np.zeros((80, 120, 3), dtype=np.uint8)
+
+        provider = ProviderStub()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workflow = self._build_workflow(
+                runtime_root=Path(temp_dir),
+                provider=provider,
+                frame_reader=FrameReaderStub(),
+                detect_targets=lambda *args, **kwargs: [
+                    TrackedRegion(
+                        id='target-1500-0',
+                        time_ms=1500,
+                        box=NormalizedRect(x=0.2, y=0.2, width=0.3, height=0.3),
+                        confidence=0.95,
+                        class_name='car',
+                    ),
+                ],
+                analyze_frame=lambda payload: {
+                    'acceptedCandidateId': 'candidate-1',
+                    'candidates': [
+                        {'id': 'candidate-1', 'text': 'ABC1234', 'confidence': 0.97},
+                    ],
+                },
+            )
+            workflow._render_detection_reference = lambda frame, detections, output_dir: (output_dir / 'anchor.jpg', 120, 80)
+            workflow._encode_chat_image = lambda image_path: 'YWJj'
+            workflow._prepare_frame_image = lambda image, title, subtitle: (image, 120, 80)
+            workflow._write_image = lambda image_path, image: None
+
+            result = workflow._resolve_target(
+                request_id='ai-log-target-test',
+                description='請找出車牌 ABC1234 的車輛',
+                source_path='demo.mp4',
+                marker_rect=None,
+                target_vehicle_kind='car',
+                country_hints=[],
+                analysis_profile_id=None,
+                enable_developer_diagnostics=False,
+                anchor_frame=RenderedFrame('fine-001', 1500, 0, 'fine-001', 'fine-001.jpg', 120, 80),
+                output_dir=Path(temp_dir) / 'target-resolution',
+            )
+
+            self.assertEqual(len(provider.calls), 1)
+            self.assertEqual(provider.calls[0]['stage'], 'target')
+            self.assertEqual(result['selectedTrackId'], 'target-1500-0')
+            self.assertEqual(result['selectedCandidateId'], 'candidate-1')
+            self.assertGreaterEqual(result['confidence'], 0.99)
+
+    def test_resolve_target_allows_provider_to_override_exact_match_when_contradicted(self) -> None:
+        class ProviderStub:
+            kind = 'stub'
+
+            def generate_json(self, **kwargs):
+                del kwargs
+                return {
+                    'selectedTrackId': 'target-1500-1',
+                    'selectedCandidateId': 'candidate-2',
+                    'confidence': 0.72,
+                    'plateHintConsistency': 'contradicted',
+                    'rationale': '畫面中的車輛外觀與車牌提示不一致。',
+                }
+
+        class FrameReaderStub:
+            def read_frame(self, source_path: str, time_ms: int):
+                del source_path, time_ms
+                return np.zeros((80, 120, 3), dtype=np.uint8)
+
+        def analyze_frame(payload: dict[str, object]) -> dict[str, object]:
+            selected_box = payload['selectedTargetBox']
+            assert isinstance(selected_box, dict)
+            if float(selected_box['x']) < 0.5:
+                return {
+                    'acceptedCandidateId': 'candidate-1',
+                    'candidates': [
+                        {'id': 'candidate-1', 'text': 'ABC1234', 'confidence': 0.97},
+                    ],
+                }
+            return {
+                'acceptedCandidateId': 'candidate-2',
+                'candidates': [
+                    {'id': 'candidate-2', 'text': 'ZZZ8888', 'confidence': 0.91},
+                ],
+            }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workflow = self._build_workflow(
+                runtime_root=Path(temp_dir),
+                provider=ProviderStub(),
+                frame_reader=FrameReaderStub(),
+                detect_targets=lambda *args, **kwargs: [
+                    TrackedRegion(
+                        id='target-1500-0',
+                        time_ms=1500,
+                        box=NormalizedRect(x=0.18, y=0.2, width=0.22, height=0.28),
+                        confidence=0.95,
+                        class_name='car',
+                    ),
+                    TrackedRegion(
+                        id='target-1500-1',
+                        time_ms=1500,
+                        box=NormalizedRect(x=0.58, y=0.24, width=0.24, height=0.3),
+                        confidence=0.93,
+                        class_name='car',
+                    ),
+                ],
+                analyze_frame=analyze_frame,
+            )
+            workflow._render_detection_reference = lambda frame, detections, output_dir: (output_dir / 'anchor.jpg', 120, 80)
+            workflow._encode_chat_image = lambda image_path: 'YWJj'
+            workflow._prepare_frame_image = lambda image, title, subtitle: (image, 120, 80)
+            workflow._write_image = lambda image_path, image: None
+
+            result = workflow._resolve_target(
+                request_id='ai-log-target-contradicted-test',
+                description='請找出車牌 ABC1234 的車輛',
+                source_path='demo.mp4',
+                marker_rect=None,
+                target_vehicle_kind='car',
+                country_hints=[],
+                analysis_profile_id=None,
+                enable_developer_diagnostics=False,
+                anchor_frame=RenderedFrame('fine-001', 1500, 0, 'fine-001', 'fine-001.jpg', 120, 80),
+                output_dir=Path(temp_dir) / 'target-resolution',
+            )
+
+            self.assertEqual(result['selectedTrackId'], 'target-1500-1')
+            self.assertEqual(result['selectedCandidateId'], 'candidate-2')
+            self.assertEqual(result['plateHintConsistency'], 'contradicted')
+            self.assertAlmostEqual(result['confidence'], 0.72)
 
 
 if __name__ == '__main__':

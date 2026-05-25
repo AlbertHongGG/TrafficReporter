@@ -8,7 +8,7 @@ from traffic_lpr_runtime.domain.interfaces import FrameReader, PlateRecognizer, 
 from traffic_lpr_runtime.domain.models import FrameSample, PlateCandidate, TargetTrack, TrackedRegion
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect, crop_image
 from traffic_lpr_runtime.application.benchmark_workflow import BenchmarkRunWorkflow
-from traffic_lpr_runtime.application.ai_evidence_workflow import AiEvidenceWorkflow
+from traffic_lpr_runtime.application.ai_evidence_workflow import AiEvidenceRuntimeBridge, AiEvidenceWorkflow
 from traffic_lpr_runtime.application.candidate_fusion import CandidateFusionService, apply_reliability_selection
 from traffic_lpr_runtime.application.contract_spec import LprContractRegistry
 from traffic_lpr_runtime.application.interval_tracking import IntervalTrackingService
@@ -78,6 +78,11 @@ class LprRuntimeApplication:
             analyze_frame=self.analyze_frame,
             analyze_interval=self.analyze_interval,
         )
+        self._ai_evidence_runtime_bridge = AiEvidenceRuntimeBridge(
+            detect_targets=self._detect_targets,
+            analyze_frame=self.analyze_frame,
+            analyze_interval=self.analyze_interval,
+        )
         self._ai_provider = build_ai_provider(runtime_root=self._dependencies.runtime_root())
         self._ai_evidence_workflow = AiEvidenceWorkflow(
             ensure_ready=self._dependencies.ensure_ready,
@@ -85,9 +90,7 @@ class LprRuntimeApplication:
             runtime_root=self._dependencies.runtime_root,
             dependencies=self._dependencies,
             frame_reader=self._frame_reader,
-            detect_targets=self._detect_targets,
-            analyze_frame=self.analyze_frame,
-            analyze_interval=self.analyze_interval,
+            runtime_bridge=self._ai_evidence_runtime_bridge,
             provider=self._ai_provider,
         )
         self._contract_registry = LprContractRegistry()

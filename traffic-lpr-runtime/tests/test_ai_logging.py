@@ -59,6 +59,7 @@ class AiLoggingTests(unittest.TestCase):
             self.assertEqual(result, {'decision': 'accept', 'score': 0.98})
             log_files = list(Path(temp_dir).rglob('*.json'))
             self.assertEqual(len(log_files), 1)
+            self.assertRegex(log_files[0].name, r'^\d{6}_\d{3}_fine_stub_[0-9a-f]{32}\.json$')
 
             payload = json.loads(log_files[0].read_text(encoding='utf-8'))
             self.assertEqual(payload['status'], 'succeeded')
@@ -84,6 +85,7 @@ class AiLoggingTests(unittest.TestCase):
 
             log_files = list(Path(temp_dir).rglob('*.json'))
             self.assertEqual(len(log_files), 1)
+            self.assertRegex(log_files[0].name, r'^\d{6}_\d{3}_target_stub_[0-9a-f]{32}\.json$')
 
             payload = json.loads(log_files[0].read_text(encoding='utf-8'))
             self.assertEqual(payload['status'], 'failed')

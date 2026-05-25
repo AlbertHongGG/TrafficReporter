@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import re
 import time
 from collections import OrderedDict
@@ -53,6 +54,135 @@ class StoryboardSelection:
     keyframes: Sequence[SelectedKeyframe] = field(default_factory=tuple)
 
 
+@dataclass(frozen=True, slots=True)
+class TargetCandidateEvidence:
+    track_id: str
+    label: str
+    class_name: str
+    detection_confidence: float
+    normalized_box: dict[str, Any]
+    selected_box: dict[str, Any] | None
+    accepted_candidate_id: str | None
+    candidates: Sequence[dict[str, Any]]
+    crop_image_path: str
+    crop_frame_width: int
+    crop_frame_height: int
+
+    @property
+    def top_candidate(self) -> dict[str, Any] | None:
+        return _resolve_plate_candidate(self.candidates, self.accepted_candidate_id)
+
+    @property
+    def top_plate_text(self) -> str | None:
+        top_candidate = self.top_candidate
+        return _optional_string(top_candidate.get('text')) if isinstance(top_candidate, dict) else None
+
+    @property
+    def top_plate_confidence(self) -> float | None:
+        top_candidate = self.top_candidate
+        if not isinstance(top_candidate, dict):
+            return None
+        return _float_value(top_candidate.get('confidence'))
+
+    def matching_candidate(self, plate_hint: str | None) -> dict[str, Any] | None:
+        if not plate_hint:
+            return None
+        for candidate in self.candidates:
+            candidate_text = _optional_string(candidate.get('text'))
+            if candidate_text and _normalize_plate(candidate_text) == plate_hint:
+                return candidate
+        return None
+
+    def has_candidate(self, candidate_id: str | None) -> bool:
+        if not candidate_id:
+            return False
+        return any(_optional_string(candidate.get('id')) == candidate_id for candidate in self.candidates)
+
+    def resolve_selected_candidate_id(self, candidate_id: str | None) -> str | None:
+        if self.has_candidate(candidate_id):
+            return candidate_id
+        if self.accepted_candidate_id:
+            return self.accepted_candidate_id
+        top_candidate = self.top_candidate
+        return _optional_string(top_candidate.get('id')) if isinstance(top_candidate, dict) else None
+
+    def to_prompt_payload(self) -> dict[str, Any]:
+        return {
+            'trackId': self.track_id,
+            'label': self.label,
+            'imageFrameId': self.track_id,
+            'className': self.class_name,
+            'detectionConfidence': self.detection_confidence,
+            'acceptedCandidateId': self.accepted_candidate_id,
+            'acceptedPlate': _candidate_evidence_payload(self.top_candidate),
+            'ocrCandidates': [_candidate_evidence_payload(candidate) for candidate in self.candidates[:3]],
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class PlateHintMatchEvidence:
+    candidate_evidence: TargetCandidateEvidence
+    candidate: dict[str, Any]
+
+    def sort_key(self) -> tuple[float, float]:
+        return (
+            _float_value(self.candidate.get('confidence')) or 0.0,
+            self.candidate_evidence.detection_confidence,
+        )
+
+    def matched_text(self, fallback: str | None) -> str:
+        return _optional_string(self.candidate.get('text')) or fallback or '目標車牌'
+
+    def to_prompt_payload(self) -> dict[str, Any]:
+        return {
+            'trackId': self.candidate_evidence.track_id,
+            'candidate': _candidate_evidence_payload(self.candidate),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class TargetResolutionEvidence:
+    description: str
+    anchor_frame: RenderedFrame
+    plate_hint: str | None
+    candidates: Sequence[TargetCandidateEvidence]
+    exact_plate_hint_matches: Sequence[PlateHintMatchEvidence] = field(default_factory=tuple)
+
+    @property
+    def primary_exact_plate_hint_match(self) -> PlateHintMatchEvidence | None:
+        return self.exact_plate_hint_matches[0] if self.exact_plate_hint_matches else None
+
+    def find_candidate(self, track_id: str | None) -> TargetCandidateEvidence | None:
+        if not track_id:
+            return None
+        return next((candidate for candidate in self.candidates if candidate.track_id == track_id), None)
+
+    def to_prompt_payload(self) -> dict[str, Any]:
+        return {
+            'description': self.description,
+            'anchorFrame': {
+                'frameId': self.anchor_frame.frame_id,
+                'timeMs': self.anchor_frame.time_ms,
+                'timeLabel': _format_time_label(self.anchor_frame.time_ms),
+            },
+            'plateHint': self.plate_hint,
+            'policy': {
+                'plateHintPriority': 'strong-prior',
+                'allowOverrideWhenVisualEvidenceContradicts': True,
+                'allowedTrackIds': [candidate.track_id for candidate in self.candidates],
+            },
+            'targets': [candidate.to_prompt_payload() for candidate in self.candidates],
+            'exactPlateHintMatches': [match.to_prompt_payload() for match in self.exact_plate_hint_matches],
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class AiEvidenceRuntimeBridge:
+    detect_targets: Callable[[Any, int, str, NormalizedRect | None], list[TrackedRegion]]
+    analyze_frame: Callable[[dict[str, Any]], dict[str, Any]]
+    analyze_interval: Callable[[dict[str, Any]], dict[str, Any]]
+
+
 class AiEvidenceWorkflow:
     def __init__(
         self,
@@ -62,9 +192,7 @@ class AiEvidenceWorkflow:
         runtime_root: Callable[[], Path],
         dependencies: Any,
         frame_reader: Any,
-        detect_targets: Callable[[Any, int, str, NormalizedRect | None], list[TrackedRegion]],
-        analyze_frame: Callable[[dict[str, Any]], dict[str, Any]],
-        analyze_interval: Callable[[dict[str, Any]], dict[str, Any]],
+        runtime_bridge: AiEvidenceRuntimeBridge,
         provider: VisionLlmProvider,
     ) -> None:
         self._ensure_ready = ensure_ready
@@ -72,9 +200,7 @@ class AiEvidenceWorkflow:
         self._runtime_root = runtime_root
         self._dependencies = dependencies
         self._frame_reader = frame_reader
-        self._detect_targets = detect_targets
-        self._analyze_frame = analyze_frame
-        self._analyze_interval = analyze_interval
+        self._runtime_bridge = runtime_bridge
         self._provider = provider
 
     def run(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -189,7 +315,7 @@ class AiEvidenceWorkflow:
                 f'interval={planned_interval["startMs"]}-{planned_interval["endMs"]} '
                 f'anchor={anchor_frame.time_ms} selectedTarget={target_resolution["selectedBox"] is not None}'
             ),
-            func=lambda: self._analyze_interval({
+            func=lambda: self._runtime_bridge.analyze_interval({
                 'sourcePath': source_path,
                 'interval': planned_interval,
                 'anchorTimeMs': anchor_frame.time_ms,
@@ -308,7 +434,8 @@ class AiEvidenceWorkflow:
                 'workflow': 'ai-evidence',
                 'runId': request_id,
                 'requestId': request_id,
-                'stage': 'localize-coarse-interval',
+                'stage': 'coarse',
+                'operation': 'localize-coarse-interval',
                 'frameCount': len(frames),
             },
         )
@@ -347,7 +474,8 @@ class AiEvidenceWorkflow:
                 'workflow': 'ai-evidence',
                 'runId': request_id,
                 'requestId': request_id,
-                'stage': 'select-keyframes',
+                'stage': 'fine',
+                'operation': 'select-keyframes',
                 'frameCount': len(frames),
                 'maxKeyframes': max_keyframes,
             },
@@ -380,30 +508,101 @@ class AiEvidenceWorkflow:
     ) -> dict[str, Any]:
         output_dir.mkdir(parents=True, exist_ok=True)
         frame = self._frame_reader.read_frame(source_path, anchor_frame.time_ms)
-        detections = self._detect_targets(frame, anchor_frame.time_ms, target_vehicle_kind, marker_rect)
+        detections = self._runtime_bridge.detect_targets(frame, anchor_frame.time_ms, target_vehicle_kind, marker_rect)
         if not detections:
             raise RuntimeFailure('AI evidence target resolution found no detectable targets on the selected anchor frame.')
 
         detections = sorted(detections, key=lambda detection: detection.confidence, reverse=True)[:6]
         annotated_path, frame_width, frame_height = self._render_detection_reference(frame, detections, output_dir)
-        detection_payloads: list[dict[str, Any]] = []
+        resolution_evidence, chat_images = self._collect_target_resolution_evidence(
+            request_id=request_id,
+            description=description,
+            source_path=source_path,
+            marker_rect=marker_rect,
+            target_vehicle_kind=target_vehicle_kind,
+            country_hints=country_hints,
+            analysis_profile_id=analysis_profile_id,
+            enable_developer_diagnostics=enable_developer_diagnostics,
+            anchor_frame=anchor_frame,
+            frame=frame,
+            detections=detections,
+            output_dir=output_dir,
+            annotated_path=annotated_path,
+            frame_width=frame_width,
+            frame_height=frame_height,
+        )
+        system_prompt, user_prompt = self._build_target_resolution_prompt(resolution_evidence)
+        try:
+            response = self._provider.generate_json(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                images=chat_images,
+                request_metadata={
+                    'workflow': 'ai-evidence',
+                    'runId': request_id,
+                    'requestId': request_id,
+                    'stage': 'target',
+                    'operation': 'resolve-target',
+                    'anchorFrameId': anchor_frame.frame_id,
+                    'anchorTimeMs': anchor_frame.time_ms,
+                    'candidateCount': len(resolution_evidence.candidates),
+                    'plateHint': resolution_evidence.plate_hint,
+                    'plateHintPolicy': 'strong-prior-not-absolute',
+                    'plateHintMatchCount': len(resolution_evidence.exact_plate_hint_matches),
+                    'plateHintMatchTrackId': (
+                        resolution_evidence.primary_exact_plate_hint_match.candidate_evidence.track_id
+                        if resolution_evidence.primary_exact_plate_hint_match is not None else None
+                    ),
+                },
+            )
+        except Exception:
+            if resolution_evidence.primary_exact_plate_hint_match is None:
+                raise
+            response = None
+
+        return self._finalize_target_resolution(
+            anchor_frame=anchor_frame,
+            response=response,
+            resolution_evidence=resolution_evidence,
+        )
+
+    def _collect_target_resolution_evidence(
+        self,
+        *,
+        request_id: str,
+        description: str,
+        source_path: str,
+        marker_rect: NormalizedRect | None,
+        target_vehicle_kind: str,
+        country_hints: list[str],
+        analysis_profile_id: str | None,
+        enable_developer_diagnostics: bool,
+        anchor_frame: RenderedFrame,
+        frame: Any,
+        detections: Sequence[TrackedRegion],
+        output_dir: Path,
+        annotated_path: Path,
+        frame_width: int,
+        frame_height: int,
+    ) -> tuple[TargetResolutionEvidence, list[VisionChatImage]]:
+        detection_evidence: list[TargetCandidateEvidence] = []
         chat_images = [VisionChatImage(
             frame_id='anchor-overview',
             label=f'anchor-overview @ T+{_format_time_label(anchor_frame.time_ms)}',
             image_base64=self._encode_chat_image(annotated_path),
         )]
-        plate_hint = _extract_plate_hint(description)
 
         for index, detection in enumerate(detections):
-            crop_path = output_dir / f'target-{index:02d}.jpg'
+            label = f'target-{index:02d}'
+            crop_path = output_dir / f'{label}.jpg'
             crop = crop_image(frame, detection.box)
             rendered_crop, crop_width, crop_height = self._prepare_frame_image(
                 crop,
-                title=f'target-{index:02d}',
+                title=label,
                 subtitle=f'T+{_format_time_label(anchor_frame.time_ms)}',
             )
             self._write_image(crop_path, rendered_crop)
-            frame_result = self._analyze_frame({
+            frame_result = self._runtime_bridge.analyze_frame({
                 'sourcePath': source_path,
                 'timeMs': anchor_frame.time_ms,
                 'markerRect': marker_rect.to_payload() if marker_rect else None,
@@ -412,93 +611,153 @@ class AiEvidenceWorkflow:
                 'countryHints': country_hints,
                 'analysisProfileId': analysis_profile_id,
                 'enableDeveloperDiagnostics': enable_developer_diagnostics,
-                'requestId': f'{anchor_frame.frame_id}-target-{index:02d}',
+                'requestId': f'{request_id}-{anchor_frame.frame_id}-target-{index:02d}',
             })
-            best_candidate = _resolve_plate_candidate(frame_result.get('candidates') or [], frame_result.get('acceptedCandidateId'))
-            detection_payloads.append({
-                'trackId': detection.id,
-                'label': f'target-{index:02d}',
-                'className': detection.class_name,
-                'confidence': detection.confidence,
-                'normalizedBox': detection.box.to_payload(),
-                'selectedBox': self._overlay_payload(detection.box, frame_width, frame_height),
-                'topPlateText': best_candidate['text'] if isinstance(best_candidate, dict) else None,
-                'topPlateConfidence': best_candidate['confidence'] if isinstance(best_candidate, dict) else None,
-                'acceptedCandidateId': frame_result.get('acceptedCandidateId'),
-                'candidates': frame_result.get('candidates') or [],
-                'cropImagePath': str(crop_path),
-                'cropFrameWidth': crop_width,
-                'cropFrameHeight': crop_height,
-            })
+            candidates = tuple(candidate for candidate in (frame_result.get('candidates') or []) if isinstance(candidate, dict))
+            detection_evidence.append(TargetCandidateEvidence(
+                track_id=detection.id,
+                label=label,
+                class_name=detection.class_name,
+                detection_confidence=detection.confidence,
+                normalized_box=detection.box.to_payload(),
+                selected_box=self._overlay_payload(detection.box, frame_width, frame_height),
+                accepted_candidate_id=_optional_string(frame_result.get('acceptedCandidateId')),
+                candidates=candidates,
+                crop_image_path=str(crop_path),
+                crop_frame_width=crop_width,
+                crop_frame_height=crop_height,
+            ))
             chat_images.append(VisionChatImage(
                 frame_id=detection.id,
-                label=f'target-{index:02d} @ T+{_format_time_label(anchor_frame.time_ms)}',
+                label=f'{label} @ T+{_format_time_label(anchor_frame.time_ms)}',
                 image_base64=self._encode_chat_image(crop_path),
             ))
 
-        candidate_tracks = self._build_target_candidate_tracks(
+        plate_hint = _extract_plate_hint(description)
+        exact_plate_hint_matches = [
+            PlateHintMatchEvidence(candidate_evidence=candidate_evidence, candidate=matched_candidate)
+            for candidate_evidence in detection_evidence
+            for matched_candidate in [candidate_evidence.matching_candidate(plate_hint)]
+            if matched_candidate is not None
+        ]
+        exact_plate_hint_matches.sort(key=lambda match: match.sort_key(), reverse=True)
+        return TargetResolutionEvidence(
+            description=description,
             anchor_frame=anchor_frame,
-            detection_payloads=detection_payloads,
-        )
+            plate_hint=plate_hint,
+            candidates=tuple(detection_evidence),
+            exact_plate_hint_matches=tuple(exact_plate_hint_matches),
+        ), chat_images
 
-        if plate_hint:
-            for detection_payload in detection_payloads:
-                for candidate in detection_payload['candidates']:
-                    candidate_text = str(candidate.get('text') or '')
-                    if _normalize_plate(candidate_text) == plate_hint:
-                        return {
-                            'anchorFrameId': anchor_frame.frame_id,
-                            'selectedTrackId': detection_payload['trackId'],
-                            'selectedCandidateId': candidate.get('id'),
-                            'confidence': 0.99,
-                            'rationale': f'直接匹配描述中的車牌號碼 {candidate_text}。',
-                            'selectedBox': detection_payload['selectedBox'],
-                            'candidateTracks': candidate_tracks,
-                        }
-
+    def _build_target_resolution_prompt(
+        self,
+        resolution_evidence: TargetResolutionEvidence,
+    ) -> tuple[str, str]:
         system_prompt = (
             '你是交通事件 target resolver。你必須只從提供的候選 target IDs 中選出最符合描述的目標。'
-            '請結合 anchor overview、各個 target crop、以及系統提供的 OCR 提示判斷。只輸出 JSON。'
+            '請結合 anchor overview、各個 target crop、以及結構化 OCR 證據判斷。只輸出 JSON。'
         )
-        detection_list = '\n'.join(
-            f'- {payload["trackId"]} ({payload["label"]}) class={payload["className"]} '
-            f'ocr={payload["topPlateText"] or "--"} conf={payload["topPlateConfidence"] or 0:.3f}'
-            for payload in detection_payloads
+        prompt_payload = json.dumps(
+            resolution_evidence.to_prompt_payload(),
+            ensure_ascii=False,
+            indent=2,
         )
         user_prompt = (
-            f'使用者描述:\n{description}\n\n'
-            f'anchor frame: {anchor_frame.frame_id} @ T+{_format_time_label(anchor_frame.time_ms)}\n\n'
-            f'候選 target:\n{detection_list}\n\n'
-            '請輸出 JSON:\n'
-            '{"selectedTrackId":"...","confidence":0.0,"rationale":"..."}'
+            '請根據以下 JSON 證據與對應圖片選擇 target。targets[*].imageFrameId 會對應到提供的 crop 圖。\n'
+            '如果 exactPlateHintMatches 非空，代表 OCR 與描述中的車牌提示完全一致，這是 strong prior；'
+            '只有當畫面證據明確矛盾時，才可改選其他 target，並將 plateHintConsistency 設為 contradicted。\n\n'
+            f'{prompt_payload}\n\n'
+            '請只輸出 JSON:\n'
+            '{"selectedTrackId":"...","selectedCandidateId":"...","confidence":0.0,'
+            '"plateHintConsistency":"supporting|neutral|contradicted|not-applicable","rationale":"..."}'
         )
-        response = self._provider.generate_json(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            images=chat_images,
-            request_metadata={
-                'workflow': 'ai-evidence',
-                'runId': request_id,
-                'requestId': request_id,
-                'stage': 'resolve-target',
-                'anchorFrameId': anchor_frame.frame_id,
-                'anchorTimeMs': anchor_frame.time_ms,
-                'candidateCount': len(detection_payloads),
-            },
+        return system_prompt, user_prompt
+
+    def _finalize_target_resolution(
+        self,
+        *,
+        anchor_frame: RenderedFrame,
+        response: dict[str, Any] | None,
+        resolution_evidence: TargetResolutionEvidence,
+    ) -> dict[str, Any]:
+        candidate_tracks = self._build_target_candidate_tracks(
+            anchor_frame=anchor_frame,
+            candidates=resolution_evidence.candidates,
         )
+        strong_prior_match = resolution_evidence.primary_exact_plate_hint_match
+        response = response or {}
         selected_track_id = _optional_string(response.get('selectedTrackId'))
-        selected_payload = next((payload for payload in detection_payloads if payload['trackId'] == selected_track_id), None)
-        if selected_payload is None:
-            selected_payload = detection_payloads[0]
-            selected_track_id = selected_payload['trackId']
+        selected_candidate_id = _optional_string(response.get('selectedCandidateId'))
+        selected_candidate = resolution_evidence.find_candidate(selected_track_id)
+        rationale = str(response.get('rationale') or '').strip()
+        confidence = _float_value(response.get('confidence')) or 0.5
+        plate_hint_consistency = _normalize_plate_hint_consistency(response.get('plateHintConsistency'))
+
+        if selected_candidate is not None:
+            selected_candidate_id = selected_candidate.resolve_selected_candidate_id(selected_candidate_id)
+
+        if strong_prior_match is not None:
+            matched_candidate = strong_prior_match.candidate_evidence
+            matched_candidate_id = _optional_string(strong_prior_match.candidate.get('id'))
+            matched_candidate_text = strong_prior_match.matched_text(resolution_evidence.plate_hint)
+            if selected_candidate is None:
+                selected_candidate = matched_candidate
+                selected_track_id = matched_candidate.track_id
+                selected_candidate_id = matched_candidate_id
+                confidence = max(confidence, 0.99)
+                plate_hint_consistency = 'supporting'
+                rationale = f'依據描述中的車牌 {matched_candidate_text} 與 OCR 候選完全一致，直接鎖定目標。'
+            elif selected_candidate.track_id == matched_candidate.track_id:
+                selected_candidate_id = matched_candidate_id
+                confidence = max(confidence, 0.99)
+                if plate_hint_consistency != 'contradicted':
+                    plate_hint_consistency = 'supporting'
+                if not rationale:
+                    rationale = f'依據描述中的車牌 {matched_candidate_text} 與 OCR 候選完全一致，優先鎖定目標。'
+            elif plate_hint_consistency != 'contradicted':
+                overridden_track_id = selected_track_id or '未知 target'
+                selected_candidate = matched_candidate
+                selected_track_id = matched_candidate.track_id
+                selected_candidate_id = matched_candidate_id
+                confidence = max(confidence, 0.99)
+                plate_hint_consistency = 'supporting'
+                rationale = (
+                    f'依據描述中的車牌 {matched_candidate_text} 與 OCR 候選完全一致，'
+                    f'覆寫模型原先提議的 {overridden_track_id}。'
+                )
+
+        if selected_candidate is None:
+            selected_candidate = resolution_evidence.candidates[0]
+            selected_track_id = selected_candidate.track_id
+            selected_candidate_id = selected_candidate.resolve_selected_candidate_id(selected_candidate_id)
+
+        if plate_hint_consistency is None:
+            if resolution_evidence.plate_hint is None:
+                plate_hint_consistency = 'not-applicable'
+            elif strong_prior_match is not None and selected_candidate.track_id == strong_prior_match.candidate_evidence.track_id:
+                plate_hint_consistency = 'supporting'
+            else:
+                plate_hint_consistency = 'neutral'
+
+        if not rationale:
+            if plate_hint_consistency == 'contradicted' and resolution_evidence.plate_hint:
+                rationale = f'畫面證據與描述中的車牌提示矛盾，因此改選 {selected_candidate.label}。'
+            else:
+                rationale = f'預設選擇 {selected_candidate.label}。'
 
         return {
             'anchorFrameId': anchor_frame.frame_id,
             'selectedTrackId': selected_track_id,
-            'selectedCandidateId': selected_payload.get('acceptedCandidateId'),
-            'confidence': float(response.get('confidence') or 0.5),
-            'rationale': str(response.get('rationale') or f'預設選擇 {selected_payload["label"]}。').strip(),
-            'selectedBox': selected_payload['selectedBox'],
+            'selectedCandidateId': selected_candidate_id,
+            'confidence': confidence,
+            'rationale': rationale,
+            'selectedBox': selected_candidate.selected_box,
+            'plateHint': resolution_evidence.plate_hint,
+            'plateHintConsistency': plate_hint_consistency,
+            'strongPriorTrackId': (
+                strong_prior_match.candidate_evidence.track_id
+                if strong_prior_match is not None else None
+            ),
             'candidateTracks': candidate_tracks,
         }
 
@@ -506,39 +765,33 @@ class AiEvidenceWorkflow:
         self,
         *,
         anchor_frame: RenderedFrame,
-        detection_payloads: list[dict[str, Any]],
+        candidates: Sequence[TargetCandidateEvidence],
     ) -> list[dict[str, Any]]:
         tracks: list[dict[str, Any]] = []
-        for index, payload in enumerate(detection_payloads):
-            track_id = _optional_string(payload.get('trackId')) or f'ai-target-{index:02d}'
-            class_name = _optional_string(payload.get('className')) or 'vehicle'
-            normalized_box = payload.get('normalizedBox')
-            if not isinstance(normalized_box, dict):
-                continue
-            confidence = float(payload.get('confidence') or 0.0)
-            top_plate_text = _optional_string(payload.get('topPlateText'))
-            label = top_plate_text or f'{class_name} {index + 1}'
+        for candidate in candidates:
+            top_plate_text = candidate.top_plate_text
+            label = top_plate_text or candidate.label
             tracks.append({
-                'id': track_id,
-                'className': class_name,
+                'id': candidate.track_id,
+                'className': candidate.class_name,
                 'label': label,
-                'confidence': confidence,
+                'confidence': candidate.detection_confidence,
                 'frames': [{
-                    'id': f'{track_id}-anchor',
+                    'id': f'{candidate.track_id}-anchor',
                     'timeMs': anchor_frame.time_ms,
-                    'box': normalized_box,
-                    'confidence': confidence,
-                    'className': class_name,
+                    'box': candidate.normalized_box,
+                    'confidence': candidate.detection_confidence,
+                    'className': candidate.class_name,
                     'diagnostics': {
                         'source': 'ai-evidence-target-resolution',
-                        'topPlateText': top_plate_text,
-                        'acceptedCandidateId': payload.get('acceptedCandidateId'),
+                        'acceptedCandidateId': candidate.accepted_candidate_id,
+                        'ocrEvidence': candidate.to_prompt_payload(),
                     },
                 }],
                 'diagnostics': {
                     'source': 'ai-evidence-target-resolution',
                     'anchorFrameId': anchor_frame.frame_id,
-                    'topPlateText': top_plate_text,
+                    'ocrEvidence': candidate.to_prompt_payload(),
                 },
             })
         return tracks
@@ -829,7 +1082,7 @@ def _find_closest_track_box(track: dict[str, Any] | None, time_ms: int) -> dict[
     return closest.get('box') if isinstance(closest.get('box'), dict) else None
 
 
-def _resolve_plate_candidate(candidates: list[dict[str, Any]], accepted_candidate_id: Any) -> dict[str, Any] | None:
+def _resolve_plate_candidate(candidates: Sequence[dict[str, Any]], accepted_candidate_id: Any) -> dict[str, Any] | None:
     accepted_id = _optional_string(accepted_candidate_id)
     if accepted_id:
         for candidate in candidates:
@@ -855,6 +1108,26 @@ def _normalize_plate(value: str) -> str:
     return ''.join(character for character in value.upper() if character.isalnum())
 
 
+def _candidate_evidence_payload(candidate: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(candidate, dict):
+        return None
+    text = _optional_string(candidate.get('text'))
+    return {
+        'candidateId': _optional_string(candidate.get('id')),
+        'text': text,
+        'normalizedText': _normalize_plate(text) if text else None,
+        'confidence': _float_value(candidate.get('confidence')) or 0.0,
+        'source': _optional_string(candidate.get('source')),
+    }
+
+
+def _normalize_plate_hint_consistency(value: Any) -> str | None:
+    normalized = _optional_string(value.lower()) if isinstance(value, str) else None
+    if normalized in {'supporting', 'neutral', 'contradicted', 'not-applicable'}:
+        return normalized
+    return None
+
+
 def _extract_plate_hint(description: str) -> str | None:
     match = re.search(r'([A-Z0-9]{2,4}-?[A-Z0-9]{2,4})', description.upper())
     if not match:
@@ -864,6 +1137,17 @@ def _extract_plate_hint(description: str) -> str | None:
 
 def _optional_string(value: Any) -> str | None:
     return value if isinstance(value, str) and value.strip() else None
+
+
+def _float_value(value: Any) -> float | None:
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return None
+    return None
 
 
 def _build_summary(description: str, interval: dict[str, Any], plate_candidate: dict[str, Any] | None) -> str:

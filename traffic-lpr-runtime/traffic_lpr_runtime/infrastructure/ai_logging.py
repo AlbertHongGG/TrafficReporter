@@ -17,11 +17,23 @@ class JsonFileAiCallLogger:
     def __init__(self, runs_root: Path) -> None:
         self._runs_root = runs_root
 
-    def record(self, entry: dict[str, Any], *, started_at_ms: int, provider_kind: str, run_id: str) -> Path:
+    def record(
+        self,
+        entry: dict[str, Any],
+        *,
+        started_at_ms: int,
+        provider_kind: str,
+        run_id: str,
+        stage_label: str | None = None,
+    ) -> Path:
         timestamp = datetime.fromtimestamp(started_at_ms / 1000.0)
         day_dir = self._runs_root / run_id / 'ai-logs'
         day_dir.mkdir(parents=True, exist_ok=True)
-        file_name = f'{timestamp.strftime("%H%M%S_%f")[:-3]}_{_slugify(provider_kind)}_{entry["callId"]}.json'
+        file_name_parts = [timestamp.strftime('%H%M%S_%f')[:-3]]
+        if stage_label:
+            file_name_parts.append(stage_label)
+        file_name_parts.extend([_slugify(provider_kind), entry['callId']])
+        file_name = f'{"_".join(file_name_parts)}.json'
         output_path = day_dir / file_name
         output_path.write_text(
             json.dumps(_json_safe(entry), ensure_ascii=False, indent=2),
@@ -55,6 +67,7 @@ class LoggingVisionLlmProvider:
         started_at_ms = _now_ms()
         call_id = uuid4().hex
         resolved_run_id = _extract_run_id(request_metadata)
+        resolved_stage_label = _extract_stage_label(request_metadata)
         request_payload = {
             'systemPrompt': system_prompt,
             'userPrompt': user_prompt,
@@ -91,6 +104,7 @@ class LoggingVisionLlmProvider:
                 started_at_ms=started_at_ms,
                 provider_kind=self.kind,
                 run_id=resolved_run_id,
+                stage_label=resolved_stage_label,
             )
             raise
 
@@ -109,6 +123,7 @@ class LoggingVisionLlmProvider:
             started_at_ms=started_at_ms,
             provider_kind=self.kind,
             run_id=resolved_run_id,
+            stage_label=resolved_stage_label,
         )
         return response
 
@@ -151,6 +166,26 @@ def _extract_run_id(request_metadata: dict[str, Any] | None) -> str:
             if isinstance(value, str) and value.strip():
                 return value.strip()
     return build_run_id()
+
+
+def _extract_stage_label(request_metadata: dict[str, Any] | None) -> str | None:
+    if not isinstance(request_metadata, dict):
+        return None
+
+    raw_stage = request_metadata.get('stage')
+    if not isinstance(raw_stage, str) or not raw_stage.strip():
+        return None
+
+    stage = raw_stage.strip().lower()
+    if stage in {'coarse', 'fine', 'target'}:
+        return stage
+    if 'coarse' in stage:
+        return 'coarse'
+    if 'fine' in stage or 'keyframe' in stage:
+        return 'fine'
+    if 'target' in stage:
+        return 'target'
+    return _slugify(stage)
 
 
 def _slugify(value: str) -> str:

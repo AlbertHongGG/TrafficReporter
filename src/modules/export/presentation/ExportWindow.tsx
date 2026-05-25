@@ -100,7 +100,7 @@ export const ExportWindow: React.FC = () => {
     setFormat(defaultFormatForSession(nextSnapshot));
     setVideoQuality(nextSnapshot.renderProfile.videoQuality ?? '1080p');
     setAudioBitrateKbps(nextSnapshot.renderProfile.audioBitrateKbps ?? 320);
-    setCompressionMode(nextSnapshot.renderProfile.compressionMode ?? 'standard');
+    setCompressionMode(nextSnapshot.renderProfile.compressionMode);
     setOutputPath('');
     setProgress(DEFAULT_PROGRESS);
     setStatus('idle');

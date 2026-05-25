@@ -284,19 +284,17 @@ fn build_filter_graph(request: &TimelineExportRequest) -> Result<(Vec<String>, S
 fn codec_args_for_profile(profile: &RenderProfilePayload) -> Vec<String> {
     let format = profile.format.to_lowercase();
     let bitrate = profile.audio_bitrate_kbps.unwrap_or(320).clamp(96, 320);
-    let compact_mode = matches!(profile.compression_mode.as_deref(), Some("compact"));
-    let video_preset = if compact_mode { "slow" } else { "medium" };
-    let video_crf = if compact_mode { "22" } else { "18" };
-    let audio_bitrate_cap = if compact_mode { 128 } else { 192 };
+    let compression_mode = profile.compression_mode;
+    let audio_bitrate_cap = compression_mode.audio_bitrate_cap_kbps();
 
     match format.as_str() {
         "mp4" => vec![
             "-c:v".to_string(),
             "libx264".to_string(),
             "-preset".to_string(),
-            video_preset.to_string(),
+            compression_mode.video_preset().to_string(),
             "-crf".to_string(),
-            video_crf.to_string(),
+            compression_mode.video_crf().to_string(),
             "-pix_fmt".to_string(),
             "yuv420p".to_string(),
             "-c:a".to_string(),
@@ -310,9 +308,9 @@ fn codec_args_for_profile(profile: &RenderProfilePayload) -> Vec<String> {
             "-c:v".to_string(),
             "libx264".to_string(),
             "-preset".to_string(),
-            video_preset.to_string(),
+            compression_mode.video_preset().to_string(),
             "-crf".to_string(),
-            video_crf.to_string(),
+            compression_mode.video_crf().to_string(),
             "-pix_fmt".to_string(),
             "yuv420p".to_string(),
             "-c:a".to_string(),
@@ -337,9 +335,9 @@ fn codec_args_for_profile(profile: &RenderProfilePayload) -> Vec<String> {
             "-c:v".to_string(),
             "libx264".to_string(),
             "-preset".to_string(),
-            video_preset.to_string(),
+            compression_mode.video_preset().to_string(),
             "-crf".to_string(),
-            video_crf.to_string(),
+            compression_mode.video_crf().to_string(),
             "-pix_fmt".to_string(),
             "yuv420p".to_string(),
             "-c:a".to_string(),
@@ -502,11 +500,11 @@ mod tests {
             fps: 60,
             video_quality: Some("1080p".to_string()),
             audio_bitrate_kbps: Some(320),
-            compression_mode: Some("compact".to_string()),
+            compression_mode: crate::contracts::OutputCompressionModePayload::Compact,
         });
 
-        assert!(args.windows(2).any(|window| window == ["-preset", "slow"]));
-        assert!(args.windows(2).any(|window| window == ["-crf", "22"]));
-        assert!(args.windows(2).any(|window| window == ["-b:a", "128k"]));
+        assert!(args.windows(2).any(|window| window == ["-preset", "veryslow"]));
+        assert!(args.windows(2).any(|window| window == ["-crf", "30"]));
+        assert!(args.windows(2).any(|window| window == ["-b:a", "96k"]));
     }
 }

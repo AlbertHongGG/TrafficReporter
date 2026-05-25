@@ -1,6 +1,7 @@
 {
   "ts": {
     "imports": [
+      { "name": "OutputCompressionMode", "from": "./editor" },
       { "name": "VideoMarkerRect", "from": "./editor" }
     ]
   },
@@ -23,6 +24,10 @@
     }
   },
   "externals": {
+    "OutputCompressionMode": {
+      "kind": "stringUnion",
+      "rustName": "OutputCompressionModePayload"
+    },
     "VideoMarkerRect": {
       "kind": "object",
       "fields": [
@@ -414,6 +419,7 @@
         { "name": "sourcePath", "type": "string" },
         { "name": "timeMs", "type": "number", "rustType": "u64" },
         { "name": "markerRect", "type": "VideoMarkerRect", "nullable": true },
+        { "name": "compressionMode", "type": "OutputCompressionMode" },
         { "name": "interval", "type": "TimelineIntervalSelection", "nullable": true },
         { "name": "targetTrack", "type": "LprTargetTrack", "nullable": true },
         { "name": "acceptedCandidate", "type": "LprPlateCandidate", "nullable": true },

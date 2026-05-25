@@ -109,6 +109,20 @@ AI evidence stage policy:
 - `target` means anchor-frame vehicle resolution, not interval tracking
 - final tracking/OCR semantics still come from the deterministic `analyze-interval` runtime workflow
 
+Export compression policy:
+- `compressionMode` is an explicit cross-layer contract field, not an optional host-side hint
+- timeline export, frame export, and evidence bundle source-frame export must use the same compression mode semantics
+- `standard` preserves lossless still-image export and higher-bitrate timeline settings
+- `compact` means near-lossless-first size reduction: smaller x264 settings for timelines and JPEG still-image export for user-facing frame artifacts
+- evidence bundles must not hardcode a still-image format that bypasses the selected compression mode
+
+Target evidence policy:
+- the target resolver prompt must be built from structured evidence payloads, not ad hoc OCR summary strings
+- target candidate evidence must carry detection ids plus OCR candidate summaries so logs and prompts describe the same objects
+- an exact OCR match to the description's plate hint is a strong prior, not an absolute override
+- overriding that strong prior requires an explicit `contradicted` assessment from the target resolver output, not a silent branch
+- if the provider fails and a strong prior exact match exists, the runtime may still fall back to that exact match deterministically
+
 ## Job Lifecycle Policy
 
 LPR job lifecycle is:

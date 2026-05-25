@@ -1795,6 +1795,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         sourcePath: activeFile.asset.path,
         timeMs: Math.max(0, Math.round(livePlayheadMsRef.current)),
         markerRect: activeFile.markerRect,
+        compressionMode: activeFile.renderProfile.compressionMode,
         interval: lprState.interval,
         targetTrack: lprAnalysisTrack ?? lprSelectedTrack,
         acceptedCandidate: lprAcceptedCandidate,

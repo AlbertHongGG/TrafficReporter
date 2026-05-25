@@ -1,6 +1,7 @@
 // This file is auto-generated from schemas/lpr/lpr-contracts.json.
 // Do not edit manually.
 
+import type { OutputCompressionMode } from './editor';
 import type { VideoMarkerRect } from './editor';
 
 export type LprWorkflowMode = 'idle' | 'range' | 'target' | 'review';
@@ -259,6 +260,7 @@ export interface LprEvidenceExportRequest {
   sourcePath: string;
   timeMs: number;
   markerRect: VideoMarkerRect | null;
+  compressionMode: OutputCompressionMode;
   interval: TimelineIntervalSelection | null;
   targetTrack: LprTargetTrack | null;
   acceptedCandidate: LprPlateCandidate | null;

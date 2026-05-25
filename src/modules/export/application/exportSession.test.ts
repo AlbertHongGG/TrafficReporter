@@ -26,6 +26,7 @@ describe('preparePendingExportSession', () => {
       fps: 120,
       videoQuality: '2160p',
       audioBitrateKbps: 320,
+      compressionMode: 'compact',
     };
     fileState.clips = [
       {

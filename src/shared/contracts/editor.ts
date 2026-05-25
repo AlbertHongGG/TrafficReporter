@@ -39,12 +39,14 @@ export type AudioBitrateKbps = 320 | 256 | 192 | 128 | 96;
 
 export type OutputCompressionMode = 'standard' | 'compact';
 
+export const DEFAULT_OUTPUT_COMPRESSION_MODE: OutputCompressionMode = 'standard';
+
 export interface RenderProfile {
   format: ExportFormat;
   fps: number;
   videoQuality?: VideoQuality;
   audioBitrateKbps?: AudioBitrateKbps;
-  compressionMode?: OutputCompressionMode;
+  compressionMode: OutputCompressionMode;
 }
 
 export interface VideoMarkerRect {

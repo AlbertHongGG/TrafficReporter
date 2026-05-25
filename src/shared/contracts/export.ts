@@ -52,7 +52,7 @@ export interface FrameExportRequest {
   sourcePath: string;
   timeMs: number;
   markerRect: VideoMarkerRect | null;
-  compressionMode?: OutputCompressionMode;
+  compressionMode: OutputCompressionMode;
 }
 
 export interface ExportProgressPayload {

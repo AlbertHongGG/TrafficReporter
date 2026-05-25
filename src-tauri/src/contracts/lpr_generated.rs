@@ -2,7 +2,7 @@
 // Do not edit manually.
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use super::{VideoMarkerRectPayload};
+use super::{OutputCompressionModePayload, VideoMarkerRectPayload};
 
 pub type LprVehicleKind = String;
 
@@ -225,6 +225,7 @@ pub struct LprEvidenceExportRequestPayload {
     pub source_path: String,
     pub time_ms: u64,
     pub marker_rect: Option<VideoMarkerRectPayload>,
+    pub compression_mode: OutputCompressionModePayload,
     pub interval: Option<TimelineIntervalSelectionPayload>,
     pub target_track: Option<LprTargetTrackPayload>,
     pub accepted_candidate: Option<LprPlateCandidatePayload>,
