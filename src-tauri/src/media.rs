@@ -40,7 +40,7 @@ pub fn resolve_video_compression_settings(
     let safe_fps = fps.max(1);
     let is_compact = compression_mode.is_compact();
     let gop_size = match (output_target, is_compact) {
-        (VideoCompressionTarget::TimelineExport, true) => safe_fps.saturating_mul(5),
+        (VideoCompressionTarget::TimelineExport, true) => safe_fps.saturating_mul(10),
         (VideoCompressionTarget::AiEvidenceClip, true) => safe_fps.saturating_mul(4),
         (_, false) => safe_fps.saturating_mul(2),
     };
@@ -58,7 +58,7 @@ pub fn resolve_video_compression_settings(
 
     VideoCompressionSettings {
         preset: if is_compact { "veryslow" } else { "medium" },
-        crf: if is_compact { 31 } else { 18 },
+        crf: if is_compact { 34 } else { 18 },
         gop_size,
         min_keyframe_interval,
         b_frames: if is_compact { 4 } else { 2 },
@@ -138,12 +138,12 @@ fn compact_video_maxrate_kbps(
 ) -> u32 {
     let longer_side = width.max(height);
     let base_kbps: u32 = match longer_side {
-        0..=640 => 400,
-        641..=960 => 650,
-        961..=1280 => 1000,
-        1281..=1920 => 1800,
-        1921..=2560 => 2800,
-        _ => 4200,
+        0..=640 => 300,
+        641..=960 => 500,
+        961..=1280 => 700,
+        1281..=1920 => 1400,
+        1921..=2560 => 2200,
+        _ => 3200,
     };
 
     let fps_adjusted = if fps > 30 {
@@ -184,10 +184,10 @@ mod tests {
         assert_eq!(standard.preset, "medium");
         assert_eq!(compact.preset, "veryslow");
         assert_eq!(standard.crf, 18);
-        assert_eq!(compact.crf, 31);
-        assert_eq!(compact.gop_size, 300);
-        assert_eq!(compact.maxrate_kbps, Some(2160));
-        assert_eq!(compact.bufsize_kbps, Some(4320));
+        assert_eq!(compact.crf, 34);
+        assert_eq!(compact.gop_size, 600);
+        assert_eq!(compact.maxrate_kbps, Some(1680));
+        assert_eq!(compact.bufsize_kbps, Some(3360));
     }
 
     #[test]

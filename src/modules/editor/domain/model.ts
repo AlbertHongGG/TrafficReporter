@@ -1,4 +1,5 @@
 import type {
+  AudioBitrateKbps,
   LprTrackedRegion,
   LprTargetTrack,
   MediaProbeResult,
@@ -73,6 +74,18 @@ export const DEFAULT_RENDER_PROFILE: RenderProfile = {
   audioBitrateKbps: 320,
   compressionMode: 'standard',
 };
+
+const AUDIO_BITRATE_OPTIONS_DESC: AudioBitrateKbps[] = [320, 256, 192, 128, 96];
+
+function resolveDefaultAudioBitrateKbps(sourceBitrateKbps?: number): AudioBitrateKbps {
+  if (!Number.isFinite(sourceBitrateKbps) || !sourceBitrateKbps || sourceBitrateKbps <= 0) {
+    return DEFAULT_RENDER_PROFILE.audioBitrateKbps ?? 320;
+  }
+
+  const normalizedSourceBitrateKbps = Math.round(sourceBitrateKbps);
+  return AUDIO_BITRATE_OPTIONS_DESC.find((option) => option <= normalizedSourceBitrateKbps)
+    ?? AUDIO_BITRATE_OPTIONS_DESC[AUDIO_BITRATE_OPTIONS_DESC.length - 1];
+}
 
 export const DEFAULT_ZOOM = 96;
 
@@ -239,6 +252,7 @@ export function buildEditorFileState(asset: EditorAsset, options: BuildEditorFil
     ? options.clips.map((clip) => ({ ...clip }))
     : [createDefaultClip(asset.id, track.id, asset.durationMs)];
   const defaultFps = asset.fps ?? DEFAULT_RENDER_PROFILE.fps;
+  const defaultAudioBitrateKbps = resolveDefaultAudioBitrateKbps(asset.audioBitrateKbps);
 
   return {
     id: options.id ?? createId('file'),
@@ -248,6 +262,7 @@ export function buildEditorFileState(asset: EditorAsset, options: BuildEditorFil
     renderProfile: {
       ...DEFAULT_RENDER_PROFILE,
       fps: defaultFps,
+      audioBitrateKbps: defaultAudioBitrateKbps,
       ...options.renderProfile,
     },
     selectedClipIds: [],

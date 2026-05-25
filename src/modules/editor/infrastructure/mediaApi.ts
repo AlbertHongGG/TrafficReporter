@@ -124,6 +124,7 @@ export async function buildEditorAsset(path: string): Promise<EditorAsset> {
     hasVideo: probe.hasVideo,
     hasAudio: probe.hasAudio,
     fps: probe.fps,
+    audioBitrateKbps: probe.audioBitrateKbps,
     width: probe.width,
     height: probe.height,
     status: 'ready',

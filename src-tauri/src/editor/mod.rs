@@ -475,6 +475,36 @@ fn parse_stream_fps(line: &str) -> Option<u32> {
     None
 }
 
+fn parse_stream_audio_bitrate_kbps(line: &str) -> Option<u32> {
+    for segment in line.split(',') {
+        let trimmed = segment.trim();
+        let Some(value) = trimmed.strip_suffix(" kb/s") else {
+            continue;
+        };
+
+        let bitrate_kbps = value.trim().parse::<f64>().ok()?;
+        if bitrate_kbps.is_finite() && bitrate_kbps > 0.0 {
+            return Some(bitrate_kbps.round().clamp(1.0, 10_000.0) as u32);
+        }
+    }
+
+    None
+}
+
+fn parse_json_stream_bitrate_kbps(stream: &serde_json::Value) -> Option<u32> {
+    let bitrate_bps = match stream.get("bit_rate") {
+        Some(serde_json::Value::String(value)) => value.trim().parse::<u64>().ok(),
+        Some(serde_json::Value::Number(value)) => value.as_u64(),
+        _ => None,
+    }?;
+
+    if bitrate_bps == 0 {
+        return None;
+    }
+
+    u32::try_from((bitrate_bps.saturating_add(500)) / 1000).ok()
+}
+
 fn seconds_from_ms(value: u64) -> String {
     format!("{:.3}", value as f64 / 1000.0)
 }
@@ -770,6 +800,7 @@ fn probe_with_ffprobe(path: &str) -> Result<MediaProbePayload, String> {
     let mut has_video = false;
     let mut has_audio = false;
     let mut fps = None;
+    let mut audio_bitrate_kbps = None;
     let mut width = None;
     let mut height = None;
 
@@ -803,6 +834,7 @@ fn probe_with_ffprobe(path: &str) -> Result<MediaProbePayload, String> {
             }
             Some("audio") => {
                 has_audio = true;
+                audio_bitrate_kbps = audio_bitrate_kbps.or_else(|| parse_json_stream_bitrate_kbps(stream));
             }
             _ => {}
         }
@@ -817,6 +849,7 @@ fn probe_with_ffprobe(path: &str) -> Result<MediaProbePayload, String> {
         has_video,
         has_audio,
         fps,
+        audio_bitrate_kbps,
         width,
         height,
     })
@@ -836,6 +869,7 @@ fn probe_with_ffmpeg(path: &str) -> Result<MediaProbePayload, String> {
     let mut has_video = false;
     let mut has_audio = false;
     let mut fps = None;
+    let mut audio_bitrate_kbps = None;
     let mut width = None;
     let mut height = None;
 
@@ -865,6 +899,9 @@ fn probe_with_ffmpeg(path: &str) -> Result<MediaProbePayload, String> {
 
         if line.contains("Audio:") {
             has_audio = true;
+            if audio_bitrate_kbps.is_none() {
+                audio_bitrate_kbps = parse_stream_audio_bitrate_kbps(line);
+            }
         }
     }
 
@@ -890,6 +927,7 @@ fn probe_with_ffmpeg(path: &str) -> Result<MediaProbePayload, String> {
         has_video,
         has_audio,
         fps,
+        audio_bitrate_kbps,
         width,
         height,
     })
@@ -1698,9 +1736,9 @@ mod ai_clip_tests {
         );
 
         assert!(args.windows(2).any(|window| window == ["-preset", "veryslow"]));
-        assert!(args.windows(2).any(|window| window == ["-crf", "31"]));
+        assert!(args.windows(2).any(|window| window == ["-crf", "34"]));
         assert!(args.windows(2).any(|window| window == ["-g", "240"]));
-        assert!(args.windows(2).any(|window| window == ["-maxrate", "1836k"]));
+        assert!(args.windows(2).any(|window| window == ["-maxrate", "1428k"]));
         assert!(args.windows(2).any(|window| window == ["-b:a", "256k"]));
         assert!(args.windows(2).any(|window| window == ["-movflags", "+faststart"]));
     }

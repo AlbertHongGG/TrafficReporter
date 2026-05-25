@@ -22,6 +22,7 @@ pub struct MediaProbePayload {
     pub has_video: bool,
     pub has_audio: bool,
     pub fps: Option<u32>,
+    pub audio_bitrate_kbps: Option<u32>,
     pub width: Option<u32>,
     pub height: Option<u32>,
 }

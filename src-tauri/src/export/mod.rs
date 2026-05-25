@@ -579,12 +579,12 @@ mod tests {
         }, Some((1920, 1080)), 60);
 
         assert!(args.windows(2).any(|window| window == ["-preset", "veryslow"]));
-        assert!(args.windows(2).any(|window| window == ["-crf", "31"]));
+        assert!(args.windows(2).any(|window| window == ["-crf", "34"]));
         assert!(args.windows(2).any(|window| window == ["-b:a", "320k"]));
-        assert!(args.windows(2).any(|window| window == ["-g", "300"]));
+        assert!(args.windows(2).any(|window| window == ["-g", "600"]));
         assert!(args.windows(2).any(|window| window == ["-bf", "4"]));
-        assert!(args.windows(2).any(|window| window == ["-maxrate", "2160k"]));
-        assert!(args.windows(2).any(|window| window == ["-bufsize", "4320k"]));
+        assert!(args.windows(2).any(|window| window == ["-maxrate", "1680k"]));
+        assert!(args.windows(2).any(|window| window == ["-bufsize", "3360k"]));
     }
 
     #[test]
