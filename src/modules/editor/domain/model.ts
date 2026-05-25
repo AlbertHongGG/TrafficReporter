@@ -69,7 +69,7 @@ export const DEFAULT_WORKSPACE_NAME = 'Video Workspace';
 export const DEFAULT_RENDER_PROFILE: RenderProfile = {
   format: 'mp4',
   fps: 60,
-  videoQuality: '1080p',
+  videoQuality: 'source',
   audioBitrateKbps: 320,
   compressionMode: 'standard',
 };

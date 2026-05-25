@@ -112,16 +112,19 @@ AI evidence stage policy:
 Export compression policy:
 - `compressionMode` is an explicit cross-layer contract field, not an optional host-side hint
 - timeline export, frame export, and evidence bundle source-frame export must use the same compression mode semantics
-- `standard` preserves lossless still-image export and higher-bitrate timeline settings
-- `compact` means near-lossless-first size reduction: smaller x264 settings for timelines and JPEG still-image export for user-facing frame artifacts
-- evidence bundles must not hardcode a still-image format that bypasses the selected compression mode
+- compression mode must not silently change output dimensions; timeline exports may scale only when the user explicitly selects a lower resolution, and they must never upscale beyond the source dimensions
+- `standard` keeps higher-fidelity timeline settings and full-color PNG still-image outputs
+- `compact` means lossy size reduction at the same dimensions: stronger H.264 inter-frame compression for timelines and lossy PNG quantization for user-facing still images
+- evidence bundles must not hardcode a still-image format that bypasses the selected compression mode, and user-facing still-image outputs must remain `.png`
 
 Target evidence policy:
+- AI evidence prompts live in a runtime-owned prompt catalog, not as hidden inline strings inside workflow code
 - the target resolver prompt must be built from structured evidence payloads, not ad hoc OCR summary strings
 - target candidate evidence must carry detection ids plus OCR candidate summaries so logs and prompts describe the same objects
 - an exact OCR match to the description's plate hint is a strong prior, not an absolute override
 - overriding that strong prior requires an explicit `contradicted` assessment from the target resolver output, not a silent branch
 - if the provider fails and a strong prior exact match exists, the runtime may still fall back to that exact match deterministically
+- user-facing AI images must not burn stage/frame/time headers into pixels; runtime logs keep the metadata, while final keyframes and target-resolution artifacts stay visually clean except for meaningful box annotations
 
 ## Job Lifecycle Policy
 

@@ -2,6 +2,7 @@ import React from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { save } from '@tauri-apps/plugin-dialog';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   AlertCircle,
@@ -17,7 +18,7 @@ import {
   X,
   Crosshair,
 } from 'lucide-react';
-import { requestAiPanelWindowSession, sendAiPanelAction } from '../infrastructure/aiPanelApi';
+import { requestAiPanelWindowSession, saveGeneratedMediaAsset, sendAiPanelAction } from '../infrastructure/aiPanelApi';
 import {
   AI_PANEL_SESSION_UPDATED_EVENT,
   type AiPanelAction,
@@ -57,7 +58,6 @@ export const AiEvidenceWindow: React.FC = () => {
   const keyframes = result?.keyframes ?? [];
   const runtimeReady = snapshot?.runtimeStatus?.available ?? false;
   const isRunning = aiState.job.status === 'queued' || aiState.job.status === 'running';
-  const clipHref = toLocalAsset(result?.clipPath);
   const progress = clamp01(aiState.job.progress);
   const hasError = Boolean(errorMessage || aiState.job.error);
   const canRun = Boolean(snapshot?.hasActiveFile) && runtimeReady && !isRunning;
@@ -115,6 +115,39 @@ export const AiEvidenceWindow: React.FC = () => {
       await sendAiPanelAction(action);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to send the latest AI panel action.');
+    }
+  }, []);
+
+  const handleSaveGeneratedAsset = React.useCallback(async (
+    sourcePath: string | null | undefined,
+    fallbackName: string,
+    filterName: string,
+  ) => {
+    if (!sourcePath) {
+      return;
+    }
+
+    const suggestedName = downloadName(sourcePath, fallbackName);
+    const extension = suggestedName.split('.').at(-1)?.toLowerCase() || fallbackName.split('.').at(-1)?.toLowerCase() || 'bin';
+    const selectedPath = await save({
+      title: 'Save generated media asset',
+      defaultPath: suggestedName,
+      filters: [{ name: filterName, extensions: [extension] }],
+    });
+
+    if (!selectedPath) {
+      return;
+    }
+
+    const normalizedPath = selectedPath.toLowerCase().endsWith(`.${extension}`)
+      ? selectedPath
+      : `${selectedPath}.${extension}`;
+
+    try {
+      setErrorMessage(null);
+      await saveGeneratedMediaAsset(sourcePath, normalizedPath);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to save the generated media asset.');
     }
   }, []);
 
@@ -247,11 +280,15 @@ export const AiEvidenceWindow: React.FC = () => {
                         <span className={styles.metricValue}>{formatTransportTime(result.interval.startMs)} - {formatTransportTime(result.interval.endMs)}</span>
                       </button>
                     )}
-                    {clipHref && (
-                      <a className={styles.metricPill} href={clipHref} download={downloadName(result.clipPath, 'ai-evidence-clip.mp4')}>
+                    {result.clipPath && (
+                      <button
+                        type="button"
+                        className={styles.metricPill}
+                        onClick={() => void handleSaveGeneratedAsset(result.clipPath, 'ai-evidence-clip.mp4', 'MP4 Video')}
+                      >
                         <Download size={14} className={styles.metricIcon} />
                         <span className={styles.metricValue}>Clip</span>
-                      </a>
+                      </button>
                     )}
                   </div>
                   
@@ -291,19 +328,23 @@ export const AiEvidenceWindow: React.FC = () => {
                                   >
                                     <LocateFixed size={13} />
                                   </button>
-                                  {imageHref && (
-                                    <a
+                                  {keyframe.frame.imagePath && (
+                                    <button
+                                      type="button"
                                       className={styles.frameActionBtn}
-                                      href={imageHref}
-                                      download={downloadName(keyframe.frame.imagePath, `${keyframe.frame.frameId}.jpg`)}
+                                      onClick={() => void handleSaveGeneratedAsset(
+                                        keyframe.frame.imagePath,
+                                        `${keyframe.frame.frameId}.png`,
+                                        'PNG Image',
+                                      )}
                                       title="Save"
                                     >
                                       <Download size={13} />
-                                    </a>
+                                    </button>
                                   )}
                                 </div>
                               </div>
-                              <p className={styles.frameDesc}>{compactLabel(keyframe.description, keyframe.frame.label)}</p>
+                              <p className={styles.frameDesc}>{compactLabel(keyframe.description, 'Key frame description unavailable.')}</p>
                             </div>
                           </motion.article>
                         );

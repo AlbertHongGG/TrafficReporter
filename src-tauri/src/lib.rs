@@ -11,7 +11,8 @@ use app::AppState;
 use downloader::{download_youtube, get_youtube_info};
 use editor::{
 	analyze_ai_evidence, analyze_lpr_frame, analyze_lpr_interval, cancel_lpr_runtime_job, export_frame_image,
-	export_lpr_evidence, get_lpr_runtime_status, probe_media_source, scan_lpr_targets,
+	export_lpr_evidence, get_lpr_runtime_status, probe_media_source, save_generated_media_asset,
+	scan_lpr_targets,
 };
 use export::{get_pending_export_session, process_timeline_export, set_pending_export_session};
 
@@ -30,6 +31,7 @@ pub fn run() {
 			analyze_ai_evidence,
 			export_frame_image,
 			export_lpr_evidence,
+			save_generated_media_asset,
 			cancel_lpr_runtime_job,
 			get_lpr_runtime_status,
 			scan_lpr_targets,

@@ -771,6 +771,7 @@ pub async fn probe_media_source(path: String) -> Result<MediaProbePayload, Strin
 fn export_frame_image_internal(request: &FrameExportRequest) -> Result<(), String> {
     let ffmpeg = find_bundled("ffmpeg")?;
     let output_path = PathBuf::from(&request.output_path);
+    ensure_png_output_path(&output_path)?;
     if let Some(parent) = output_path.parent() {
         if !parent.as_os_str().is_empty() {
             fs::create_dir_all(parent)
@@ -778,32 +779,68 @@ fn export_frame_image_internal(request: &FrameExportRequest) -> Result<(), Strin
         }
     }
 
-    let args = build_frame_export_args(request);
+    let temp_png_path = build_temp_png_path(&output_path);
+    let export_result = (|| -> Result<(), String> {
+        run_ffmpeg_command(&ffmpeg, &build_frame_export_args_for_output(request, &temp_png_path))?;
 
-    let output = hidden_command(&ffmpeg)
-        .args(&args)
+        if let Some(max_colors) = request.compression_mode.still_image_quantization_max_colors() {
+            run_ffmpeg_command(&ffmpeg, &build_png_quantize_args(&temp_png_path, &output_path, max_colors))?;
+            fs::remove_file(&temp_png_path)
+                .map_err(|error| format!("Failed to clean temporary PNG export: {}", error))?;
+        } else {
+            fs::copy(&temp_png_path, &output_path)
+                .map_err(|error| format!("Failed to finalize PNG export: {}", error))?;
+            fs::remove_file(&temp_png_path)
+                .map_err(|error| format!("Failed to clean temporary PNG export: {}", error))?;
+        }
+
+        Ok(())
+    })();
+
+    if export_result.is_err() {
+        let _ = fs::remove_file(&temp_png_path);
+    }
+
+    export_result
+}
+
+fn run_ffmpeg_command(ffmpeg: &str, args: &[String]) -> Result<(), String> {
+    let output = hidden_command(ffmpeg)
+        .args(args)
         .output()
         .map_err(|error| format!("Failed to execute ffmpeg: {}", error))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        return Err(if stderr.is_empty() {
+        Err(if stderr.is_empty() {
             "ffmpeg failed to export the frame.".to_string()
         } else {
             stderr
-        });
+        })
+    } else {
+        Ok(())
     }
-
-    Ok(())
 }
 
-fn build_frame_export_args(request: &FrameExportRequest) -> Vec<String> {
-    let output_path = PathBuf::from(&request.output_path);
-    let compression_mode = request.compression_mode;
-    let output_extension = output_path
+fn ensure_png_output_path(output_path: &Path) -> Result<(), String> {
+    let extension = output_path
         .extension()
         .and_then(|value| value.to_str())
         .map(|value| value.to_ascii_lowercase());
+    if matches!(extension.as_deref(), Some("png")) {
+        Ok(())
+    } else {
+        Err("Frame and evidence image exports only support PNG output paths.".to_string())
+    }
+}
+
+#[cfg(test)]
+fn build_frame_export_args(request: &FrameExportRequest) -> Vec<String> {
+    build_frame_export_args_for_output(request, &PathBuf::from(&request.output_path))
+}
+
+fn build_frame_export_args_for_output(request: &FrameExportRequest, output_path: &Path) -> Vec<String> {
+    let output_path_string = output_path.to_string_lossy().to_string();
 
     let mut args = vec![
         "-y".to_string(),
@@ -825,24 +862,68 @@ fn build_frame_export_args(request: &FrameExportRequest) -> Vec<String> {
         "1".to_string(),
     ]);
 
-    if matches!(output_extension.as_deref(), Some("jpg") | Some("jpeg")) {
-        if let Some(frame_quality) = compression_mode.still_image_quality() {
-            args.extend(["-q:v".to_string(), frame_quality.to_string()]);
-        }
-    }
-
-    args.push(output_path.to_string_lossy().to_string());
+    args.push(output_path_string);
     args
+}
+
+fn build_png_quantize_args(input_path: &Path, output_path: &Path, max_colors: u32) -> Vec<String> {
+    vec![
+        "-y".to_string(),
+        "-hide_banner".to_string(),
+        "-loglevel".to_string(),
+        "error".to_string(),
+        "-i".to_string(),
+        input_path.to_string_lossy().to_string(),
+        "-filter_complex".to_string(),
+        format!(
+            "[0:v]split=2[work][palette];[palette]palettegen=max_colors={max_colors}:stats_mode=single[p];[work][p]paletteuse=dither=bayer:bayer_scale=3:new=1[quantized]"
+        ),
+        "-map".to_string(),
+        "[quantized]".to_string(),
+        "-frames:v".to_string(),
+        "1".to_string(),
+        output_path.to_string_lossy().to_string(),
+    ]
+}
+
+fn build_temp_png_path(output_path: &Path) -> PathBuf {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_micros())
+        .unwrap_or(0);
+    let stem = output_path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .filter(|value| !value.is_empty())
+        .unwrap_or("frame-export");
+    output_path.with_file_name(format!("{stem}.render-{timestamp}.png"))
 }
 
 fn build_evidence_source_frame_path(
     bundle_dir: &Path,
-    compression_mode: OutputCompressionModePayload,
+    _compression_mode: OutputCompressionModePayload,
 ) -> PathBuf {
-    bundle_dir.join(format!(
-        "source-frame.{}",
-        compression_mode.still_image_extension()
-    ))
+    bundle_dir.join("source-frame.png")
+}
+
+#[tauri::command]
+pub fn save_generated_media_asset(source_path: String, output_path: String) -> Result<(), String> {
+    let source_path = PathBuf::from(source_path);
+    if !source_path.exists() {
+        return Err(format!("Source artifact does not exist: {}", source_path.display()));
+    }
+
+    let output_path = PathBuf::from(output_path);
+    if let Some(parent) = output_path.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent)
+                .map_err(|error| format!("Failed to create output directory: {}", error))?;
+        }
+    }
+
+    fs::copy(&source_path, &output_path)
+        .map_err(|error| format!("Failed to save generated media asset: {}", error))?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -1412,34 +1493,41 @@ mod tests {
             OutputCompressionModePayload::Standard,
         );
 
-        assert_eq!(compact_path, PathBuf::from("C:/tmp/review/evidence.bundle/source-frame.jpg"));
+        assert_eq!(compact_path, PathBuf::from("C:/tmp/review/evidence.bundle/source-frame.png"));
         assert_eq!(standard_path, PathBuf::from("C:/tmp/review/evidence.bundle/source-frame.png"));
     }
 
     #[test]
-    fn adds_jpeg_quality_for_compact_frame_exports() {
+    fn compact_png_quantization_uses_palette_filters() {
+        let args = build_png_quantize_args(
+            Path::new("C:/tmp/frame.render.png"),
+            Path::new("C:/tmp/frame.png"),
+            192,
+        );
+
+        assert!(args.windows(2).any(|window| window == ["-map", "[quantized]"]));
+        assert!(args.iter().any(|value| value.contains("palettegen=max_colors=192")));
+        assert!(args.iter().any(|value| value.contains("paletteuse=dither=bayer")));
+    }
+
+    #[test]
+    fn raw_frame_exports_target_png_output() {
         let args = build_frame_export_args(&FrameExportRequest {
-            output_path: "C:/tmp/frame.jpg".to_string(),
+            output_path: "C:/tmp/frame.png".to_string(),
             source_path: "C:/tmp/source.mp4".to_string(),
             time_ms: 1250,
             marker_rect: None,
             compression_mode: OutputCompressionModePayload::Compact,
         });
 
-        assert!(args.windows(2).any(|window| window == ["-q:v", "6"]));
+        assert_eq!(args.last().map(String::as_str), Some("C:/tmp/frame.png"));
+        assert!(!args.iter().any(|value| value == "-q:v"));
     }
 
     #[test]
-    fn keeps_standard_png_frame_exports_lossless() {
-        let args = build_frame_export_args(&FrameExportRequest {
-            output_path: "C:/tmp/frame.png".to_string(),
-            source_path: "C:/tmp/source.mp4".to_string(),
-            time_ms: 1250,
-            marker_rect: None,
-            compression_mode: OutputCompressionModePayload::Standard,
-        });
-
-        assert!(!args.windows(2).any(|window| window == ["-q:v", "6"]));
+    fn rejects_non_png_frame_output_paths() {
+        assert!(ensure_png_output_path(Path::new("C:/tmp/frame.jpg")).is_err());
+        assert!(ensure_png_output_path(Path::new("C:/tmp/frame.png")).is_ok());
     }
 
     #[test]

@@ -75,7 +75,8 @@ class AiEvidenceWorkflowTests(unittest.TestCase):
         self.assertEqual(result[0].frame.frame_id, 'fine-001')
         self.assertEqual(result[0].description, '關鍵幀')
         self.assertEqual(result[1].frame.frame_id, 'fine-002')
-        self.assertEqual(result[1].description, 'fine-002')
+        self.assertIn('事件尾段的關鍵畫面', result[1].description)
+        self.assertIn('T+00:02.000', result[1].description)
 
     def test_run_accepts_typed_storyboard_selections(self) -> None:
         frame = RenderedFrame('fine-001', 1500, 1, 'fine-001', 'fine-001.jpg', 1280, 720)
@@ -227,7 +228,7 @@ class AiEvidenceWorkflowTests(unittest.TestCase):
             )
             workflow._render_detection_reference = lambda frame, detections, output_dir: (output_dir / 'anchor.jpg', 120, 80)
             workflow._encode_chat_image = lambda image_path: 'YWJj'
-            workflow._prepare_frame_image = lambda image, title, subtitle: (image, 120, 80)
+            workflow._prepare_frame_image = lambda image, title, subtitle, **kwargs: (image, 120, 80)
             workflow._write_image = lambda image_path, image: None
 
             result = workflow._resolve_target(
@@ -310,7 +311,7 @@ class AiEvidenceWorkflowTests(unittest.TestCase):
             )
             workflow._render_detection_reference = lambda frame, detections, output_dir: (output_dir / 'anchor.jpg', 120, 80)
             workflow._encode_chat_image = lambda image_path: 'YWJj'
-            workflow._prepare_frame_image = lambda image, title, subtitle: (image, 120, 80)
+            workflow._prepare_frame_image = lambda image, title, subtitle, **kwargs: (image, 120, 80)
             workflow._write_image = lambda image_path, image: None
 
             result = workflow._resolve_target(

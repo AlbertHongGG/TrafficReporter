@@ -43,6 +43,13 @@ const FORMAT_OPTIONS: Array<{
 const VIDEO_QUALITY_OPTIONS: VideoQuality[] = ['source', '2160p', '1440p', '1080p', '720p', '480p'];
 const AUDIO_BITRATE_OPTIONS: AudioBitrateKbps[] = [320, 256, 192, 128, 96];
 const COMPRESSION_MODE_OPTIONS: OutputCompressionMode[] = ['standard', 'compact'];
+const VIDEO_QUALITY_HEIGHTS: Record<Exclude<VideoQuality, 'source'>, number> = {
+  '2160p': 2160,
+  '1440p': 1440,
+  '1080p': 1080,
+  '720p': 720,
+  '480p': 480,
+};
 
 const DEFAULT_PROGRESS: ExportProgressPayload = {
   progress: 0,
@@ -74,10 +81,69 @@ function suggestedFilename(snapshot: ExportSnapshot | null, format: ExportFormat
   return `${snapshot?.suggestedName?.trim() || 'timeline-export'}.${format}`;
 }
 
+function makeEvenDimension(value: number) {
+  const normalized = Math.max(2, Math.round(value));
+  return normalized % 2 === 0 ? normalized : normalized - 1;
+}
+
+function scaledDimensionsForQuality(width: number, height: number, quality: VideoQuality) {
+  const sourceWidth = makeEvenDimension(width);
+  const sourceHeight = makeEvenDimension(height);
+  if (quality === 'source') {
+    return { width: sourceWidth, height: sourceHeight };
+  }
+
+  const targetHeight = VIDEO_QUALITY_HEIGHTS[quality];
+  if (sourceHeight <= targetHeight) {
+    return { width: sourceWidth, height: sourceHeight };
+  }
+
+  const scale = targetHeight / sourceHeight;
+  return {
+    width: makeEvenDimension(sourceWidth * scale),
+    height: makeEvenDimension(targetHeight),
+  };
+}
+
+function buildVideoQualityOptions(snapshot: ExportSnapshot | null): Array<{ value: VideoQuality; label: string }> {
+  if (!snapshot?.dominantWidth || !snapshot?.dominantHeight) {
+    return [{ value: 'source', label: 'Original' }];
+  }
+
+  const sourceDimensions = scaledDimensionsForQuality(snapshot.dominantWidth, snapshot.dominantHeight, 'source');
+  const options: Array<{ value: VideoQuality; label: string }> = [{
+    value: 'source',
+    label: `${sourceDimensions.width}x${sourceDimensions.height}`,
+  }];
+
+  for (const quality of VIDEO_QUALITY_OPTIONS) {
+    if (quality === 'source') {
+      continue;
+    }
+
+    const dimensions = scaledDimensionsForQuality(snapshot.dominantWidth, snapshot.dominantHeight, quality);
+    if (dimensions.width === sourceDimensions.width && dimensions.height === sourceDimensions.height) {
+      continue;
+    }
+
+    options.push({
+      value: quality,
+      label: `${quality} (${dimensions.width}x${dimensions.height})`,
+    });
+  }
+
+  return options;
+}
+
+function normalizeVideoQuality(snapshot: ExportSnapshot | null, requestedQuality: VideoQuality) {
+  const availableQualities = new Set(buildVideoQualityOptions(snapshot).map((option) => option.value));
+  return availableQualities.has(requestedQuality) ? requestedQuality : 'source';
+}
+
 export const ExportWindow: React.FC = () => {
   const [snapshot, setSnapshot] = React.useState<ExportSnapshot | null>(null);
   const [format, setFormat] = React.useState<ExportFormat>('mp4');
-  const [videoQuality, setVideoQuality] = React.useState<VideoQuality>('1080p');
+  const [videoQuality, setVideoQuality] = React.useState<VideoQuality>('source');
   const [audioBitrateKbps, setAudioBitrateKbps] = React.useState<AudioBitrateKbps>(320);
   const [compressionMode, setCompressionMode] = React.useState<OutputCompressionMode>('standard');
   const [outputPath, setOutputPath] = React.useState('');
@@ -85,8 +151,8 @@ export const ExportWindow: React.FC = () => {
   const [status, setStatus] = React.useState<ExportStatus>('loading');
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
 
-  const isVideoOutput = true;
   const usesAudioBitrate = true;
+  const videoQualityOptions = React.useMemo(() => buildVideoQualityOptions(snapshot), [snapshot]);
 
   const applySnapshot = React.useCallback((nextSnapshot: ExportSnapshot | null) => {
     if (!nextSnapshot) {
@@ -98,7 +164,7 @@ export const ExportWindow: React.FC = () => {
 
     setSnapshot(nextSnapshot);
     setFormat(defaultFormatForSession(nextSnapshot));
-    setVideoQuality(nextSnapshot.renderProfile.videoQuality ?? '1080p');
+  setVideoQuality(normalizeVideoQuality(nextSnapshot, nextSnapshot.renderProfile.videoQuality ?? 'source'));
     setAudioBitrateKbps(nextSnapshot.renderProfile.audioBitrateKbps ?? 320);
     setCompressionMode(nextSnapshot.renderProfile.compressionMode);
     setOutputPath('');
@@ -362,14 +428,14 @@ export const ExportWindow: React.FC = () => {
                 </div>
 
                 <div className={styles.settingGroup}>
-                  <label>{isVideoOutput ? 'Quality' : 'Bitrate'}</label>
+                  <label>Resolution</label>
                   <div className={styles.selectWrapper}>
                     <Select
                       value={videoQuality}
-                      onChange={(val) => setVideoQuality(val as VideoQuality)}
-                      options={VIDEO_QUALITY_OPTIONS.map((opt) => ({
-                        value: opt,
-                        label: opt === 'source' ? 'Source' : opt,
+                      onChange={(value) => setVideoQuality(normalizeVideoQuality(snapshot, value as VideoQuality))}
+                      options={videoQualityOptions.map((option) => ({
+                        value: option.value,
+                        label: option.label,
                       }))}
                     />
                   </div>

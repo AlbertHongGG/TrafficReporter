@@ -187,8 +187,8 @@ function replaceExtension(fileName: string, extension: string) {
   return `${fileName.slice(0, dotIndex)}.${extension}`;
 }
 
-function frameExportExtension(fileState: EditorFileState) {
-  return fileState.renderProfile.compressionMode === 'compact' ? 'jpg' : 'png';
+function frameExportExtension(_fileState: EditorFileState) {
+  return 'png';
 }
 
 function defaultFrameFileName(fileState: EditorFileState, playheadMs: number) {

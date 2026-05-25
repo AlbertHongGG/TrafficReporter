@@ -1,3 +1,4 @@
+import { invoke } from '@tauri-apps/api/core';
 import { emitTo } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import {
@@ -97,4 +98,8 @@ export function requestAiPanelWindowSession() {
 
 export function sendAiPanelAction(action: AiPanelAction) {
   return emitTo(MAIN_WINDOW_LABEL, AI_PANEL_ACTION_EVENT, action);
+}
+
+export function saveGeneratedMediaAsset(sourcePath: string, outputPath: string) {
+  return invoke<void>('save_generated_media_asset', { sourcePath, outputPath });
 }

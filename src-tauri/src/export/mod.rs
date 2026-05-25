@@ -66,27 +66,43 @@ fn make_even(value: u32) -> u32 {
     }
 }
 
-fn scaled_dimensions_for_quality(width: u32, height: u32, quality: Option<&str>) -> (u32, u32) {
-    let base_width = width.max(2);
-    let base_height = height.max(2);
+fn source_dimensions(width: u32, height: u32) -> (u32, u32) {
+    (make_even(width.max(2)), make_even(height.max(2)))
+}
 
-    let target_height = match quality.unwrap_or("1080p") {
-        "source" => return (make_even(base_width), make_even(base_height)),
+fn scaled_dimensions_for_quality(width: u32, height: u32, quality: Option<&str>) -> (u32, u32) {
+    let (base_width, base_height) = source_dimensions(width, height);
+
+    let target_height = match quality.unwrap_or("source") {
+        "source" => return (base_width, base_height),
         "2160p" => 2160,
         "1440p" => 1440,
         "1080p" => 1080,
         "720p" => 720,
         "480p" => 480,
-        _ => 1080,
+        _ => return (base_width, base_height),
     };
 
     if base_height <= target_height {
-        return (make_even(base_width), make_even(base_height));
+        return (base_width, base_height);
     }
 
     let scale = target_height as f64 / base_height as f64;
     let scaled_width = ((base_width as f64) * scale).round() as u32;
     (make_even(scaled_width), make_even(target_height))
+}
+
+fn resolved_video_dimensions(request: &TimelineExportRequest) -> Option<(u32, u32)> {
+    let format = request.profile.format.to_lowercase();
+    if !matches!(format.as_str(), "mp4" | "mkv") {
+        return None;
+    }
+
+    Some(scaled_dimensions_for_quality(
+        request.snapshot.dominant_width.unwrap_or(1280),
+        request.snapshot.dominant_height.unwrap_or(720),
+        request.profile.video_quality.as_deref(),
+    ))
 }
 
 fn build_filter_graph(request: &TimelineExportRequest) -> Result<(Vec<String>, String, Option<String>), String> {
@@ -103,15 +119,7 @@ fn build_filter_graph(request: &TimelineExportRequest) -> Result<(Vec<String>, S
 
     let total_ms = snapshot.timeline_duration_ms.max(1000);
     let total_seconds = seconds_from_ms(total_ms);
-    let (width, height) = if is_video_output {
-        scaled_dimensions_for_quality(
-            snapshot.dominant_width.unwrap_or(1280),
-            snapshot.dominant_height.unwrap_or(720),
-            request.profile.video_quality.as_deref(),
-        )
-    } else {
-        (0, 0)
-    };
+    let (width, height) = resolved_video_dimensions(request).unwrap_or((0, 0));
 
     if is_video_output {
         args.extend([
@@ -281,43 +289,92 @@ fn build_filter_graph(request: &TimelineExportRequest) -> Result<(Vec<String>, S
     ))
 }
 
-fn codec_args_for_profile(profile: &RenderProfilePayload) -> Vec<String> {
+fn codec_args_for_profile(profile: &RenderProfilePayload, video_dimensions: Option<(u32, u32)>) -> Vec<String> {
     let format = profile.format.to_lowercase();
     let bitrate = profile.audio_bitrate_kbps.unwrap_or(320).clamp(96, 320);
     let compression_mode = profile.compression_mode;
-    let audio_bitrate_cap = compression_mode.audio_bitrate_cap_kbps();
+    let fps = profile.fps.max(1);
+    let gop_size = compression_mode.video_gop_size(fps);
+    let min_keyframe_interval = compression_mode.video_min_keyframe_interval(fps);
+    let b_frames = compression_mode.video_b_frames();
+    let compact_video_maxrate = video_dimensions
+        .and_then(|(width, height)| compression_mode.video_maxrate_kbps(width, height, fps));
+    let compact_video_bufsize = video_dimensions
+        .and_then(|(width, height)| compression_mode.video_bufsize_kbps(width, height, fps));
 
     match format.as_str() {
-        "mp4" => vec![
-            "-c:v".to_string(),
-            "libx264".to_string(),
-            "-preset".to_string(),
-            compression_mode.video_preset().to_string(),
-            "-crf".to_string(),
-            compression_mode.video_crf().to_string(),
-            "-pix_fmt".to_string(),
-            "yuv420p".to_string(),
-            "-c:a".to_string(),
-            "aac".to_string(),
-            "-b:a".to_string(),
-            format!("{}k", bitrate.min(audio_bitrate_cap)),
-            "-movflags".to_string(),
-            "+faststart".to_string(),
-        ],
-        "mkv" => vec![
-            "-c:v".to_string(),
-            "libx264".to_string(),
-            "-preset".to_string(),
-            compression_mode.video_preset().to_string(),
-            "-crf".to_string(),
-            compression_mode.video_crf().to_string(),
-            "-pix_fmt".to_string(),
-            "yuv420p".to_string(),
-            "-c:a".to_string(),
-            "aac".to_string(),
-            "-b:a".to_string(),
-            format!("{}k", bitrate.min(audio_bitrate_cap)),
-        ],
+        "mp4" => {
+            let mut args = vec![
+                "-c:v".to_string(),
+                "libx264".to_string(),
+                "-preset".to_string(),
+                compression_mode.video_preset().to_string(),
+                "-crf".to_string(),
+                compression_mode.video_crf().to_string(),
+                "-pix_fmt".to_string(),
+                "yuv420p".to_string(),
+                "-g".to_string(),
+                gop_size.to_string(),
+                "-keyint_min".to_string(),
+                min_keyframe_interval.to_string(),
+                "-bf".to_string(),
+                b_frames.to_string(),
+                "-sc_threshold".to_string(),
+                if compression_mode.is_compact() { "80" } else { "40" }.to_string(),
+            ];
+            if let (Some(maxrate), Some(bufsize)) = (compact_video_maxrate, compact_video_bufsize) {
+                args.extend([
+                    "-maxrate".to_string(),
+                    format!("{}k", maxrate),
+                    "-bufsize".to_string(),
+                    format!("{}k", bufsize),
+                ]);
+            }
+            args.extend([
+                "-c:a".to_string(),
+                "aac".to_string(),
+                "-b:a".to_string(),
+                format!("{}k", bitrate),
+                "-movflags".to_string(),
+                "+faststart".to_string(),
+            ]);
+            args
+        }
+        "mkv" => {
+            let mut args = vec![
+                "-c:v".to_string(),
+                "libx264".to_string(),
+                "-preset".to_string(),
+                compression_mode.video_preset().to_string(),
+                "-crf".to_string(),
+                compression_mode.video_crf().to_string(),
+                "-pix_fmt".to_string(),
+                "yuv420p".to_string(),
+                "-g".to_string(),
+                gop_size.to_string(),
+                "-keyint_min".to_string(),
+                min_keyframe_interval.to_string(),
+                "-bf".to_string(),
+                b_frames.to_string(),
+                "-sc_threshold".to_string(),
+                if compression_mode.is_compact() { "80" } else { "40" }.to_string(),
+            ];
+            if let (Some(maxrate), Some(bufsize)) = (compact_video_maxrate, compact_video_bufsize) {
+                args.extend([
+                    "-maxrate".to_string(),
+                    format!("{}k", maxrate),
+                    "-bufsize".to_string(),
+                    format!("{}k", bufsize),
+                ]);
+            }
+            args.extend([
+                "-c:a".to_string(),
+                "aac".to_string(),
+                "-b:a".to_string(),
+                format!("{}k", bitrate),
+            ]);
+            args
+        }
         "mp3" => vec![
             "-c:a".to_string(),
             "libmp3lame".to_string(),
@@ -331,22 +388,43 @@ fn codec_args_for_profile(profile: &RenderProfilePayload) -> Vec<String> {
             format!("{}k", bitrate),
         ],
         "wav" => vec!["-c:a".to_string(), "pcm_s16le".to_string()],
-        _ => vec![
-            "-c:v".to_string(),
-            "libx264".to_string(),
-            "-preset".to_string(),
-            compression_mode.video_preset().to_string(),
-            "-crf".to_string(),
-            compression_mode.video_crf().to_string(),
-            "-pix_fmt".to_string(),
-            "yuv420p".to_string(),
-            "-c:a".to_string(),
-            "aac".to_string(),
-            "-b:a".to_string(),
-            format!("{}k", audio_bitrate_cap),
-            "-movflags".to_string(),
-            "+faststart".to_string(),
-        ],
+        _ => {
+            let mut args = vec![
+                "-c:v".to_string(),
+                "libx264".to_string(),
+                "-preset".to_string(),
+                compression_mode.video_preset().to_string(),
+                "-crf".to_string(),
+                compression_mode.video_crf().to_string(),
+                "-pix_fmt".to_string(),
+                "yuv420p".to_string(),
+                "-g".to_string(),
+                gop_size.to_string(),
+                "-keyint_min".to_string(),
+                min_keyframe_interval.to_string(),
+                "-bf".to_string(),
+                b_frames.to_string(),
+                "-sc_threshold".to_string(),
+                if compression_mode.is_compact() { "80" } else { "40" }.to_string(),
+            ];
+            if let (Some(maxrate), Some(bufsize)) = (compact_video_maxrate, compact_video_bufsize) {
+                args.extend([
+                    "-maxrate".to_string(),
+                    format!("{}k", maxrate),
+                    "-bufsize".to_string(),
+                    format!("{}k", bufsize),
+                ]);
+            }
+            args.extend([
+                "-c:a".to_string(),
+                "aac".to_string(),
+                "-b:a".to_string(),
+                format!("{}k", bitrate),
+                "-movflags".to_string(),
+                "+faststart".to_string(),
+            ]);
+            args
+        }
     }
 }
 
@@ -371,7 +449,7 @@ pub async fn process_timeline_export(app: AppHandle, request: TimelineExportRequ
         args.extend(["-map".to_string(), video_map]);
     }
     args.extend(["-map".to_string(), audio_map]);
-    args.extend(codec_args_for_profile(&request.profile));
+    args.extend(codec_args_for_profile(&request.profile, resolved_video_dimensions(&request)));
     args.push(request.output_path.clone());
 
     let mut child = hidden_command(&ffmpeg)
@@ -484,13 +562,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn scales_to_even_dimensions() {
-        assert_eq!(scaled_dimensions_for_quality(1921, 1081, Some("720p")), (1278, 720));
+    fn source_dimensions_are_even_and_preserve_size() {
+        assert_eq!(source_dimensions(1921, 1081), (1920, 1080));
     }
 
     #[test]
-    fn keeps_source_dimensions_when_requested() {
-        assert_eq!(scaled_dimensions_for_quality(1921, 1081, Some("source")), (1920, 1080));
+    fn source_dimensions_do_not_downscale_smaller_inputs() {
+        assert_eq!(source_dimensions(1280, 720), (1280, 720));
+    }
+
+    #[test]
+    fn scaled_dimensions_respect_requested_quality() {
+        assert_eq!(scaled_dimensions_for_quality(3840, 2160, Some("1080p")), (1920, 1080));
+    }
+
+    #[test]
+    fn scaled_dimensions_never_upscale_beyond_source() {
+        assert_eq!(scaled_dimensions_for_quality(1280, 720, Some("2160p")), (1280, 720));
     }
 
     #[test]
@@ -501,10 +589,14 @@ mod tests {
             video_quality: Some("1080p".to_string()),
             audio_bitrate_kbps: Some(320),
             compression_mode: crate::contracts::OutputCompressionModePayload::Compact,
-        });
+        }, Some((1920, 1080)));
 
         assert!(args.windows(2).any(|window| window == ["-preset", "veryslow"]));
         assert!(args.windows(2).any(|window| window == ["-crf", "30"]));
-        assert!(args.windows(2).any(|window| window == ["-b:a", "96k"]));
+        assert!(args.windows(2).any(|window| window == ["-b:a", "320k"]));
+        assert!(args.windows(2).any(|window| window == ["-g", "240"]));
+        assert!(args.windows(2).any(|window| window == ["-bf", "3"]));
+        assert!(args.windows(2).any(|window| window == ["-maxrate", "8100k"]));
+        assert!(args.windows(2).any(|window| window == ["-bufsize", "16200k"]));
     }
 }

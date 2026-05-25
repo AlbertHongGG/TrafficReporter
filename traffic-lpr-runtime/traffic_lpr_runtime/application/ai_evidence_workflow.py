@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Callable, Sequence
 
 from traffic_lpr_runtime.application.ai_provider import VisionChatImage, VisionLlmProvider
+from traffic_lpr_runtime.application.prompt_catalog import load_ai_evidence_prompt_catalog
 from traffic_lpr_runtime.domain.errors import RuntimeFailure
 from traffic_lpr_runtime.domain.models import TrackedRegion
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect, crop_image
@@ -202,6 +203,7 @@ class AiEvidenceWorkflow:
         self._frame_reader = frame_reader
         self._runtime_bridge = runtime_bridge
         self._provider = provider
+        self._prompt_catalog = load_ai_evidence_prompt_catalog()
 
     def run(self, payload: dict[str, Any]) -> dict[str, Any]:
         self._ensure_ready()
@@ -397,6 +399,7 @@ class AiEvidenceWorkflow:
                 frame,
                 title=f'{prefix}-{index:03d}',
                 subtitle=f'T+{_format_time_label(time_ms)}',
+                show_header=True,
             )
             image_path = output_dir / f'{prefix}-{index:03d}.jpg'
             self._write_image(image_path, rendered)
@@ -414,20 +417,14 @@ class AiEvidenceWorkflow:
         return frames
 
     def _select_coarse_interval(self, request_id: str, description: str, frames: list[RenderedFrame]) -> StoryboardSelection:
-        system_prompt = (
-            '你是交通事件關鍵證據規劃器。你只能引用系統提供的 frameId，不能自行猜測時間。'
-            '請根據使用者描述，從提供的 frameId 中找出最可能涵蓋完整事件過程的起點、終點與 anchor。'
-            '只輸出 JSON 物件。'
-        )
+        prompt_stage = self._prompt_catalog.coarse
         frame_list = '\n'.join(f'- {frame.frame_id}: {frame.label}' for frame in frames)
-        user_prompt = (
-            f'使用者描述:\n{description}\n\n'
-            f'可用 frame 參考:\n{frame_list}\n\n'
-            '請輸出 JSON:\n'
-            '{"startFrameId":"...","endFrameId":"...","anchorFrameId":"...","summary":"..."}'
+        user_prompt = prompt_stage.render_user_prompt(
+            description=description,
+            frameList=frame_list,
         )
         response = self._provider.generate_json(
-            system_prompt=system_prompt,
+            system_prompt=prompt_stage.system_prompt,
             user_prompt=user_prompt,
             images=[self._frame_to_chat_image(frame) for frame in frames],
             request_metadata={
@@ -453,21 +450,15 @@ class AiEvidenceWorkflow:
         frames: list[RenderedFrame],
         max_keyframes: int,
     ) -> StoryboardSelection:
-        system_prompt = (
-            '你是交通事件關鍵幀規劃器。你只能引用提供的 frameId，不能自由編造新的時間。'
-            '請選出完整事件區段的起點、終點、一個 target anchor，以及 8 到 10 個足以描述完整過程的關鍵幀。'
-            '每個關鍵幀都要有一句簡短中文描述。只輸出 JSON 物件。'
-        )
+        prompt_stage = self._prompt_catalog.fine
         frame_list = '\n'.join(f'- {frame.frame_id}: {frame.label}' for frame in frames)
-        user_prompt = (
-            f'使用者描述:\n{description}\n\n'
-            f'可用 frame 參考:\n{frame_list}\n\n'
-            '請輸出 JSON:\n'
-            '{"startFrameId":"...","endFrameId":"...","anchorFrameId":"...","summary":"...",'
-            '"keyframes":[{"frameId":"...","description":"..."}]}'
+        user_prompt = prompt_stage.render_user_prompt(
+            description=description,
+            frameList=frame_list,
+            maxKeyframes=max_keyframes,
         )
         response = self._provider.generate_json(
-            system_prompt=system_prompt,
+            system_prompt=prompt_stage.system_prompt,
             user_prompt=user_prompt,
             images=[self._frame_to_chat_image(frame) for frame in frames],
             request_metadata={
@@ -600,6 +591,7 @@ class AiEvidenceWorkflow:
                 crop,
                 title=label,
                 subtitle=f'T+{_format_time_label(anchor_frame.time_ms)}',
+                show_header=False,
             )
             self._write_image(crop_path, rendered_crop)
             frame_result = self._runtime_bridge.analyze_frame({
@@ -653,25 +645,16 @@ class AiEvidenceWorkflow:
         self,
         resolution_evidence: TargetResolutionEvidence,
     ) -> tuple[str, str]:
-        system_prompt = (
-            '你是交通事件 target resolver。你必須只從提供的候選 target IDs 中選出最符合描述的目標。'
-            '請結合 anchor overview、各個 target crop、以及結構化 OCR 證據判斷。只輸出 JSON。'
-        )
+        prompt_stage = self._prompt_catalog.target
         prompt_payload = json.dumps(
             resolution_evidence.to_prompt_payload(),
             ensure_ascii=False,
             indent=2,
         )
-        user_prompt = (
-            '請根據以下 JSON 證據與對應圖片選擇 target。targets[*].imageFrameId 會對應到提供的 crop 圖。\n'
-            '如果 exactPlateHintMatches 非空，代表 OCR 與描述中的車牌提示完全一致，這是 strong prior；'
-            '只有當畫面證據明確矛盾時，才可改選其他 target，並將 plateHintConsistency 設為 contradicted。\n\n'
-            f'{prompt_payload}\n\n'
-            '請只輸出 JSON:\n'
-            '{"selectedTrackId":"...","selectedCandidateId":"...","confidence":0.0,'
-            '"plateHintConsistency":"supporting|neutral|contradicted|not-applicable","rationale":"..."}'
+        user_prompt = prompt_stage.render_user_prompt(
+            promptPayload=prompt_payload,
         )
-        return system_prompt, user_prompt
+        return prompt_stage.system_prompt, user_prompt
 
     def _finalize_target_resolution(
         self,
@@ -818,7 +801,12 @@ class AiEvidenceWorkflow:
                 2,
                 cv2.LINE_AA,
             )
-        rendered, _, _ = self._prepare_frame_image(annotated, title='anchor-overview', subtitle='candidate targets')
+        rendered, _, _ = self._prepare_frame_image(
+            annotated,
+            title='anchor-overview',
+            subtitle='candidate targets',
+            show_header=False,
+        )
         output_path = output_dir / 'anchor-overview.jpg'
         self._write_image(output_path, rendered)
         return output_path, width, height
@@ -837,10 +825,14 @@ class AiEvidenceWorkflow:
             rendered_frame = keyframe.frame
             frame = self._frame_reader.read_frame(source_path, rendered_frame.time_ms)
             box = _find_closest_track_box(analysis_track, rendered_frame.time_ms)
-            title = rendered_frame.frame_id
-            subtitle = f'T+{_format_time_label(rendered_frame.time_ms)}'
-            annotated, frame_width, frame_height = self._prepare_frame_image(frame, title=title, subtitle=subtitle, box=box)
-            output_path = output_dir / f'{rendered_frame.frame_id}.jpg'
+            annotated, frame_width, frame_height = self._prepare_frame_image(
+                frame,
+                title=rendered_frame.frame_id,
+                subtitle=f'T+{_format_time_label(rendered_frame.time_ms)}',
+                box=box,
+                show_header=False,
+            )
+            output_path = output_dir / f'{rendered_frame.frame_id}.png'
             self._write_image(output_path, annotated)
             rendered_keyframes.append({
                 'frame': rendered_frame.to_payload(image_path=str(output_path)),
@@ -856,6 +848,7 @@ class AiEvidenceWorkflow:
         title: str,
         subtitle: str,
         box: dict[str, Any] | None = None,
+        show_header: bool = True,
     ) -> tuple[Any, int, int]:
         cv2 = self._dependencies.cv2
         image = frame.copy()
@@ -865,9 +858,10 @@ class AiEvidenceWorkflow:
             if normalized_box is not None:
                 x1, y1, x2, y2 = normalized_box.to_pixels(width, height)
                 cv2.rectangle(image, (x1, y1), (x2, y2), (16, 16, 255), 3)
-        cv2.rectangle(image, (0, 0), (min(width, 520), 84), (8, 8, 8), -1)
-        cv2.putText(image, title, (18, 34), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2, cv2.LINE_AA)
-        cv2.putText(image, subtitle, (18, 66), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (222, 222, 222), 2, cv2.LINE_AA)
+        if show_header:
+            cv2.rectangle(image, (0, 0), (min(width, 520), 84), (8, 8, 8), -1)
+            cv2.putText(image, title, (18, 34), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2, cv2.LINE_AA)
+            cv2.putText(image, subtitle, (18, 66), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (222, 222, 222), 2, cv2.LINE_AA)
         longest_side = max(width, height)
         if longest_side > 1280:
             scale = 1280.0 / float(longest_side)
@@ -877,7 +871,11 @@ class AiEvidenceWorkflow:
 
     def _write_image(self, path: Path, image: Any) -> None:
         cv2 = self._dependencies.cv2
-        ok, encoded = cv2.imencode('.jpg', image)
+        suffix = path.suffix.lower()
+        if suffix == '.png':
+            ok, encoded = cv2.imencode('.png', image, [int(cv2.IMWRITE_PNG_COMPRESSION), 3])
+        else:
+            ok, encoded = cv2.imencode('.jpg', image, [int(cv2.IMWRITE_JPEG_QUALITY), 88])
         if not ok:
             raise RuntimeFailure(f'Unable to encode image artifact at {path}.')
         path.write_bytes(encoded.tobytes())
@@ -1046,9 +1044,12 @@ def _normalize_keyframes(value: Any, frames: list[RenderedFrame], *, desired_cou
         frame_id = item.get('frameId') if isinstance(item, dict) else item if isinstance(item, str) else None
         if isinstance(frame_id, str) and frame_id in by_id:
             frame = by_id[frame_id]
+            description = ''
+            if isinstance(item, dict):
+                description = str(item.get('description') or '').strip()
             selected.append(SelectedKeyframe(
                 frame=frame,
-                description=str(item.get('description') or frame.label) if isinstance(item, dict) else frame.label,
+                description=description or _fallback_keyframe_description(frame=frame, frames=frames),
             ))
     deduped: list[SelectedKeyframe] = []
     seen_frame_ids: set[str] = set()
@@ -1067,9 +1068,25 @@ def _normalize_keyframes(value: Any, frames: list[RenderedFrame], *, desired_cou
         fallback_frame = remaining.pop(pick_index)
         selected.append(SelectedKeyframe(
             frame=fallback_frame,
-            description=fallback_frame.label,
+            description=_fallback_keyframe_description(frame=fallback_frame, frames=frames),
         ))
     return sorted(selected, key=lambda entry: entry.frame.time_ms)
+
+
+def _fallback_keyframe_description(*, frame: RenderedFrame, frames: list[RenderedFrame]) -> str:
+    ordered_frames = sorted(frames, key=lambda item: item.time_ms)
+    if not ordered_frames:
+        return '這是事件中的關鍵畫面，請重點查看主要目標與周邊情境。'
+
+    position = ordered_frames.index(frame) if frame in ordered_frames else 0
+    if position == 0:
+        stage_description = '這是事件開始附近的關鍵畫面，請重點確認目標最初出現的位置與周邊情境。'
+    elif position == len(ordered_frames) - 1:
+        stage_description = '這是事件尾段的關鍵畫面，請重點確認目標最後的位置、動作與結果。'
+    else:
+        stage_description = '這是事件進行中的關鍵畫面，請重點查看目標的動作變化與周邊互動。'
+
+    return f'{stage_description} 畫面時間約為 T+{_format_time_label(frame.time_ms)}。'
 
 
 def _find_closest_track_box(track: dict[str, Any] | None, time_ms: int) -> dict[str, Any] | None:
