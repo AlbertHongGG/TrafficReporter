@@ -20,7 +20,6 @@ export const Header: React.FC = () => {
       </div>
 
       <div className={styles.center} data-tauri-drag-region>
-        <div className={styles.workspaceBadge}>Video Workspace</div>
       </div>
 
       <div className={styles.right}>

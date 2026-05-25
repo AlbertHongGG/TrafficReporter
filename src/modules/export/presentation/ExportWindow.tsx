@@ -113,7 +113,7 @@ function buildVideoQualityOptions(snapshot: ExportSnapshot | null): Array<{ valu
   const sourceDimensions = scaledDimensionsForQuality(snapshot.dominantWidth, snapshot.dominantHeight, 'source');
   const options: Array<{ value: VideoQuality; label: string }> = [{
     value: 'source',
-    label: `${sourceDimensions.width}x${sourceDimensions.height}`,
+    label: `${sourceDimensions.height}p (${sourceDimensions.width}x${sourceDimensions.height})`,
   }];
 
   for (const quality of VIDEO_QUALITY_OPTIONS) {

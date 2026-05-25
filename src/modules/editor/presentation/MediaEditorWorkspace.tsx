@@ -103,30 +103,30 @@ const log = createLogger('MediaEditorWorkspace');
 
 const RULER_STEP_CANDIDATES_MS = [1, 2, 5, 10, 20, 50, 100, 250, 500, 1000, 2000, 5000, 10000, 15000, 30000, 60000, 120000, 300000];
 const MIN_TIMELINE_PADDING_MS = 60000;
-const TIMELINE_LABEL_WIDTH_PX = 200;
+const TIMELINE_LABEL_WIDTH_PX = 120;
 
 type ClipInteraction =
   | {
-      type: 'move';
-      clipId: string;
-      startClientX: number;
-      previewStartMs: number;
-      originStartMs: number;
-    }
+    type: 'move';
+    clipId: string;
+    startClientX: number;
+    previewStartMs: number;
+    originStartMs: number;
+  }
   | {
-      type: 'trim-start';
-      clipId: string;
-      startClientX: number;
-      previewInPointMs: number;
-      originInPointMs: number;
-    }
+    type: 'trim-start';
+    clipId: string;
+    startClientX: number;
+    previewInPointMs: number;
+    originInPointMs: number;
+  }
   | {
-      type: 'trim-end';
-      clipId: string;
-      startClientX: number;
-      previewOutPointMs: number;
-      originOutPointMs: number;
-    };
+    type: 'trim-end';
+    clipId: string;
+    startClientX: number;
+    previewOutPointMs: number;
+    originOutPointMs: number;
+  };
 
 type MarkerInteraction = {
   type: 'move' | 'resize';
@@ -443,13 +443,13 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       dispatch({
         type: 'set-lpr-runtime-status',
         runtimeStatus: {
-        available: false,
-        pythonExecutable: null,
-        runtimeScript: null,
-        version: null,
-        missingPackages: [],
-        installedPackages: [],
-        detail: getErrorMessage(error, 'Unable to inspect the local LPR runtime.'),
+          available: false,
+          pythonExecutable: null,
+          runtimeScript: null,
+          version: null,
+          missingPackages: [],
+          installedPackages: [],
+          detail: getErrorMessage(error, 'Unable to inspect the local LPR runtime.'),
         },
       });
     }
@@ -2124,15 +2124,6 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
             <ImageDown size={14} />
             Frame
           </button>
-          <button
-            type="button"
-            className={`${styles.toolbarButton} ${activeFile?.renderProfile.compressionMode === 'compact' ? styles.toolbarButtonActive : ''}`}
-            onClick={handleToggleCompactExports}
-            disabled={!activeFile}
-          >
-            <Archive size={14} />
-            Compact
-          </button>
           <button type="button" className={styles.toolbarButton} onClick={() => void handleOpenExportWindow()}>
             <FileOutput size={14} />
             Export
@@ -2144,6 +2135,15 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
           <button type="button" className={styles.toolbarButton} onClick={() => void handleOpenAiPanelWindow()}>
             <Brain size={14} />
             AI
+          </button>
+          <button
+            type="button"
+            className={`${styles.toolbarButton} ${activeFile?.renderProfile.compressionMode === 'compact' ? styles.toolbarButtonActive : ''}`}
+            onClick={handleToggleCompactExports}
+            disabled={!activeFile}
+          >
+            <Archive size={14} />
+            Compact
           </button>
           <button type="button" className={styles.primaryButton} onClick={() => void handleImportClick()}>
             <Import size={14} />
@@ -2432,7 +2432,6 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
                 <div className={styles.trackRow}>
                   <div className={styles.stickyCell}>
                     <div className={styles.trackLabelBlock}>
-                      <strong>{activeFile?.track.name ?? 'Track 1'}</strong>
                       <span>{activeClips.length} clip(s)</span>
                     </div>
                     <span className={styles.trackHint}>{activeFile ? formatTransportTime(activeFile.asset.durationMs) : '--:--'}</span>
