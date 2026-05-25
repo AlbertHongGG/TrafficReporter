@@ -26,6 +26,7 @@
   "externals": {
     "OutputCompressionMode": {
       "kind": "stringUnion",
+      "values": ["standard", "compact"],
       "rustName": "OutputCompressionModePayload"
     },
     "VideoMarkerRect": {

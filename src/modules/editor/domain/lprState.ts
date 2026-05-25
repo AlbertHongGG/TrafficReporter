@@ -150,7 +150,7 @@ export function buildDefaultLprState(overrides: Partial<LprSessionState> = {}): 
     workflowMode: overrides.workflowMode ?? 'idle',
     interval: cloneIntervalSelection(overrides.interval ?? null),
     selectedAnalysisProfileId: overrides.selectedAnalysisProfileId ?? defaultLprAnalysisProfileId,
-    showDeveloperDiagnostics: overrides.showDeveloperDiagnostics ?? false,
+    showDeveloperDiagnostics: overrides.showDeveloperDiagnostics ?? true,
     targetVehicleKind: overrides.targetVehicleKind ?? 'vehicle',
     useDenseSampling: overrides.useDenseSampling ?? true,
     countryHints: [...(overrides.countryHints ?? [])],
