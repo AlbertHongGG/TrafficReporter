@@ -386,6 +386,7 @@
         { "name": "anchorTimeMs", "type": "number", "rustType": "u64" },
         { "name": "targetVehicleKind", "type": "LprVehicleKind" },
         { "name": "selectedTargetBox", "type": "VideoMarkerRect", "nullable": true },
+        { "name": "selectedTargetTrackId", "type": "string", "optional": true, "nullable": true },
         { "name": "countryHints", "type": "array", "items": "string" },
         { "name": "sampleEveryMs", "type": "number", "rustType": "u64", "optional": true },
         { "name": "maxSamples", "type": "number", "rustType": "u32", "optional": true },

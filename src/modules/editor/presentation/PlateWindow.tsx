@@ -30,7 +30,7 @@ import {
 import { requestPlateWindowSession, sendPlateWindowAction } from '../infrastructure/plateWindowApi';
 import { clamp, formatRulerLabel, formatTransportTime } from '../domain/model';
 import { buildDefaultLprState } from '../domain/lprState';
-import type { LprFrameSample, LprJobState, LprPlateCandidate, LprReviewState, TimelineIntervalSelection } from '../../../shared/contracts';
+import type { LprFrameSample, LprJobState, LprPlateCandidate, LprReviewState, LprTargetTrack, TimelineIntervalSelection } from '../../../shared/contracts';
 import { getLprAnalysisProfileLabel, getLprAnalysisProfiles } from '../../../shared/lprAnalysisProfiles';
 import { createLogger, getErrorSummary, serializeError } from '../../../utils/logger';
 import styles from './PlateWindow.module.css';
@@ -96,6 +96,16 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     return null;
   }
   return value as Record<string, unknown>;
+}
+
+function asNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function asStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0)
+    : [];
 }
 
 function asArtifacts(sample: LprFrameSample): EvidenceArtifact[] {
@@ -204,6 +214,85 @@ function candidateSelection(candidate: LprPlateCandidate | null | undefined) {
     reviewRequired: selection?.reviewRequired === true,
     reasons,
   };
+}
+
+function countSummary(label: string, value: number | null) {
+  return value !== null && value > 0 ? `${label} ${value}` : null;
+}
+
+function buildTargetDiagnosticsLines(track: LprTargetTrack | null): string[] {
+  if (!track) {
+    return [];
+  }
+  const diagnostics = asRecord(track.diagnostics);
+  if (!diagnostics) {
+    return [];
+  }
+  const targetDetection = asRecord(diagnostics.targetDetection);
+  const trackerMode = typeof diagnostics.trackerMode === 'string' ? diagnostics.trackerMode : null;
+  const canonicalTargetId = typeof diagnostics.canonicalTargetId === 'string' ? diagnostics.canonicalTargetId : track.id;
+  const anchorDetectionId = typeof diagnostics.anchorDetectionId === 'string' ? diagnostics.anchorDetectionId : null;
+  const anchorTrackId = typeof diagnostics.anchorTrackId === 'string' ? diagnostics.anchorTrackId : null;
+  const matchedFrames = asNumber(diagnostics.matchedFrames);
+  const reassociatedFrames = asNumber(diagnostics.reassociatedFrames);
+  const detectionFallbackFrames = asNumber(diagnostics.detectionFallbackFrames);
+  const identityBreaks = asNumber(diagnostics.identityBreaks);
+  const suppressedDuplicates = asNumber(targetDetection?.suppressedDuplicateDetections);
+  const terminationReasons = asStringArray(diagnostics.terminationReasons);
+
+  const lines = [
+    [
+      canonicalTargetId ? `id ${canonicalTargetId}` : null,
+      trackerMode ? `mode ${trackerMode}` : null,
+      matchedFrames !== null ? `frames ${matchedFrames}` : null,
+    ].filter(Boolean).join(' · '),
+    [
+      anchorDetectionId ? `anchor ${anchorDetectionId}` : null,
+      anchorTrackId ? `track ${anchorTrackId}` : null,
+      countSummary('deduped', suppressedDuplicates),
+    ].filter(Boolean).join(' · '),
+    [
+      countSummary('fallback', detectionFallbackFrames),
+      countSummary('reassoc', reassociatedFrames),
+      countSummary('identity', identityBreaks),
+      diagnostics.terminatedEarly === true ? 'stopped early' : null,
+    ].filter(Boolean).join(' · '),
+    terminationReasons.length > 0 ? `stop ${terminationReasons.join(', ')}` : '',
+  ];
+
+  return lines.filter((line) => line.length > 0);
+}
+
+function buildSampleTrackingLines(sample: LprFrameSample): string[] {
+  const diagnostics = asRecord(sample.diagnostics);
+  const tracking = asRecord(diagnostics?.tracking);
+  if (!tracking) {
+    return [];
+  }
+
+  const selection = asRecord(tracking.selection);
+  const selectionScore = asNumber(tracking.selectionScore);
+  const predictedIou = asNumber(selection?.predictedIou);
+  const previousIou = asNumber(selection?.previousIou);
+  const source = typeof tracking.trackingSource === 'string' ? tracking.trackingSource : null;
+  const preferredTrackId = typeof tracking.preferredTrackId === 'string' ? tracking.preferredTrackId : null;
+  const canonicalTargetId = typeof tracking.canonicalTargetId === 'string' ? tracking.canonicalTargetId : null;
+
+  const lines = [
+    [
+      source ? `source ${source}` : null,
+      preferredTrackId ? `track ${preferredTrackId}` : null,
+      canonicalTargetId ? `id ${canonicalTargetId}` : null,
+    ].filter(Boolean).join(' · '),
+    [
+      selectionScore !== null ? `score ${formatConfidence(selectionScore)}` : null,
+      predictedIou !== null ? `pred ${formatConfidence(predictedIou)}` : null,
+      previousIou !== null ? `prev ${formatConfidence(previousIou)}` : null,
+      selection?.motionGatePassed === true ? 'motion ok' : selection?.motionGatePassed === false ? 'motion rejected' : null,
+    ].filter(Boolean).join(' · '),
+  ];
+
+  return lines.filter((line) => line.length > 0);
 }
 
 type StatusTone = 'neutral' | 'success' | 'warning' | 'danger';
@@ -548,7 +637,10 @@ export const PlateWindow: React.FC = () => {
                   {activeTab === 'targets' && (
                     <motion.div key="targets" variants={tabContentVariants} initial="hidden" animate="show" exit="exit" className={styles.listContainer}>
                       {lprState.targetTracks.length === 0 && <div className={styles.emptyInline}>No targets</div>}
-                      {lprState.targetTracks.map((track) => (
+                      {lprState.targetTracks.map((track) => {
+                        const displayTrack = lprState.analysisTrack?.id === track.id ? lprState.analysisTrack : track;
+                        const diagnosticLines = lprState.showDeveloperDiagnostics ? buildTargetDiagnosticsLines(displayTrack) : [];
+                        return (
                         <motion.button
                           layout
                           variants={listItemVariants}
@@ -569,10 +661,14 @@ export const PlateWindow: React.FC = () => {
                             <span className={styles.targetRowFrame}>
                               Frame {formatSampleTimestamp(track.frames[0]?.timeMs ?? snapshot.anchorTimeMs)}
                             </span>
+                            {diagnosticLines.map((line) => (
+                              <span key={`${track.id}-${line}`} className={styles.targetRowMeta}>{line}</span>
+                            ))}
                           </div>
                           {track.id === lprState.selectedTargetTrackId && <motion.div layoutId="activeTarget" className={styles.activeListItemGlow} />}
                         </motion.button>
-                      ))}
+                        );
+                      })}
                     </motion.div>
                   )}
 
@@ -607,6 +703,7 @@ export const PlateWindow: React.FC = () => {
                       {evidenceSamples.length === 0 && <div className={styles.emptyInline}>No evidence</div>}
                       {evidenceSamples.map((entry) => {
                         const isActive = entry.sample.id === activeEvidenceSample?.sample.id;
+                        const trackingLines = lprState.showDeveloperDiagnostics ? buildSampleTrackingLines(entry.sample) : [];
                         return (
                           <motion.div
                             layout
@@ -698,6 +795,20 @@ export const PlateWindow: React.FC = () => {
                                             </div>
                                           );
                                         })}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {trackingLines.length > 0 && (
+                                    <div className={styles.evidenceMetaSection}>
+                                      <div className={styles.evidenceMetaHeader}>
+                                        <Target size={14} className={styles.metaIcon} />
+                                        <span className={styles.evidenceMetaTitle}>Tracking</span>
+                                      </div>
+                                      <div className={styles.diagnosticLineList}>
+                                        {trackingLines.map((line) => (
+                                          <div key={`${entry.sample.id}-${line}`} className={styles.diagnosticLine}>{line}</div>
+                                        ))}
                                       </div>
                                     </div>
                                   )}

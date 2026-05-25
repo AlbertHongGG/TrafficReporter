@@ -234,6 +234,7 @@ export interface LprIntervalAnalysisRequest {
   anchorTimeMs: number;
   targetVehicleKind: LprVehicleKind;
   selectedTargetBox: VideoMarkerRect | null;
+  selectedTargetTrackId?: string | null;
   countryHints: string[];
   sampleEveryMs?: number;
   maxSamples?: number;

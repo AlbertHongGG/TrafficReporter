@@ -195,6 +195,7 @@ pub struct LprIntervalAnalysisRequestPayload {
     pub anchor_time_ms: u64,
     pub target_vehicle_kind: LprVehicleKind,
     pub selected_target_box: Option<VideoMarkerRectPayload>,
+    pub selected_target_track_id: Option<String>,
     pub country_hints: Vec<String>,
     pub sample_every_ms: Option<u64>,
     pub max_samples: Option<u32>,

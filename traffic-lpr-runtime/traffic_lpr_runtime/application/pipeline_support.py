@@ -278,6 +278,7 @@ class TargetCentricTracker:
         anchor_detection: TrackedRegion | None = None
         anchor_box = selected_target_box
         anchor_class_name: str | None = None
+        anchor_selection_source = 'detection'
 
         for time_ms in traversal_times:
             frame = self._frame_reader.read_frame(source_path, time_ms)
@@ -294,10 +295,12 @@ class TargetCentricTracker:
                     anchor_region = tracker_anchor_region
                     anchor_track_id = tracker_anchor_region.id if tracker_anchor_region.id.startswith('track-') else None
                     anchor_box = tracker_anchor_region.box
+                    anchor_selection_source = 'tracker'
                 else:
                     anchor_region = anchor_detection
                     anchor_track_id = None
                     anchor_box = anchor_reference_box
+                    anchor_selection_source = 'detection'
                 anchor_class_name = anchor_detection.class_name if anchor_detection is not None else anchor_region.class_name if anchor_region is not None else None
 
         if anchor_box is None:
@@ -310,7 +313,7 @@ class TargetCentricTracker:
                 'frameRate': frame_rate,
             }
 
-        backward_frames, backward_misses, backward_reassociated, _ = self._follow_ultralytics_direction(
+        backward_frames, backward_diagnostics = self._follow_ultralytics_direction(
             sorted((time_ms for time_ms in sample_times if time_ms < anchor_time_ms), reverse=True),
             anchor_box,
             anchor_track_id,
@@ -319,7 +322,7 @@ class TargetCentricTracker:
             detections_by_time,
             options,
         )
-        forward_frames, forward_misses, forward_reassociated, _ = self._follow_ultralytics_direction(
+        forward_frames, forward_diagnostics = self._follow_ultralytics_direction(
             sorted(time_ms for time_ms in sample_times if time_ms > anchor_time_ms),
             anchor_box,
             anchor_track_id,
@@ -332,14 +335,27 @@ class TargetCentricTracker:
         tracked_frames: list[TrackedRegion] = list(reversed(backward_frames))
         if anchor_time_ms in sample_times and anchor_region is not None:
             tracked_frames.append(self._clone_tracked_region(anchor_region, {
-                'trackingSource': 'anchor',
+                'trackingSource': f'anchor-{anchor_selection_source}',
                 'preferredTrackId': anchor_track_id,
+                'anchorDetectionId': anchor_detection.id if anchor_detection is not None else anchor_region.id,
             }))
         tracked_frames.extend(forward_frames)
 
-        missed_frames = backward_misses + forward_misses
-        reassociated_frames = backward_reassociated + forward_reassociated
+        missed_frames = backward_diagnostics['missedFrames'] + forward_diagnostics['missedFrames']
+        reassociated_frames = backward_diagnostics['reassociatedFrames'] + forward_diagnostics['reassociatedFrames']
+        detection_fallback_frames = (
+            backward_diagnostics['detectionFallbackFrames']
+            + forward_diagnostics['detectionFallbackFrames']
+        )
+        identity_breaks = backward_diagnostics['identityBreaks'] + forward_diagnostics['identityBreaks']
         confidences = [frame.confidence for frame in tracked_frames]
+        termination_reasons = [
+            reason for reason in [
+                backward_diagnostics.get('terminationReason'),
+                forward_diagnostics.get('terminationReason'),
+            ]
+            if isinstance(reason, str) and reason
+        ]
 
         diagnostics = {
             'trackerMode': options.tracker_mode,
@@ -348,8 +364,14 @@ class TargetCentricTracker:
             'averageMatchScore': (sum(confidences) / len(confidences)) if confidences else 0.0,
             'anchorDetected': anchor_region is not None or anchor_detection is not None,
             'anchorTrackId': anchor_track_id,
+            'anchorDetectionId': anchor_detection.id if anchor_detection is not None else anchor_region.id if anchor_region is not None else None,
             'frameRate': frame_rate,
             'reassociatedFrames': reassociated_frames,
+            'detectionFallbackFrames': detection_fallback_frames,
+            'identityBreaks': identity_breaks,
+            'terminatedEarly': backward_diagnostics['terminatedEarly'] or forward_diagnostics['terminatedEarly'],
+            'terminationReasons': termination_reasons,
+            'canonicalTargetId': anchor_detection.id if anchor_detection is not None else anchor_track_id,
         }
         return tracked_frames, diagnostics
 
@@ -362,10 +384,16 @@ class TargetCentricTracker:
         tracked_by_time: dict[int, list[TrackedRegion]],
         detections_by_time: dict[int, list[TrackedRegion]],
         options: AnalysisOptions,
-    ) -> tuple[list[TrackedRegion], int, int, str | None]:
+    ) -> tuple[list[TrackedRegion], dict[str, Any]]:
         tracked_frames: list[TrackedRegion] = []
-        missed_frames = 0
-        reassociated_frames = 0
+        direction_diagnostics = {
+            'missedFrames': 0,
+            'reassociatedFrames': 0,
+            'detectionFallbackFrames': 0,
+            'identityBreaks': 0,
+            'terminatedEarly': False,
+            'terminationReason': None,
+        }
         current_box = seed_box
         current_track_id = preferred_track_id
 
@@ -394,6 +422,7 @@ class TargetCentricTracker:
             )
 
             selected = tracker_match
+            selected_source = 'tracker'
             diagnostics = {
                 'trackingSource': 'tracker',
                 'preferredTrackId': current_track_id,
@@ -404,24 +433,42 @@ class TargetCentricTracker:
 
             if use_detection_fallback:
                 selected = detection_match
+                selected_source = 'detection-fallback'
                 diagnostics = {
                     'trackingSource': 'detection-fallback',
                     'preferredTrackId': current_track_id,
                     'selectionScore': detection_score,
                     'selection': detection_diagnostics,
                 }
-                if current_track_id is not None:
-                    reassociated_frames += 1
             elif selected is None:
-                missed_frames += 1
+                direction_diagnostics['missedFrames'] += 1
                 continue
-            elif current_track_id is not None and selected.id != current_track_id:
-                reassociated_frames += 1
 
             selection_motion_ok = diagnostics['selection'].get('motionGatePassed') is True
             if not selection_motion_ok:
-                missed_frames += 1
+                direction_diagnostics['missedFrames'] += 1
                 continue
+
+            transition_allowed, transition_reason = _identity_transition_is_allowed(
+                current_track_id=current_track_id_before,
+                selected=selected,
+                selected_source=selected_source,
+                selection_score=diagnostics['selectionScore'],
+                selection_diagnostics=diagnostics['selection'],
+                tracker_match=tracker_match,
+                tracker_score=tracker_score,
+                tracker_diagnostics=tracker_diagnostics,
+            )
+            if not transition_allowed:
+                direction_diagnostics['identityBreaks'] += 1
+                direction_diagnostics['terminatedEarly'] = True
+                direction_diagnostics['terminationReason'] = transition_reason
+                break
+
+            if selected_source == 'detection-fallback':
+                direction_diagnostics['detectionFallbackFrames'] += 1
+            if current_track_id_before is not None and selected.id != current_track_id_before:
+                direction_diagnostics['reassociatedFrames'] += 1
 
             if selected.id.startswith('track-'):
                 current_track_id = selected.id
@@ -432,7 +479,8 @@ class TargetCentricTracker:
             if current_track_id_before is None and not selected.id.startswith('track-'):
                 current_track_id = None
 
-        return tracked_frames, missed_frames, reassociated_frames, current_track_id
+        direction_diagnostics['currentTrackId'] = current_track_id
+        return tracked_frames, direction_diagnostics
 
     def _associate_tracked_regions(
         self,
@@ -778,6 +826,49 @@ def _anchor_matches_reference(
     return overlap >= 0.18 or center_distance <= 0.08
 
 
+def _identity_transition_is_allowed(
+    *,
+    current_track_id: str | None,
+    selected: TrackedRegion,
+    selected_source: str,
+    selection_score: float,
+    selection_diagnostics: dict[str, Any],
+    tracker_match: TrackedRegion | None,
+    tracker_score: float,
+    tracker_diagnostics: dict[str, Any],
+) -> tuple[bool, str | None]:
+    if current_track_id is None:
+        return True, None
+    if selected_source == 'tracker' and selected.id == current_track_id:
+        return True, None
+
+    motion_ok = selection_diagnostics.get('motionGatePassed') is True
+    predicted_iou = _to_float(selection_diagnostics.get('predictedIou'))
+    previous_iou = _to_float(selection_diagnostics.get('previousIou'))
+    center_distance = _to_float(selection_diagnostics.get('centerDistance'), default=1.0)
+    strong_continuity = motion_ok and (
+        max(predicted_iou, previous_iou) >= 0.28
+        or center_distance <= 0.055
+    ) and selection_score >= 0.28
+
+    tracker_competitive = (
+        tracker_match is not None
+        and tracker_diagnostics.get('motionGatePassed') is True
+        and tracker_score >= (selection_score - 0.16)
+    )
+    if selected_source == 'detection-fallback':
+        if tracker_competitive or not strong_continuity:
+            return False, 'detection-fallback-identity-break'
+        return True, None
+
+    if selected.id.startswith('track-') and selected.id != current_track_id:
+        if not strong_continuity or selection_score < 0.36:
+            return False, 'track-switch-identity-break'
+        return True, None
+
+    return False, 'untrusted-target-transition'
+
+
 def _motion_gate(candidate_box: NormalizedRect, reference_box: NormalizedRect) -> dict[str, float | bool]:
     candidate_center_x = candidate_box.x + (candidate_box.width / 2.0)
     candidate_center_y = candidate_box.y + (candidate_box.height / 2.0)
@@ -857,3 +948,10 @@ def _to_optional_str(value: Any) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _to_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default

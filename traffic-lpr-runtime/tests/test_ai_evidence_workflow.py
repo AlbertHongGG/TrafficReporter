@@ -181,7 +181,87 @@ class AiEvidenceWorkflowTests(unittest.TestCase):
             self.assertEqual(projection['selectedTargetTrackId'], 'candidate-track-2')
             self.assertEqual(len(projection['targetTracks']), 2)
             self.assertEqual(projection['targetTracks'][1]['label'], 'candidate plate')
-            self.assertEqual(projection['analysisTrack']['id'], 'analysis-track-1')
+            self.assertEqual(projection['analysisTrack']['id'], 'candidate-track-2')
+            self.assertEqual(projection['analysisTrack']['diagnostics']['canonicalizedFromTrackId'], 'analysis-track-1')
+
+    def test_resolve_target_deduplicates_overlapping_anchor_candidates(self) -> None:
+        class ProviderStub:
+            kind = 'stub'
+
+            def __init__(self) -> None:
+                self.metadata: dict[str, object] | None = None
+
+            def generate_json(self, **kwargs):
+                self.metadata = kwargs.get('request_metadata')
+                return {
+                    'selectedTrackId': 'target-1500-0',
+                    'confidence': 0.66,
+                    'rationale': 'pick the strongest target',
+                }
+
+        class FrameReaderStub:
+            def read_frame(self, source_path: str, time_ms: int):
+                del source_path, time_ms
+                return np.zeros((80, 120, 3), dtype=np.uint8)
+
+        analyze_calls: list[dict[str, object]] = []
+        provider = ProviderStub()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workflow = self._build_workflow(
+                runtime_root=Path(temp_dir),
+                provider=provider,
+                frame_reader=FrameReaderStub(),
+                detect_targets=lambda *args, **kwargs: [
+                    TrackedRegion(
+                        id='target-1500-0',
+                        time_ms=1500,
+                        box=NormalizedRect(x=0.22, y=0.18, width=0.28, height=0.34),
+                        confidence=0.95,
+                        class_name='car',
+                    ),
+                    TrackedRegion(
+                        id='target-1500-1',
+                        time_ms=1500,
+                        box=NormalizedRect(x=0.24, y=0.2, width=0.26, height=0.32),
+                        confidence=0.9,
+                        class_name='car',
+                    ),
+                    TrackedRegion(
+                        id='target-1500-2',
+                        time_ms=1500,
+                        box=NormalizedRect(x=0.62, y=0.2, width=0.18, height=0.22),
+                        confidence=0.86,
+                        class_name='car',
+                    ),
+                ],
+                analyze_frame=lambda payload: analyze_calls.append(payload) or {
+                    'acceptedCandidateId': None,
+                    'candidates': [],
+                },
+            )
+            workflow._render_detection_reference = lambda frame, detections, output_dir: (output_dir / 'anchor.jpg', 120, 80)
+            workflow._encode_chat_image = lambda image_path: 'YWJj'
+            workflow._prepare_frame_image = lambda image, title, subtitle, **kwargs: (image, 120, 80)
+            workflow._write_image = lambda image_path, image: None
+
+            result = workflow._resolve_target(
+                request_id='ai-dedupe-test',
+                description='找出這台車',
+                source_path='demo.mp4',
+                marker_rect=None,
+                target_vehicle_kind='car',
+                country_hints=[],
+                analysis_profile_id=None,
+                enable_developer_diagnostics=False,
+                anchor_frame=RenderedFrame('fine-001', 1500, 0, 'fine-001', 'fine-001.jpg', 120, 80),
+                output_dir=Path(temp_dir) / 'target-resolution',
+            )
+
+            self.assertEqual(len(analyze_calls), 2)
+            self.assertEqual(provider.metadata['candidateCount'], 2)
+            self.assertEqual(result['selectedTrackId'], 'target-1500-0')
+            self.assertEqual(result['candidateTracks'][0]['diagnostics']['targetDetection']['suppressedDuplicateDetections'], 1)
 
     def test_resolve_target_still_invokes_provider_when_plate_hint_matches_exactly(self) -> None:
         class ProviderStub:

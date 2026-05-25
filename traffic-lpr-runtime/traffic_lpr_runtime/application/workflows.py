@@ -41,6 +41,40 @@ def _request_run_id(payload: dict[str, Any]) -> str | None:
     return None
 
 
+def _selected_target_track_id(payload: dict[str, Any], track_diagnostics: dict[str, Any]) -> str | None:
+    for value in [
+        payload.get('selectedTargetTrackId'),
+        track_diagnostics.get('canonicalTargetId'),
+        track_diagnostics.get('anchorDetectionId'),
+    ]:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _tracking_identity_review_reasons(track_diagnostics: dict[str, Any]) -> list[str]:
+    reasons: list[str] = []
+    identity_breaks = int(track_diagnostics.get('identityBreaks') or 0)
+    reassociated_frames = int(track_diagnostics.get('reassociatedFrames') or 0)
+    detection_fallback_frames = int(track_diagnostics.get('detectionFallbackFrames') or 0)
+
+    if identity_breaks > 0:
+        reasons.append('tracking identity became ambiguous across the interval')
+    if track_diagnostics.get('terminatedEarly') is True:
+        reasons.append('tracking stopped early after the target drifted')
+    if detection_fallback_frames > 0 and reassociated_frames > 0:
+        reasons.append('tracker had to reacquire the target from fresh detections')
+    return reasons
+
+
+def _merge_reasons(existing: list[str], additions: list[str]) -> list[str]:
+    merged: list[str] = []
+    for reason in [*existing, *additions]:
+        if reason and reason not in merged:
+            merged.append(reason)
+    return merged
+
+
 class TargetScanWorkflow:
     def __init__(
         self,
@@ -194,6 +228,12 @@ class IntervalAnalysisWorkflow:
             payload.get('maxSamples'),
             options,
         )
+        canonical_target_track_id = _selected_target_track_id(payload, track_diagnostics)
+        if canonical_target_track_id is not None:
+            track_diagnostics = {
+                **track_diagnostics,
+                'canonicalTargetId': canonical_target_track_id,
+            }
         calibrated_target_boxes = self._calibrate_interval_target_boxes(
             tracked_frames,
             anchor_time_ms,
@@ -229,11 +269,12 @@ class IntervalAnalysisWorkflow:
                     'calibratedBox': calibrated_target_box.to_payload(),
                 }
                 tracked_frame.box = calibrated_target_box
-                sample.diagnostics = {
-                    **(sample.diagnostics or {}),
-                    'analysisTargetBox': analysis_target_box.to_payload(),
-                    'rawTrackingBox': raw_tracking_box.to_payload(),
-                }
+            sample.diagnostics = {
+                **(sample.diagnostics or {}),
+                'analysisTargetBox': analysis_target_box.to_payload(),
+                'rawTrackingBox': raw_tracking_box.to_payload(),
+                'tracking': tracked_frame.diagnostics,
+            }
             samples.append(sample)
             if observation is not None:
                 observations.append(observation)
@@ -252,6 +293,19 @@ class IntervalAnalysisWorkflow:
             options,
             True,
         )
+        identity_review_reasons = _tracking_identity_review_reasons(track_diagnostics)
+        if identity_review_reasons:
+            accepted_candidate_id = None
+            selection_diagnostics = {
+                **selection_diagnostics,
+                'acceptedCandidateId': None,
+                'reviewRequired': True,
+                'reasons': _merge_reasons(
+                    [reason for reason in selection_diagnostics.get('reasons') or [] if isinstance(reason, str)],
+                    identity_review_reasons,
+                ),
+                'tracking': track_diagnostics,
+            }
         if candidates:
             suggested_candidate = next(
                 (candidate for candidate in candidates if candidate.id == selection_diagnostics.get('suggestedCandidateId')),

@@ -7,6 +7,13 @@ from traffic_lpr_runtime.domain.models import TargetTrack, TrackedRegion
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect, clamp
 
 
+def _optional_string(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    return text or None
+
+
 class IntervalTrackingService:
     def __init__(
         self,
@@ -124,6 +131,7 @@ class IntervalTrackingService:
             'missedFrames': 0,
             'averageMatchScore': 0.0,
             'anchorDetected': anchor_region is not None,
+            'anchorDetectionId': anchor_region.id if anchor_region is not None else None,
         }
         return tracked_frames, diagnostics
 
@@ -172,15 +180,29 @@ class IntervalTrackingService:
     def build_track_payload(self, tracked_frames: list[TrackedRegion], diagnostics: dict[str, Any]) -> list[TargetTrack]:
         if not tracked_frames:
             return []
+        track_id = (
+            _optional_string(diagnostics.get('canonicalTargetId'))
+            or _optional_string(diagnostics.get('anchorDetectionId'))
+            or tracked_frames[0].id
+            or 'tracked-target-0'
+        )
+        for tracked_frame in tracked_frames:
+            tracked_frame.diagnostics = {
+                **(tracked_frame.diagnostics or {}),
+                'canonicalTargetId': track_id,
+            }
         average_confidence = sum(frame.confidence for frame in tracked_frames) / len(tracked_frames)
         return [
             TargetTrack(
-                id='tracked-target-0',
+                id=track_id,
                 class_name=tracked_frames[0].class_name,
                 label=f'{tracked_frames[0].class_name} {tracked_frames[0].time_ms}ms',
                 confidence=average_confidence,
                 frames=tracked_frames,
-                diagnostics=diagnostics,
+                diagnostics={
+                    **diagnostics,
+                    'canonicalTargetId': track_id,
+                },
             )
         ]
 

@@ -1713,6 +1713,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         anchorTimeMs: Math.max(0, Math.round(lprSelectedTargetAnchor.timeMs)),
         targetVehicleKind: lprAnalysisVehicleKind,
         selectedTargetBox: lprSelectedTargetAnchor.box,
+        selectedTargetTrackId: lprSelectedTrack?.id ?? lprState.selectedTargetTrackId ?? null,
         countryHints,
         sampleEveryMs,
         maxSamples: lprState.useDenseSampling ? 18 : 8,

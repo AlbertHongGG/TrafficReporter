@@ -68,6 +68,7 @@ class TargetCandidateEvidence:
     crop_image_path: str
     crop_frame_width: int
     crop_frame_height: int
+    detection_diagnostics: dict[str, Any] | None = None
 
     @property
     def top_candidate(self) -> dict[str, Any] | None:
@@ -323,6 +324,7 @@ class AiEvidenceWorkflow:
                 'anchorTimeMs': anchor_frame.time_ms,
                 'targetVehicleKind': target_vehicle_kind,
                 'selectedTargetBox': target_resolution['selectedBox']['normalizedBox'] if target_resolution['selectedBox'] else None,
+                'selectedTargetTrackId': target_resolution.get('selectedTrackId'),
                 'countryHints': country_hints,
                 'analysisProfileId': analysis_profile_id,
                 'enableDeveloperDiagnostics': enable_developer_diagnostics,
@@ -503,6 +505,7 @@ class AiEvidenceWorkflow:
         if not detections:
             raise RuntimeFailure('AI evidence target resolution found no detectable targets on the selected anchor frame.')
 
+        detections = _dedupe_anchor_target_detections(detections)
         detections = sorted(detections, key=lambda detection: detection.confidence, reverse=True)[:6]
         annotated_path, frame_width, frame_height = self._render_detection_reference(frame, detections, output_dir)
         resolution_evidence, chat_images = self._collect_target_resolution_evidence(
@@ -618,6 +621,7 @@ class AiEvidenceWorkflow:
                 crop_image_path=str(crop_path),
                 crop_frame_width=crop_width,
                 crop_frame_height=crop_height,
+                detection_diagnostics=detection.diagnostics,
             ))
             chat_images.append(VisionChatImage(
                 frame_id=detection.id,
@@ -768,12 +772,14 @@ class AiEvidenceWorkflow:
                     'diagnostics': {
                         'source': 'ai-evidence-target-resolution',
                         'acceptedCandidateId': candidate.accepted_candidate_id,
+                        'targetDetection': candidate.detection_diagnostics,
                         'ocrEvidence': candidate.to_prompt_payload(),
                     },
                 }],
                 'diagnostics': {
                     'source': 'ai-evidence-target-resolution',
                     'anchorFrameId': anchor_frame.frame_id,
+                    'targetDetection': candidate.detection_diagnostics,
                     'ocrEvidence': candidate.to_prompt_payload(),
                 },
             })
@@ -946,7 +952,10 @@ class AiEvidenceWorkflow:
             None,
         )
         if analysis_track is None:
-            analysis_track = interval_target_tracks[0] if interval_target_tracks else None
+            if len(interval_target_tracks) == 1 and selected_target_track_id is not None and isinstance(interval_target_tracks[0], dict):
+                analysis_track = _canonicalize_track_id(interval_target_tracks[0], selected_target_track_id)
+            else:
+                analysis_track = interval_target_tracks[0] if interval_target_tracks else None
         if selected_target_track_id is None and isinstance(analysis_track, dict):
             selected_target_track_id = _optional_string(analysis_track.get('id'))
         return {
@@ -1005,6 +1014,80 @@ def _sample_times(duration_ms: int, step_ms: int, *, max_samples: int, offset_ms
         return times
     indices = [round(index * (len(times) - 1) / max(1, max_samples - 1)) for index in range(max_samples)]
     return [times[index] for index in OrderedDict.fromkeys(indices)]
+
+
+def _dedupe_anchor_target_detections(detections: Sequence[TrackedRegion]) -> list[TrackedRegion]:
+    deduped: list[TrackedRegion] = []
+    suppressed_counts: dict[str, int] = {}
+
+    for detection in sorted(detections, key=lambda candidate: candidate.confidence, reverse=True):
+        duplicate_owner = next(
+            (candidate for candidate in deduped if _anchor_target_detections_overlap(candidate, detection)),
+            None,
+        )
+        if duplicate_owner is not None:
+            suppressed_counts[duplicate_owner.id] = suppressed_counts.get(duplicate_owner.id, 0) + 1
+            continue
+        deduped.append(detection)
+
+    for detection in deduped:
+        suppressed = suppressed_counts.get(detection.id, 0)
+        if suppressed <= 0:
+            continue
+        detection.diagnostics = {
+            **(detection.diagnostics or {}),
+            'suppressedDuplicateDetections': suppressed,
+        }
+
+    return deduped
+
+
+def _anchor_target_detections_overlap(left: TrackedRegion, right: TrackedRegion) -> bool:
+    if left.class_name != right.class_name:
+        return False
+
+    iou = left.box.intersection_over_union(right.box)
+    overlap_over_smaller = _overlap_over_smaller(left.box, right.box)
+    center_distance = left.box.center_distance(right.box)
+    area_similarity = min(left.box.area(), right.box.area()) / max(left.box.area(), right.box.area(), 1e-6)
+    return (
+        iou >= 0.58
+        or overlap_over_smaller >= 0.78
+        or (
+            overlap_over_smaller >= 0.52
+            and center_distance <= 0.055
+            and area_similarity >= 0.34
+        )
+    )
+
+
+def _overlap_over_smaller(left: NormalizedRect, right: NormalizedRect) -> float:
+    left_x2 = left.x + left.width
+    left_y2 = left.y + left.height
+    right_x2 = right.x + right.width
+    right_y2 = right.y + right.height
+    inter_x1 = max(left.x, right.x)
+    inter_y1 = max(left.y, right.y)
+    inter_x2 = min(left_x2, right_x2)
+    inter_y2 = min(left_y2, right_y2)
+    inter_w = max(0.0, inter_x2 - inter_x1)
+    inter_h = max(0.0, inter_y2 - inter_y1)
+    inter_area = inter_w * inter_h
+    return inter_area / max(min(left.area(), right.area()), 1e-6)
+
+
+def _canonicalize_track_id(track: dict[str, Any], canonical_track_id: str) -> dict[str, Any]:
+    original_track_id = _optional_string(track.get('id'))
+    if original_track_id == canonical_track_id:
+        return track
+    return {
+        **track,
+        'id': canonical_track_id,
+        'diagnostics': {
+            **(track.get('diagnostics') or {}),
+            'canonicalizedFromTrackId': original_track_id,
+        },
+    }
 
 
 def _resolve_fine_step_ms(

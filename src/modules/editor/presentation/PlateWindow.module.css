@@ -723,6 +723,13 @@
   color: var(--text-muted);
 }
 
+.targetRowMeta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
 /* INFO ITEMS (Samples/History) */
 .infoItemRow {
   justify-content: flex-start;
@@ -956,6 +963,19 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 12px;
+}
+
+.diagnosticLineList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.diagnosticLine {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-secondary);
 }
 
 .evidenceMetaSection {
