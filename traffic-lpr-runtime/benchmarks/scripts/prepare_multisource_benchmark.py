@@ -13,6 +13,7 @@ import numpy as np
 from huggingface_hub import hf_hub_download
 from remotezip import RemoteZip
 
+from benchmark_catalog import build_dataset_source_catalog, build_official_suite_catalog
 from common import (
     ArchiveSource,
     BenchmarkSourceSample,
@@ -54,51 +55,40 @@ def main() -> int:
     args = parser.parse_args()
 
     runtime_root = args.runtime_root.resolve()
+    repo_root = runtime_root.parent
     paths = resolve_benchmark_paths(runtime_root)
     cache_dir = (args.cache_dir or paths.cache_root).resolve()
+    dataset_catalog = build_dataset_source_catalog(repo_root)
+    official_suite_catalog = build_official_suite_catalog(repo_root)
     contains_local_datasets = any(dataset in {'aolp', 'ufpr-alpr', 'lp2025'} for dataset in args.datasets)
     default_manifest_root = (paths.local_manifest_root / 'multisource') if contains_local_datasets else paths.public_multisource_manifest_root
     output_manifest = (args.output_manifest or (default_manifest_root / 'all.json')).resolve()
     output_images = (args.output_images or (paths.dataset_root / ('local-multisource' if contains_local_datasets else 'multisource-hardcases'))).resolve()
     split_output_dir = (args.split_output_dir or default_manifest_root).resolve()
-    dataset_root = runtime_root.parent / 'datasets'
-    aolp_root = (args.aolp_root or (dataset_root / 'aolp')).resolve()
-    lp2025_root = (args.lp2025_root or (dataset_root / 'LP2025')).resolve()
-    ufpr_root = (args.ufpr_root or (dataset_root / 'ufpr-alpr')).resolve()
+    aolp_root = _resolve_catalog_root(dataset_catalog, 'aolp', args.aolp_root)
+    lp2025_root = _resolve_catalog_root(dataset_catalog, 'lp2025', args.lp2025_root)
+    ufpr_root = _resolve_catalog_root(dataset_catalog, 'ufpr-alpr', args.ufpr_root)
 
     archive_sources: dict[str, ArchiveSource] = {}
     all_samples: list[BenchmarkSourceSample] = []
     summaries: dict[str, Any] = {}
 
-    if 'ccpd' in args.datasets:
-        archive_source, samples, summary = _load_ccpd(cache_dir)
-        archive_sources['ccpd'] = archive_source
-        all_samples.extend(samples)
-        summaries['ccpd'] = summary
+    dataset_loaders = {
+        'ccpd': lambda: _load_ccpd(cache_dir),
+        'uc3m-lp': lambda: _load_uc3m(args.uc3m_split),
+        'aolp': lambda: _load_aolp(aolp_root, [subset.lower() for subset in args.aolp_subsets]),
+        'lp2025': lambda: _load_lp2025(lp2025_root, args.lp2025_split),
+        'ufpr-alpr': lambda: _load_ufpr(ufpr_root, args.ufpr_split, args.ufpr_video_fps),
+    }
 
-    if 'uc3m-lp' in args.datasets:
-        archive_source, samples, summary = _load_uc3m(args.uc3m_split)
-        archive_sources['uc3m-lp'] = archive_source
+    for dataset_name in args.datasets:
+        archive_source, samples, summary = dataset_loaders[dataset_name]()
+        archive_sources[dataset_name] = archive_source
         all_samples.extend(samples)
-        summaries['uc3m-lp'] = summary
-
-    if 'aolp' in args.datasets:
-        archive_source, samples, summary = _load_aolp(aolp_root, [subset.lower() for subset in args.aolp_subsets])
-        archive_sources['aolp'] = archive_source
-        all_samples.extend(samples)
-        summaries['aolp'] = summary
-
-    if 'lp2025' in args.datasets:
-        archive_source, samples, summary = _load_lp2025(lp2025_root, args.lp2025_split)
-        archive_sources['lp2025'] = archive_source
-        all_samples.extend(samples)
-        summaries['lp2025'] = summary
-
-    if 'ufpr-alpr' in args.datasets:
-        archive_source, samples, summary = _load_ufpr(ufpr_root, args.ufpr_split, args.ufpr_video_fps)
-        archive_sources['ufpr-alpr'] = archive_source
-        all_samples.extend(samples)
-        summaries['ufpr-alpr'] = summary
+        summaries[dataset_name] = {
+            **summary,
+            'catalog': dataset_catalog[dataset_name].to_payload(),
+        }
 
     selected = _select_balanced_samples(all_samples, per_category=args.per_category, seed=args.seed)
     manifest = _materialize_manifest(archive_sources, selected, output_images)
@@ -112,8 +102,30 @@ def main() -> int:
         'splits': split_manifests,
         'summary': manifest['summary'],
         'sources': summaries,
+        'catalog': {
+            'selectedSources': {
+                dataset_name: dataset_catalog[dataset_name].to_payload()
+                for dataset_name in args.datasets
+            },
+            'officialSuites': [
+                suite.to_payload()
+                for suite in official_suite_catalog
+            ],
+        },
     }, ensure_ascii=False))
     return 0
+
+
+def _resolve_catalog_root(
+    dataset_catalog: dict[str, Any],
+    dataset_name: str,
+    override: Path | None,
+) -> Path:
+    policy = dataset_catalog[dataset_name]
+    resolved = policy.resolve_root(override)
+    if resolved is None:
+        raise FileNotFoundError(f'No root candidates were configured for dataset {dataset_name}.')
+    return resolved
 
 
 def _load_ccpd(cache_dir: Path) -> tuple[ArchiveSource, list[BenchmarkSourceSample], dict[str, Any]]:
@@ -196,6 +208,16 @@ def _load_aolp(root: Path, subsets: list[str]) -> tuple[ArchiveSource, list[Benc
         image_dir = subset_dir / 'Image'
         localization_dir = subset_dir / 'groundtruth_localization'
         recognition_dir = subset_dir / 'groundtruth_recognition'
+        if not image_dir.exists() or not localization_dir.exists() or not recognition_dir.exists():
+            nested_subset_dir = subset_dir / f'Subset_{subset_code}'
+            nested_image_dir = nested_subset_dir / 'Image'
+            nested_localization_dir = nested_subset_dir / 'groundtruth_localization'
+            nested_recognition_dir = nested_subset_dir / 'groundtruth_recognition'
+            if nested_image_dir.exists() and nested_localization_dir.exists() and nested_recognition_dir.exists():
+                subset_dir = nested_subset_dir
+                image_dir = nested_image_dir
+                localization_dir = nested_localization_dir
+                recognition_dir = nested_recognition_dir
         if not image_dir.exists() or not localization_dir.exists() or not recognition_dir.exists():
             raise FileNotFoundError(f'AOLP subset is incomplete: {subset_dir}')
 
@@ -1301,10 +1323,7 @@ def _build_ground_truth_frames(entries: Any, width: int, height: int) -> list[di
             continue
         frame_payload: dict[str, Any] = {
             'timeMs': int(entry.get('timeMs') or 0),
-            'expectedText': str(entry.get('expectedText') or ''),
         }
-        if entry.get('frameMember'):
-            frame_payload['frameMember'] = str(entry['frameMember'])
 
         plate_bbox = _bbox_from_mapping(entry.get('plateBox'))
         target_bbox = _bbox_from_mapping(entry.get('targetBox'))
@@ -1312,8 +1331,6 @@ def _build_ground_truth_frames(entries: Any, width: int, height: int) -> list[di
             frame_payload['plateBox'] = build_marker_rect(plate_bbox, width, height)
         if target_bbox is not None:
             frame_payload['targetBox'] = build_marker_rect(target_bbox, width, height)
-        if isinstance(entry.get('charBoxes'), list):
-            frame_payload['charBoxes'] = entry['charBoxes']
         frames.append(frame_payload)
     return frames
 

@@ -95,7 +95,7 @@ If you want a public benchmark set that does not depend on your own clips, see [
 
 The UC3M-LP path uses HTTP range reads against the published Zenodo archive, so the generator can sample real cases without forcing a full archive download before manifest creation.
 
-If you already have local AOLP and UFPR-ALPR datasets under `../datasets/aolp/` and `../datasets/ufpr-alpr/`, you can fold them into the same generator:
+If you already have local AOLP and UFPR-ALPR datasets under `../datasets/`, you can fold them into the same generator. The generator now resolves catalog-backed aliases such as `AOLP/` and `UFPR-ALPR dataset/` automatically, so you do not need to rename those folders before running the command:
 
 ```powershell
 cd traffic-lpr-runtime
@@ -103,6 +103,20 @@ cd traffic-lpr-runtime
 ```
 
 That command writes machine-local manifests under `../.runtime/cache/benchmark/manifests/local/multisource/` and materializes any needed UFPR interval videos under `../.runtime/cache/benchmark/datasets/local-multisource/`.
+
+Benchmark preparation now relies on two catalog files:
+
+- `benchmarks/scripts/benchmark_catalog.py` defines the official local and public benchmark sources, root aliases, protected archives, and protected local media such as `../datasets/dev-videos/行車紀錄.mp4`
+- `benchmarks/scripts/audit_dataset_retention.py` emits a non-destructive retention report before any pruning work
+
+Use the retention audit before deleting extracted folders:
+
+```powershell
+cd traffic-lpr-runtime
+.\.venv\Scripts\python.exe benchmarks\scripts\audit_dataset_retention.py
+```
+
+`datasets/dev-videos/` is reserved for local test media and must not be treated as disposable dataset payload.
 
 ## AI Evidence Workflow
 

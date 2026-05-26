@@ -2,6 +2,13 @@
 
 This folder is the independent benchmark system for the repository. It is intentionally outside the desktop app and outside the Python runtime package so benchmark planning, validation, runs, and reports can evolve on their own boundary.
 
+The tool now uses a V2 internal layout even though the historical top-level module filenames still exist as compatibility shims for tests and scripts. The owning package is `traffic_lpr_benchmark/`:
+
+- `traffic_lpr_benchmark/entrypoints/` - thin CLI entrypoints
+- `traffic_lpr_benchmark/application/` - coordinator, validation, evaluation, gate, artifact, registry, and profile-comparison services
+- `traffic_lpr_benchmark/domain/` - typed benchmark suite and run models
+- `traffic_lpr_benchmark/infrastructure/` - workspace paths, schema loading, schema validation, and runtime bridge client
+
 ## Current scope
 
 - benchmark workspace bootstrap
@@ -40,6 +47,12 @@ npm run benchmark -- profile-sweep --suite .runtime/cache/benchmark/suites/smoke
 npm run benchmark:test
 ```
 
+For scripts that need the runtime environment, prefer the runtime virtualenv so OpenCV and other runtime-side dependencies are available:
+
+```powershell
+traffic-lpr-runtime\.venv\Scripts\python.exe traffic-lpr-benchmark\cli.py validate --suite .runtime/cache/benchmark/suites/sample-template.json
+```
+
 ## Run Outputs
 
 Each benchmark run now writes the following files under `.runtime/runs/<run-id>/benchmark/`:
@@ -64,12 +77,19 @@ Each benchmark run now writes the following files under `.runtime/runs/<run-id>/
 ## Layout
 
 - `../schemas/`: repo-level source-of-truth schemas for benchmark suites, run bundles, and shared LPR profile catalogs
-- `traffic-lpr-benchmark/`: independent tool code
+- `traffic-lpr-benchmark/`: compatibility entrypoints plus the `traffic_lpr_benchmark/` package
 - `.runtime/cache/benchmark/suites/`: validated suite definitions
 - `.runtime/cache/benchmark/imports/`: imported or intermediate artifacts
 - `.runtime/cache/benchmark/datasets/`: materialized benchmark datasets and interval clips
 - `.runtime/cache/benchmark/manifests/`: generated machine-local manifests from benchmark preparation scripts
 - `.runtime/runs/<run-id>/benchmark/`: benchmark run outputs
+
+The benchmark source and suite retention rules now live beside the runtime benchmark preparation scripts:
+
+- `../traffic-lpr-runtime/benchmarks/scripts/benchmark_catalog.py`
+- `../traffic-lpr-runtime/benchmarks/scripts/audit_dataset_retention.py`
+
+That catalog is the source of truth for root aliases, protected archives, protected local media, and the official benchmark matrix. In particular, `../datasets/dev-videos/` is protected local test media and is not part of dataset pruning.
 
 ## Why `doctor` exists
 
