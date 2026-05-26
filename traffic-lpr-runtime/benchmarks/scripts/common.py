@@ -66,7 +66,8 @@ class BenchmarkSourceSample:
     dataset_key: str
     dataset_name: str
     archive_member: str
-    expected_text: str
+    expectation_kind: str
+    expected_text: str | None
     bbox: tuple[int, int, int, int] | None
     split: str
     brightness: float
@@ -74,6 +75,7 @@ class BenchmarkSourceSample:
     plate_area_ratio: float | None
     angle_degrees: float | None
     tags: list[str]
+    instance_id: str | None = None
     case_mode: str = 'frame'
     target_bbox: tuple[int, int, int, int] | None = None
     anchor_time_ms: int | None = None
@@ -86,6 +88,8 @@ class BenchmarkSourceSample:
 
     @property
     def unique_name(self) -> str:
+        if self.instance_id:
+            return f'{self.dataset_key}:{self.archive_member}#{self.instance_id}'
         return f'{self.dataset_key}:{self.archive_member}'
 
     def dominant_category(self) -> str:

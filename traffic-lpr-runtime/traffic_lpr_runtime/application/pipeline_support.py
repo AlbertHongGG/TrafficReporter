@@ -145,6 +145,18 @@ class _TrackerState:
     misses: int = 0
 
 
+@dataclass(slots=True)
+class _TransitionDecision:
+    allowed: bool
+    reason: str | None
+    tracking_state: str
+    continuity_score: float
+    continuity_credit: float
+    tracker_competitive: bool
+    scene_motion_active: bool
+    pending_confirmation: bool
+
+
 class _UltralyticsTrackerDetections:
     def __init__(self, xyxy: Any, confidence: Any, class_ids: Any, numpy_module: Any) -> None:
         self._numpy = numpy_module
@@ -273,15 +285,22 @@ class TargetCentricTracker:
 
         tracked_by_time: dict[int, list[TrackedRegion]] = {}
         detections_by_time: dict[int, list[TrackedRegion]] = {}
+        scene_motion_by_time: dict[int, dict[str, float]] = {}
         anchor_track_id: str | None = None
         anchor_region: TrackedRegion | None = None
         anchor_detection: TrackedRegion | None = None
         anchor_box = selected_target_box
         anchor_class_name: str | None = None
         anchor_selection_source = 'detection'
+        previous_frame: Any | None = None
+        previous_time_ms: int | None = None
 
         for time_ms in traversal_times:
             frame = self._frame_reader.read_frame(source_path, time_ms)
+            if previous_frame is None or previous_time_ms is None:
+                scene_motion_by_time[time_ms] = _normalize_scene_motion({})
+            else:
+                scene_motion_by_time[time_ms] = self._estimate_tracker_scene_motion(previous_frame, frame, previous_time_ms, time_ms)
             detections = self._target_detector.detect_targets(frame, time_ms, vehicle_kind, None)
             detections_by_time[time_ms] = detections
             tracked_regions = self._update_ultralytics_tracker(tracker, frame, detections, time_ms)
@@ -303,6 +322,9 @@ class TargetCentricTracker:
                     anchor_selection_source = 'detection'
                 anchor_class_name = anchor_detection.class_name if anchor_detection is not None else anchor_region.class_name if anchor_region is not None else None
 
+            previous_frame = frame
+            previous_time_ms = time_ms
+
         if anchor_box is None:
             return [], {
                 'trackerMode': options.tracker_mode,
@@ -320,6 +342,7 @@ class TargetCentricTracker:
             anchor_class_name,
             tracked_by_time,
             detections_by_time,
+            scene_motion_by_time,
             options,
         )
         forward_frames, forward_diagnostics = self._follow_ultralytics_direction(
@@ -329,6 +352,7 @@ class TargetCentricTracker:
             anchor_class_name,
             tracked_by_time,
             detections_by_time,
+            scene_motion_by_time,
             options,
         )
 
@@ -347,6 +371,8 @@ class TargetCentricTracker:
             backward_diagnostics['detectionFallbackFrames']
             + forward_diagnostics['detectionFallbackFrames']
         )
+        uncertain_frames = backward_diagnostics['uncertainFrames'] + forward_diagnostics['uncertainFrames']
+        scene_motion_frames = backward_diagnostics['sceneMotionFrames'] + forward_diagnostics['sceneMotionFrames']
         identity_breaks = backward_diagnostics['identityBreaks'] + forward_diagnostics['identityBreaks']
         confidences = [frame.confidence for frame in tracked_frames]
         termination_reasons = [
@@ -368,6 +394,8 @@ class TargetCentricTracker:
             'frameRate': frame_rate,
             'reassociatedFrames': reassociated_frames,
             'detectionFallbackFrames': detection_fallback_frames,
+            'uncertainFrames': uncertain_frames,
+            'sceneMotionFrames': scene_motion_frames,
             'identityBreaks': identity_breaks,
             'terminatedEarly': backward_diagnostics['terminatedEarly'] or forward_diagnostics['terminatedEarly'],
             'terminationReasons': termination_reasons,
@@ -383,6 +411,7 @@ class TargetCentricTracker:
         expected_class_name: str | None,
         tracked_by_time: dict[int, list[TrackedRegion]],
         detections_by_time: dict[int, list[TrackedRegion]],
+        scene_motion_by_time: dict[int, dict[str, float]],
         options: AnalysisOptions,
     ) -> tuple[list[TrackedRegion], dict[str, Any]]:
         tracked_frames: list[TrackedRegion] = []
@@ -390,34 +419,60 @@ class TargetCentricTracker:
             'missedFrames': 0,
             'reassociatedFrames': 0,
             'detectionFallbackFrames': 0,
+            'uncertainFrames': 0,
+            'sceneMotionFrames': 0,
             'identityBreaks': 0,
             'terminatedEarly': False,
             'terminationReason': None,
         }
         current_box = seed_box
         current_track_id = preferred_track_id
+        pending_confirmation = False
+        uncertain_streak = 0
 
-        for time_ms in traversal_times:
+        for traversal_index, time_ms in enumerate(traversal_times):
+            is_last_step = traversal_index == (len(traversal_times) - 1)
+            scene_motion = _normalize_scene_motion(scene_motion_by_time.get(time_ms) or {})
+            if _scene_motion_is_active(scene_motion):
+                direction_diagnostics['sceneMotionFrames'] += 1
             tracker_match, tracker_score, tracker_diagnostics = self._associate_tracked_regions(
                 tracked_by_time.get(time_ms, []),
                 current_box,
                 current_track_id,
                 expected_class_name,
+                scene_motion,
                 options,
             )
             detection_match, detection_score, detection_diagnostics = self._associate(
                 detections_by_time.get(time_ms, []),
                 current_box,
                 current_box,
+                scene_motion,
                 options,
             )
             tracker_motion_ok = tracker_match is not None and tracker_diagnostics.get('motionGatePassed') is True
             detection_motion_ok = detection_match is not None and detection_diagnostics.get('motionGatePassed') is True
+            tracker_overlap = _to_float(tracker_diagnostics.get('predictedIou'))
+            detection_overlap = _to_float(detection_diagnostics.get('predictedIou'))
+            tracker_center_distance = _to_float(tracker_diagnostics.get('centerDistance'), default=1.0)
+            detection_center_distance = _to_float(detection_diagnostics.get('centerDistance'), default=1.0)
+            tracker_bonus_only = (
+                tracker_match is not None
+                and tracker_motion_ok
+                and tracker_overlap < 0.08
+                and _to_float(tracker_diagnostics.get('trackBonus')) >= 0.2
+            )
+            detection_has_geometric_edge = detection_motion_ok and (
+                detection_overlap >= (tracker_overlap + 0.14)
+                or detection_center_distance <= max(0.0, tracker_center_distance - 0.05)
+            )
             use_detection_fallback = detection_match is not None and (
                 detection_motion_ok and (
                     tracker_match is None
                     or not tracker_motion_ok
                     or detection_score > (tracker_score + (0.12 if tracker_motion_ok else 0.04))
+                    or tracker_bonus_only
+                    or detection_has_geometric_edge
                 )
             )
 
@@ -428,6 +483,7 @@ class TargetCentricTracker:
                 'preferredTrackId': current_track_id,
                 'selectionScore': tracker_score,
                 'selection': tracker_diagnostics,
+                'sceneMotion': scene_motion,
             }
             current_track_id_before = current_track_id
 
@@ -439,6 +495,7 @@ class TargetCentricTracker:
                     'preferredTrackId': current_track_id,
                     'selectionScore': detection_score,
                     'selection': detection_diagnostics,
+                    'sceneMotion': scene_motion,
                 }
             elif selected is None:
                 direction_diagnostics['missedFrames'] += 1
@@ -449,7 +506,7 @@ class TargetCentricTracker:
                 direction_diagnostics['missedFrames'] += 1
                 continue
 
-            transition_allowed, transition_reason = _identity_transition_is_allowed(
+            transition = _identity_transition_is_allowed(
                 current_track_id=current_track_id_before,
                 selected=selected,
                 selected_source=selected_source,
@@ -458,16 +515,47 @@ class TargetCentricTracker:
                 tracker_match=tracker_match,
                 tracker_score=tracker_score,
                 tracker_diagnostics=tracker_diagnostics,
+                scene_motion=scene_motion,
+                pending_confirmation=pending_confirmation,
             )
-            if not transition_allowed:
+            if not transition.allowed:
+                if _should_soft_skip_identity_rejection(transition, diagnostics['selectionScore']):
+                    direction_diagnostics['missedFrames'] += 1
+                    continue
                 direction_diagnostics['identityBreaks'] += 1
                 direction_diagnostics['terminatedEarly'] = True
-                direction_diagnostics['terminationReason'] = transition_reason
+                direction_diagnostics['terminationReason'] = transition.reason
                 break
+
+            diagnostics['trackingState'] = transition.tracking_state
+            diagnostics['transition'] = {
+                'continuityScore': transition.continuity_score,
+                'continuityCredit': transition.continuity_credit,
+                'trackerCompetitive': transition.tracker_competitive,
+                'sceneMotionActive': transition.scene_motion_active,
+                'pendingConfirmation': transition.pending_confirmation,
+            }
+
+            if transition.tracking_state == 'uncertain':
+                uncertain_streak += 1
+                pending_confirmation = True
+                direction_diagnostics['uncertainFrames'] += 1
+                if uncertain_streak > _uncertain_grace_limit(transition, diagnostics['selectionScore']) and not is_last_step:
+                    direction_diagnostics['identityBreaks'] += 1
+                    direction_diagnostics['terminatedEarly'] = True
+                    direction_diagnostics['terminationReason'] = 'uncertain-identity-timeout'
+                    break
+            else:
+                uncertain_streak = 0
+                pending_confirmation = transition.pending_confirmation
 
             if selected_source == 'detection-fallback':
                 direction_diagnostics['detectionFallbackFrames'] += 1
-            if current_track_id_before is not None and selected.id != current_track_id_before:
+            if (
+                current_track_id_before is not None
+                and selected.id.startswith('track-')
+                and selected.id != current_track_id_before
+            ):
                 direction_diagnostics['reassociatedFrames'] += 1
 
             if selected.id.startswith('track-'):
@@ -488,15 +576,17 @@ class TargetCentricTracker:
         reference_box: NormalizedRect,
         preferred_track_id: str | None,
         expected_class_name: str | None,
+        scene_motion: dict[str, float],
         options: AnalysisOptions,
     ) -> tuple[TrackedRegion | None, float, dict[str, Any]]:
+        compensated_reference_box = _compensate_reference_box(reference_box, scene_motion)
         ranked: list[tuple[float, TrackedRegion, dict[str, Any]]] = []
         for candidate in tracked_regions:
-            predicted_iou = candidate.box.intersection_over_union(reference_box)
-            center_distance = candidate.box.center_distance(reference_box)
-            area_similarity = min(candidate.box.area(), reference_box.area()) / max(candidate.box.area(), reference_box.area(), 0.0001)
+            predicted_iou = candidate.box.intersection_over_union(compensated_reference_box)
+            center_distance = candidate.box.center_distance(compensated_reference_box)
+            area_similarity = min(candidate.box.area(), compensated_reference_box.area()) / max(candidate.box.area(), compensated_reference_box.area(), 0.0001)
             confidence_band = 1.0 if candidate.confidence >= options.tracker_high_confidence else 0.8
-            motion_gate = _motion_gate(candidate.box, reference_box)
+            motion_gate = _motion_gate(candidate.box, compensated_reference_box, scene_motion)
             track_bonus = 0.26 if preferred_track_id and candidate.id == preferred_track_id and (predicted_iou >= 0.04 or center_distance <= 0.18) else 0.0
             class_bonus = 0.08 if expected_class_name and candidate.class_name == expected_class_name else 0.0
             motion_penalty = 0.0 if motion_gate['passed'] else (0.34 if predicted_iou < 0.12 else 0.18)
@@ -519,6 +609,8 @@ class TargetCentricTracker:
                 'motionPenalty': motion_penalty,
                 'motionGatePassed': motion_gate['passed'],
                 'motionGate': motion_gate,
+                'sceneMotion': scene_motion,
+                'referenceBox': compensated_reference_box.to_payload(),
             }
             ranked.append((score, candidate, diagnostics))
 
@@ -660,6 +752,38 @@ class TargetCentricTracker:
 
         return _UltralyticsTrackerDetections(boxes, confidences, class_ids, numpy)
 
+    def _estimate_tracker_scene_motion(
+        self,
+        previous_frame: Any,
+        frame: Any,
+        previous_time_ms: int,
+        time_ms: int,
+    ) -> dict[str, float]:
+        del previous_time_ms, time_ms
+        cv2 = getattr(self._dependencies, 'cv2', None)
+        numpy = getattr(self._dependencies, 'numpy', None)
+        if cv2 is None or numpy is None:
+            return _normalize_scene_motion({})
+        if not hasattr(previous_frame, 'shape') or not hasattr(frame, 'shape'):
+            return _normalize_scene_motion({})
+
+        prev_gray = cv2.cvtColor(previous_frame, cv2.COLOR_BGR2GRAY)
+        curr_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        target_size = (320, 180)
+        prev_resized = cv2.resize(prev_gray, target_size).astype('float32')
+        curr_resized = cv2.resize(curr_gray, target_size).astype('float32')
+        try:
+            (shift_x, shift_y), response = cv2.phaseCorrelate(prev_resized, curr_resized)
+        except Exception:
+            return _normalize_scene_motion({})
+
+        frame_height, frame_width = frame.shape[:2]
+        return _normalize_scene_motion({
+            'dx': float(shift_x) / max(frame_width, 1),
+            'dy': float(shift_y) / max(frame_height, 1),
+            'score': float(response),
+        })
+
     def _walk(
         self,
         source_path: str,
@@ -753,16 +877,19 @@ class TargetCentricTracker:
         detections: list[TrackedRegion],
         predicted_box: NormalizedRect,
         previous_box: NormalizedRect | None,
+        scene_motion: dict[str, float],
         options: AnalysisOptions,
     ) -> tuple[TrackedRegion | None, float, dict[str, Any]]:
+        compensated_predicted_box = _compensate_reference_box(predicted_box, scene_motion)
+        compensated_previous_box = _compensate_reference_box(previous_box, scene_motion) if previous_box is not None else None
         ranked: list[tuple[float, TrackedRegion, dict[str, Any]]] = []
         for candidate in detections:
-            predicted_iou = candidate.box.intersection_over_union(predicted_box)
-            previous_iou = candidate.box.intersection_over_union(previous_box)
-            center_distance = candidate.box.center_distance(predicted_box)
-            area_similarity = min(candidate.box.area(), predicted_box.area()) / max(candidate.box.area(), predicted_box.area(), 0.0001)
+            predicted_iou = candidate.box.intersection_over_union(compensated_predicted_box)
+            previous_iou = candidate.box.intersection_over_union(compensated_previous_box)
+            center_distance = candidate.box.center_distance(compensated_predicted_box)
+            area_similarity = min(candidate.box.area(), compensated_predicted_box.area()) / max(candidate.box.area(), compensated_predicted_box.area(), 0.0001)
             confidence_band = 1.0 if candidate.confidence >= options.tracker_high_confidence else 0.8
-            motion_gate = _motion_gate(candidate.box, predicted_box)
+            motion_gate = _motion_gate(candidate.box, compensated_predicted_box, scene_motion)
             motion_penalty = 0.0 if motion_gate['passed'] else (0.34 if predicted_iou < 0.12 else 0.18)
             score = (
                 (predicted_iou * 0.52)
@@ -781,6 +908,8 @@ class TargetCentricTracker:
                 'motionPenalty': motion_penalty,
                 'motionGatePassed': motion_gate['passed'],
                 'motionGate': motion_gate,
+                'sceneMotion': scene_motion,
+                'referenceBox': compensated_predicted_box.to_payload(),
             }
             ranked.append((score, candidate, diagnostics))
 
@@ -836,40 +965,74 @@ def _identity_transition_is_allowed(
     tracker_match: TrackedRegion | None,
     tracker_score: float,
     tracker_diagnostics: dict[str, Any],
-) -> tuple[bool, str | None]:
+    scene_motion: dict[str, float],
+    pending_confirmation: bool,
+) -> _TransitionDecision:
     if current_track_id is None:
-        return True, None
+        return _TransitionDecision(True, None, 'confirmed', 1.0, 0.0, False, False, False)
     if selected_source == 'tracker' and selected.id == current_track_id:
-        return True, None
+        return _TransitionDecision(True, None, 'confirmed', 1.0, 0.0, False, False, False)
 
     motion_ok = selection_diagnostics.get('motionGatePassed') is True
     predicted_iou = _to_float(selection_diagnostics.get('predictedIou'))
     previous_iou = _to_float(selection_diagnostics.get('previousIou'))
     center_distance = _to_float(selection_diagnostics.get('centerDistance'), default=1.0)
+    tracker_overlap = _to_float(tracker_diagnostics.get('predictedIou'))
+    tracker_center_distance = _to_float(tracker_diagnostics.get('centerDistance'), default=1.0)
+    scene_motion_active = _scene_motion_is_active(scene_motion)
+    continuity_credit = min(0.12, _to_float(scene_motion.get('magnitude')) * 1.15) if scene_motion_active else 0.0
+    continuity_score = max(predicted_iou, previous_iou) + continuity_credit
     strong_continuity = motion_ok and (
-        max(predicted_iou, previous_iou) >= 0.28
-        or center_distance <= 0.055
-    ) and selection_score >= 0.28
+        continuity_score >= 0.28
+        or center_distance <= max(0.055, 0.055 + (continuity_credit * 0.55))
+    ) and selection_score >= max(0.24, 0.28 - (continuity_credit * 0.5))
 
     tracker_competitive = (
         tracker_match is not None
         and tracker_diagnostics.get('motionGatePassed') is True
         and tracker_score >= (selection_score - 0.16)
     )
+    tracker_bonus_only = tracker_overlap < 0.08 and _to_float(tracker_diagnostics.get('trackBonus')) >= 0.2
+    detection_has_geometric_edge = (
+        continuity_score >= (tracker_overlap + 0.14)
+        or center_distance <= max(0.0, tracker_center_distance - 0.05)
+    )
+    if tracker_competitive and tracker_bonus_only and detection_has_geometric_edge:
+        tracker_competitive = False
     if selected_source == 'detection-fallback':
-        if tracker_competitive or not strong_continuity:
-            return False, 'detection-fallback-identity-break'
-        return True, None
+        if tracker_competitive:
+            if pending_confirmation and detection_has_geometric_edge and continuity_score >= 0.3 and selection_score >= (tracker_score + 0.03):
+                return _TransitionDecision(True, None, 'uncertain', continuity_score, continuity_credit, True, scene_motion_active, True)
+            return _TransitionDecision(False, 'detection-fallback-identity-break', 'rejected', continuity_score, continuity_credit, True, scene_motion_active, pending_confirmation)
+        if strong_continuity:
+            return _TransitionDecision(True, None, 'uncertain', continuity_score, continuity_credit, False, scene_motion_active, True)
+        if motion_ok and scene_motion_active and selection_score >= 0.22 and continuity_score >= 0.18:
+            return _TransitionDecision(True, None, 'uncertain', continuity_score, continuity_credit, False, True, True)
+        return _TransitionDecision(False, 'detection-fallback-identity-break', 'rejected', continuity_score, continuity_credit, False, scene_motion_active, pending_confirmation)
 
     if selected.id.startswith('track-') and selected.id != current_track_id:
-        if not strong_continuity or selection_score < 0.36:
-            return False, 'track-switch-identity-break'
-        return True, None
+        if strong_continuity or (pending_confirmation and motion_ok and selection_score >= 0.3):
+            return _TransitionDecision(True, None, 'confirmed', continuity_score, continuity_credit, tracker_competitive, scene_motion_active, False)
+        return _TransitionDecision(False, 'track-switch-identity-break', 'rejected', continuity_score, continuity_credit, tracker_competitive, scene_motion_active, pending_confirmation)
 
-    return False, 'untrusted-target-transition'
+    return _TransitionDecision(False, 'untrusted-target-transition', 'rejected', continuity_score, continuity_credit, tracker_competitive, scene_motion_active, pending_confirmation)
 
 
-def _motion_gate(candidate_box: NormalizedRect, reference_box: NormalizedRect) -> dict[str, float | bool]:
+def _uncertain_grace_limit(transition: _TransitionDecision, selection_score: float) -> int:
+    if transition.continuity_score >= 0.3 and selection_score >= 0.45:
+        return 4
+    return 2
+
+
+def _should_soft_skip_identity_rejection(transition: _TransitionDecision, selection_score: float) -> bool:
+    return (
+        transition.reason == 'track-switch-identity-break'
+        and transition.continuity_score < 0.12
+        and selection_score < 0.32
+    )
+
+
+def _motion_gate(candidate_box: NormalizedRect, reference_box: NormalizedRect, scene_motion: dict[str, float] | None = None) -> dict[str, float | bool]:
     candidate_center_x = candidate_box.x + (candidate_box.width / 2.0)
     candidate_center_y = candidate_box.y + (candidate_box.height / 2.0)
     reference_center_x = reference_box.x + (reference_box.width / 2.0)
@@ -878,8 +1041,11 @@ def _motion_gate(candidate_box: NormalizedRect, reference_box: NormalizedRect) -
     delta_y = abs(candidate_center_y - reference_center_y)
     base_width = max(candidate_box.width, reference_box.width)
     base_height = max(candidate_box.height, reference_box.height)
-    max_horizontal_shift = clamp((base_width * 0.45) + 0.035, 0.08, 0.13)
-    max_vertical_shift = clamp((base_height * 1.1) + 0.05, 0.12, 0.3)
+    normalized_motion = _normalize_scene_motion(scene_motion or {})
+    motion_credit_x = min(0.08, (_to_float(normalized_motion.get('magnitude')) * 0.75) + (abs(_to_float(normalized_motion.get('dx'))) * 0.45))
+    motion_credit_y = min(0.12, (_to_float(normalized_motion.get('magnitude')) * 0.55) + (abs(_to_float(normalized_motion.get('dy'))) * 0.75))
+    max_horizontal_shift = clamp((base_width * 0.45) + 0.035 + motion_credit_x, 0.08, 0.2)
+    max_vertical_shift = clamp((base_height * 1.1) + 0.05 + motion_credit_y, 0.12, 0.38)
     passed = delta_x <= max_horizontal_shift and delta_y <= max_vertical_shift
     return {
         'passed': passed,
@@ -887,6 +1053,8 @@ def _motion_gate(candidate_box: NormalizedRect, reference_box: NormalizedRect) -
         'deltaY': delta_y,
         'maxHorizontalShift': max_horizontal_shift,
         'maxVerticalShift': max_vertical_shift,
+        'sceneMotionMagnitude': _to_float(normalized_motion.get('magnitude')),
+        'sceneMotionScore': _to_float(normalized_motion.get('score')),
     }
 
 
@@ -923,6 +1091,33 @@ def _shift_rect(
     width = clamp(rect.width + delta_width, 0.01, 1.0 - x)
     height = clamp(rect.height + delta_height, 0.01, 1.0 - y)
     return NormalizedRect(x=x, y=y, width=width, height=height)
+
+
+def _normalize_scene_motion(scene_motion: dict[str, Any]) -> dict[str, float]:
+    dx = _to_float(scene_motion.get('dx'))
+    dy = _to_float(scene_motion.get('dy'))
+    magnitude = _to_float(scene_motion.get('magnitude'))
+    if magnitude <= 0.0:
+        magnitude = (dx ** 2 + dy ** 2) ** 0.5
+    return {
+        'dx': dx,
+        'dy': dy,
+        'magnitude': magnitude,
+        'score': max(0.0, _to_float(scene_motion.get('score'))),
+    }
+
+
+def _scene_motion_is_active(scene_motion: dict[str, Any]) -> bool:
+    normalized = _normalize_scene_motion(scene_motion)
+    return normalized['magnitude'] >= 0.025 and normalized['score'] >= 0.08
+
+
+def _compensate_reference_box(reference_box: NormalizedRect, scene_motion: dict[str, Any]) -> NormalizedRect:
+    normalized = _normalize_scene_motion(scene_motion)
+    if not _scene_motion_is_active(normalized):
+        return reference_box
+    motion_weight = clamp(0.35 + min(normalized['score'], 1.0) * 0.45, 0.35, 0.8)
+    return _shift_rect(reference_box, normalized['dx'] * motion_weight, normalized['dy'] * motion_weight, 0.0, 0.0)
 
 
 def _tracker_class_id(class_name: str) -> int:

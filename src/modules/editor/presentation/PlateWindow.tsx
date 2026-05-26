@@ -174,6 +174,17 @@ function formatMetric(value: number | null | undefined) {
   return `${Math.round(clamp(value, 0, 1) * 100)}%`;
 }
 
+function formatSignedPercent(value: number | null | undefined) {
+  if (typeof value !== 'number' || Number.isNaN(value)) {
+    return '--';
+  }
+  const percent = `${Math.abs(value * 100).toFixed(1)}%`;
+  if (Math.abs(value) < 0.0005) {
+    return `0.0%`;
+  }
+  return `${value > 0 ? '+' : '-'}${percent}`;
+}
+
 function qualityMetrics(sample: LprFrameSample): Array<[string, number | null | undefined]> {
   const quality = sample.quality;
   return [
@@ -236,6 +247,8 @@ function buildTargetDiagnosticsLines(track: LprTargetTrack | null): string[] {
   const matchedFrames = asNumber(diagnostics.matchedFrames);
   const reassociatedFrames = asNumber(diagnostics.reassociatedFrames);
   const detectionFallbackFrames = asNumber(diagnostics.detectionFallbackFrames);
+  const uncertainFrames = asNumber(diagnostics.uncertainFrames);
+  const sceneMotionFrames = asNumber(diagnostics.sceneMotionFrames);
   const identityBreaks = asNumber(diagnostics.identityBreaks);
   const suppressedDuplicates = asNumber(targetDetection?.suppressedDuplicateDetections);
   const terminationReasons = asStringArray(diagnostics.terminationReasons);
@@ -254,6 +267,8 @@ function buildTargetDiagnosticsLines(track: LprTargetTrack | null): string[] {
     [
       countSummary('fallback', detectionFallbackFrames),
       countSummary('reassoc', reassociatedFrames),
+      countSummary('uncertain', uncertainFrames),
+      countSummary('scene', sceneMotionFrames),
       countSummary('identity', identityBreaks),
       diagnostics.terminatedEarly === true ? 'stopped early' : null,
     ].filter(Boolean).join(' · '),
@@ -271,16 +286,26 @@ function buildSampleTrackingLines(sample: LprFrameSample): string[] {
   }
 
   const selection = asRecord(tracking.selection);
+  const transition = asRecord(tracking.transition);
+  const sceneMotion = asRecord(tracking.sceneMotion);
   const selectionScore = asNumber(tracking.selectionScore);
   const predictedIou = asNumber(selection?.predictedIou);
   const previousIou = asNumber(selection?.previousIou);
+  const continuityScore = asNumber(transition?.continuityScore);
+  const continuityCredit = asNumber(transition?.continuityCredit);
+  const sceneMotionDx = asNumber(sceneMotion?.dx);
+  const sceneMotionDy = asNumber(sceneMotion?.dy);
+  const sceneMotionMagnitude = asNumber(sceneMotion?.magnitude);
+  const sceneMotionScore = asNumber(sceneMotion?.score);
   const source = typeof tracking.trackingSource === 'string' ? tracking.trackingSource : null;
+  const trackingState = typeof tracking.trackingState === 'string' ? tracking.trackingState : null;
   const preferredTrackId = typeof tracking.preferredTrackId === 'string' ? tracking.preferredTrackId : null;
   const canonicalTargetId = typeof tracking.canonicalTargetId === 'string' ? tracking.canonicalTargetId : null;
 
   const lines = [
     [
       source ? `source ${source}` : null,
+      trackingState ? `state ${trackingState}` : null,
       preferredTrackId ? `track ${preferredTrackId}` : null,
       canonicalTargetId ? `id ${canonicalTargetId}` : null,
     ].filter(Boolean).join(' · '),
@@ -288,7 +313,15 @@ function buildSampleTrackingLines(sample: LprFrameSample): string[] {
       selectionScore !== null ? `score ${formatConfidence(selectionScore)}` : null,
       predictedIou !== null ? `pred ${formatConfidence(predictedIou)}` : null,
       previousIou !== null ? `prev ${formatConfidence(previousIou)}` : null,
+      continuityScore !== null ? `cont ${formatConfidence(continuityScore)}` : null,
+      continuityCredit !== null && continuityCredit > 0.001 ? `credit ${formatConfidence(continuityCredit)}` : null,
       selection?.motionGatePassed === true ? 'motion ok' : selection?.motionGatePassed === false ? 'motion rejected' : null,
+    ].filter(Boolean).join(' · '),
+    [
+      sceneMotionMagnitude !== null && sceneMotionMagnitude > 0.001 ? `scene ${formatConfidence(sceneMotionMagnitude)}` : null,
+      sceneMotionDx !== null && Math.abs(sceneMotionDx) > 0.001 ? `dx ${formatSignedPercent(sceneMotionDx)}` : null,
+      sceneMotionDy !== null && Math.abs(sceneMotionDy) > 0.001 ? `dy ${formatSignedPercent(sceneMotionDy)}` : null,
+      sceneMotionScore !== null && sceneMotionScore > 0.001 ? `scene conf ${formatConfidence(sceneMotionScore)}` : null,
     ].filter(Boolean).join(' · '),
   ];
 

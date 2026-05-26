@@ -4,21 +4,69 @@ from dataclasses import dataclass
 from typing import Any
 
 
+READABLE_EXPECTATION_KIND = 'readable'
+UNREADABLE_EXPECTATION_KIND = 'unreadable'
+
+
+def _normalize_optional_text(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def normalize_expectation_kind(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().lower()
+    if normalized in {READABLE_EXPECTATION_KIND, UNREADABLE_EXPECTATION_KIND}:
+        return normalized
+    return None
+
+
+def resolve_case_expectation(payload: dict[str, Any]) -> tuple[str, str | None]:
+    expectation_payload = payload.get('expectation') if isinstance(payload.get('expectation'), dict) else None
+    expected_text = _normalize_optional_text(payload.get('expectedText'))
+
+    if expectation_payload is None:
+        if expected_text is not None:
+            return READABLE_EXPECTATION_KIND, expected_text
+        return UNREADABLE_EXPECTATION_KIND, None
+
+    expectation_kind = normalize_expectation_kind(expectation_payload.get('kind'))
+    if expectation_kind == READABLE_EXPECTATION_KIND:
+        return READABLE_EXPECTATION_KIND, _normalize_optional_text(expectation_payload.get('text')) or expected_text
+    if expectation_kind == UNREADABLE_EXPECTATION_KIND:
+        return UNREADABLE_EXPECTATION_KIND, None
+    if expected_text is not None:
+        return READABLE_EXPECTATION_KIND, expected_text
+    return UNREADABLE_EXPECTATION_KIND, None
+
+
+def format_case_expectation(expectation_kind: str, expected_text: str | None) -> str:
+    if expectation_kind == UNREADABLE_EXPECTATION_KIND:
+        return 'unreadable/no-read'
+    return expected_text or '--'
+
+
 @dataclass(slots=True)
 class BenchmarkCase:
     id: str
     mode: str
     source_path: str
-    expected_text: str
+    expectation_kind: str
+    expected_text: str | None
     payload: dict[str, Any]
 
     @classmethod
     def from_payload(cls, payload: dict[str, Any]) -> 'BenchmarkCase':
+        expectation_kind, expected_text = resolve_case_expectation(payload)
         return cls(
             id=str(payload.get('id') or ''),
             mode=str(payload.get('mode') or ''),
             source_path=str(payload.get('sourcePath') or ''),
-            expected_text=str(payload.get('expectedText') or ''),
+            expectation_kind=expectation_kind,
+            expected_text=expected_text,
             payload=dict(payload),
         )
 

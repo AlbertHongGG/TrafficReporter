@@ -9,7 +9,7 @@ from typing import Any
 from analysis import build_analysis_markdown, build_run_analysis
 from evaluation import build_evaluation_markdown, build_run_evaluation
 from ledger import build_run_ledger
-from models import BenchmarkRunBundle, BenchmarkSuite
+from models import BenchmarkRunBundle, BenchmarkSuite, format_case_expectation
 from registry import build_suite_registry
 from traffic_lpr_runtime.infrastructure.runtime_layout import build_run_id
 from validation import validate_run_bundle_payload
@@ -142,24 +142,25 @@ def build_report_html(bundle: dict[str, Any]) -> str:
 
     rows = []
     for case in cases:
-        localization = case.get('localization') or {}
-        review = case['review']
-        provenance = case['provenance']
-        rows.append(
-            '<tr>'
-            f'<td>{_safe_text(case.get("id"))}</td>'
-            f'<td>{_safe_text(case.get("mode"))}</td>'
-            f'<td>{_safe_text(case.get("expectedText"))}</td>'
-            f'<td>{_safe_text(case.get("bestText"))}</td>'
-            f'<td>{_safe_text(case.get("failureReason"))}</td>'
-            f'<td>{_safe_text(review.get("status"))}</td>'
-            f'<td>{_safe_text(provenance.get("analysisProfileId"))}</td>'
-            f'<td>{_format_number(case.get("acceptedConfidence"), 3)}</td>'
-            f'<td>{_format_number(case.get("latencyMs"), 1)}</td>'
-            f'<td>{_format_number(localization.get("plateMeanIoU"), 3)}</td>'
-            f'<td>{_format_number(localization.get("targetMeanIoU"), 3)}</td>'
-            '</tr>'
-        )
+      localization = case.get('localization') or {}
+      review = case['review']
+      provenance = case['provenance']
+      expected_display = format_case_expectation(str(case.get('expectationKind') or 'readable'), case.get('expectedText'))
+      rows.append(
+        '<tr>'
+        f'<td>{_safe_text(case.get("id"))}</td>'
+        f'<td>{_safe_text(case.get("mode"))}</td>'
+        f'<td>{_safe_text(expected_display)}</td>'
+        f'<td>{_safe_text(case.get("bestText"))}</td>'
+        f'<td>{_safe_text(case.get("failureReason"))}</td>'
+        f'<td>{_safe_text(review.get("status"))}</td>'
+        f'<td>{_safe_text(provenance.get("analysisProfileId"))}</td>'
+        f'<td>{_format_number(case.get("acceptedConfidence"), 3)}</td>'
+        f'<td>{_format_number(case.get("latencyMs"), 1)}</td>'
+        f'<td>{_format_number(localization.get("plateMeanIoU"), 3)}</td>'
+        f'<td>{_format_number(localization.get("targetMeanIoU"), 3)}</td>'
+        '</tr>'
+      )
 
     rows_markup = ''.join(rows) or '<tr><td colspan="11">No cases.</td></tr>'
     failure_breakdown = ''.join(

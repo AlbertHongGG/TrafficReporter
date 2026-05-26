@@ -15,7 +15,8 @@ class BenchmarkCaseLedgerEntry:
     split: str
     category: str
     source_hash: str | None
-    expected_text: str
+    expectation_kind: str
+    expected_text: str | None
     best_text: str | None
     exact_match: bool | None
     top3_match: bool | None
@@ -33,6 +34,7 @@ class BenchmarkCaseLedgerEntry:
             'split': self.split,
             'category': self.category,
             'sourceHash': self.source_hash,
+            'expectationKind': self.expectation_kind,
             'expectedText': self.expected_text,
             'bestText': self.best_text,
             'exactMatch': self.exact_match,
@@ -89,6 +91,7 @@ def _build_case_ledger_entry(case: Any, result_payload: dict[str, Any] | None) -
         split=str(metadata.get('split') or 'unknown'),
         category=str(metadata.get('category') or 'uncategorized'),
         source_hash=case.source.source_hash,
+        expectation_kind=case.ground_truth.expectation_kind,
         expected_text=case.ground_truth.expected_text,
         best_text=_coerce_optional_str(result_payload.get('bestText') if isinstance(result_payload, dict) else None),
         exact_match=_coerce_optional_bool(result_payload.get('exactMatch') if isinstance(result_payload, dict) else None),

@@ -22,7 +22,7 @@ from registry import build_suite_registry, summarize_suite_registry
 from profile_sweep import apply_analysis_profile_to_suite, build_profile_sweep_payload
 from reporting import write_run_artifacts
 from runtime_bridge import RuntimeInvokeError, build_runtime_request_envelope, unwrap_runtime_response
-from traffic_lpr_runtime.application.benchmark_workflow import BenchmarkRunWorkflow, summarize_benchmark_results
+from traffic_lpr_runtime.application.benchmark_workflow import BenchmarkRunWorkflow, _evaluate_localization, summarize_benchmark_results
 from validation import ValidationError, inspect_suite_payload, validate_profile_catalog_file, validate_suite_payload
 
 
@@ -42,6 +42,49 @@ class BenchmarkToolTests(unittest.TestCase):
                     'expectedText': 'ABC1234',
                     'tags': ['taiwan'],
                     'metadata': {'dataset': 'AOLP', 'category': 'blur'},
+                }
+            ],
+        }
+
+        validate_suite_payload(payload)
+
+    def test_validate_suite_payload_accepts_unreadable_frame_suite(self) -> None:
+        payload = {
+            'schemaVersion': 1,
+            'suiteId': 'unreadable-suite',
+            'title': 'Unreadable Suite',
+            'analysisProfileId': 'precision',
+            'cases': [
+                {
+                    'id': 'case-001',
+                    'mode': 'frame',
+                    'sourcePath': 'C:/tmp/frame.jpg',
+                    'timeMs': 0,
+                    'expectation': {'kind': 'unreadable'},
+                    'tags': ['taiwan', 'lp2025'],
+                    'metadata': {'dataset': 'LP2025', 'category': 'blur'},
+                }
+            ],
+        }
+
+        validate_suite_payload(payload)
+
+    def test_validate_suite_payload_accepts_interval_suite_with_selected_target_track_id(self) -> None:
+        payload = {
+            'schemaVersion': 1,
+            'suiteId': 'interval-suite',
+            'analysisProfileId': 'precision',
+            'cases': [
+                {
+                    'id': 'case-001',
+                    'mode': 'interval',
+                    'sourcePath': 'C:/tmp/track.mp4',
+                    'anchorTimeMs': 1200,
+                    'interval': {'startMs': 1000, 'endMs': 1600},
+                    'selectedTargetBox': {'x': 0.1, 'y': 0.2, 'width': 0.3, 'height': 0.2},
+                    'selectedTargetTrackId': 'target-1200-0',
+                    'expectedText': 'ABC1234',
+                    'metadata': {'dataset': 'local-dashcam', 'split': 'manual', 'category': 'tracking'},
                 }
             ],
         }
@@ -125,6 +168,7 @@ class BenchmarkToolTests(unittest.TestCase):
                 {
                     'id': 'case-001',
                     'mode': 'frame',
+                    'expectationKind': 'readable',
                     'expectedText': 'AAA1111',
                     'bestText': 'AAA1111',
                     'bestSource': 'ocr:model-a',
@@ -386,6 +430,7 @@ class BenchmarkToolTests(unittest.TestCase):
                 'cases': [
                     {
                         'id': 'case-001',
+                        'expectationKind': 'readable',
                         'expectedText': 'AAA1111',
                         'bestText': 'AAA1111',
                         'exactMatch': True,
@@ -403,6 +448,7 @@ class BenchmarkToolTests(unittest.TestCase):
                     },
                     {
                         'id': 'case-002',
+                        'expectationKind': 'readable',
                         'expectedText': 'BBB2222',
                         'bestText': 'BBC2222',
                         'exactMatch': False,
@@ -517,12 +563,62 @@ class BenchmarkToolTests(unittest.TestCase):
         self.assertEqual(runtime_result['cases'][0]['review']['suggestedCandidateId'], 'candidate-1')
         self.assertEqual(runtime_result['cases'][0]['provenance']['analysisProfileId'], 'precision')
 
+    def test_benchmark_run_supports_unreadable_expectation_case(self) -> None:
+        workflow = BenchmarkRunWorkflow(
+            ensure_ready=lambda: None,
+            status=lambda: {'status': 'ready'},
+            analyze_frame=lambda payload: {
+                'candidates': [],
+                'acceptedCandidateId': None,
+                'review': {
+                    'status': 'no-candidate',
+                    'acceptedCandidateId': None,
+                    'suggestedCandidateId': None,
+                    'reasons': [],
+                },
+                'provenance': {
+                    'requestId': 'req-002',
+                    'command': 'analyze-frame',
+                    'analysisProfileId': 'precision',
+                    'developerDiagnosticsEnabled': False,
+                    'runtimeVersion': 'runtime-1',
+                    'emittedAtMs': 2,
+                },
+                'summary': 'no read',
+                'runtime': {'status': 'ready'},
+            },
+            analyze_interval=lambda payload: {'candidates': [], 'summary': '', 'runtime': {'status': 'ready'}},
+        )
+
+        runtime_result = workflow.run(
+            {
+                'cases': [
+                    {
+                        'id': 'case-001',
+                        'mode': 'frame',
+                        'sourcePath': 'frame.jpg',
+                        'timeMs': 0,
+                        'expectation': {'kind': 'unreadable'},
+                        'metadata': {'dataset': 'LP2025', 'category': 'blur'},
+                    }
+                ]
+            }
+        )
+
+        self.assertEqual(runtime_result['cases'][0]['expectationKind'], 'unreadable')
+        self.assertIsNone(runtime_result['cases'][0]['expectedText'])
+        self.assertTrue(runtime_result['cases'][0]['exactMatch'])
+        self.assertTrue(runtime_result['cases'][0]['top3Match'])
+        self.assertEqual(runtime_result['cases'][0]['characterErrorRate'], 0.0)
+        self.assertEqual(runtime_result['cases'][0]['failureReason'], 'correct')
+
     def test_summarize_benchmark_results_rebuilds_metrics_from_case_results(self) -> None:
         runtime_result = summarize_benchmark_results(
             [
                 {
                     'id': 'case-001',
                     'mode': 'frame',
+                    'expectationKind': 'readable',
                     'expectedText': 'AAA1111',
                     'bestText': 'AAA1111',
                     'bestSource': 'ocr:model-a',
@@ -551,6 +647,7 @@ class BenchmarkToolTests(unittest.TestCase):
                 {
                     'id': 'case-002',
                     'mode': 'interval',
+                    'expectationKind': 'readable',
                     'expectedText': 'BBB2222',
                     'bestText': 'BBC2222',
                     'bestSource': 'fused',
@@ -596,6 +693,35 @@ class BenchmarkToolTests(unittest.TestCase):
         self.assertEqual(runtime_result['metrics']['datasetBreakdown']['AOLP']['totalCases'], 1)
         self.assertEqual(runtime_result['metrics']['datasetBreakdown']['UFPR-ALPR']['reviewRequiredRate'], 1.0)
         self.assertEqual(runtime_result['metrics']['splitBreakdown']['testing']['totalCases'], 1)
+
+    def test_interval_localization_matches_each_ground_truth_frame_once(self) -> None:
+        localization = _evaluate_localization(
+            {
+                'groundTruthFrames': [
+                    {
+                        'timeMs': 1000,
+                        'targetBox': {'x': 0.1, 'y': 0.2, 'width': 0.2, 'height': 0.2},
+                    }
+                ],
+                'sampleEveryMs': 120,
+            },
+            {
+                'samples': [
+                    {
+                        'timeMs': 980,
+                        'targetBox': {'x': 0.1, 'y': 0.2, 'width': 0.2, 'height': 0.2},
+                    },
+                    {
+                        'timeMs': 1020,
+                        'targetBox': {'x': 0.1, 'y': 0.2, 'width': 0.2, 'height': 0.2},
+                    },
+                ],
+            },
+        )
+
+        self.assertEqual(localization['groundTruthFrameCount'], 1)
+        self.assertEqual(localization['matchedFrameCount'], 1)
+        self.assertEqual(localization['targetRecall'], 1.0)
 
     def test_evaluate_runtime_result_gate_reports_failed_thresholds(self) -> None:
         runtime_result = {

@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from models import resolve_case_expectation
+
 
 def _canonical_json(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
@@ -79,19 +81,25 @@ class SourceReference:
 
 @dataclass(slots=True, frozen=True)
 class GroundTruth:
-    expected_text: str
+    expectation_kind: str
+    expected_text: str | None
     frame_time_ms: int | None
     anchor_time_ms: int | None
     interval: dict[str, Any] | None
     selected_target_box: dict[str, Any] | None
+    selected_target_track_id: str | None
+    ground_truth_frames: tuple[dict[str, Any], ...]
 
     def to_payload(self) -> dict[str, Any]:
         return {
+            'expectationKind': self.expectation_kind,
             'expectedText': self.expected_text,
             'timeMs': self.frame_time_ms,
             'anchorTimeMs': self.anchor_time_ms,
             'interval': self.interval,
             'selectedTargetBox': self.selected_target_box,
+            'selectedTargetTrackId': self.selected_target_track_id,
+            'groundTruthFrames': [dict(frame) for frame in self.ground_truth_frames],
         }
 
 
@@ -241,6 +249,7 @@ def _build_case_record(
     base_dir: Path | None,
     default_profile: str | None,
 ) -> BenchmarkCaseRecord:
+    expectation_kind, expected_text = resolve_case_expectation(case_payload)
     declared_path = str(case_payload.get('sourcePath') or '')
     resolved_path = _resolve_source_path(declared_path, base_dir=base_dir)
     exists = resolved_path.exists()
@@ -266,11 +275,14 @@ def _build_case_record(
         'id': case_payload.get('id'),
         'mode': case_payload.get('mode'),
         'sourcePath': declared_path,
-        'expectedText': case_payload.get('expectedText'),
+        'expectationKind': expectation_kind,
+        'expectedText': expected_text,
         'timeMs': case_payload.get('timeMs'),
         'anchorTimeMs': case_payload.get('anchorTimeMs'),
         'interval': case_payload.get('interval'),
         'selectedTargetBox': case_payload.get('selectedTargetBox'),
+        'selectedTargetTrackId': case_payload.get('selectedTargetTrackId'),
+        'groundTruthFrames': case_payload.get('groundTruthFrames'),
         'analysisProfileId': case_payload.get('analysisProfileId') or default_profile,
         'tags': case_payload.get('tags') or [],
         'metadata': metadata,
@@ -290,11 +302,18 @@ def _build_case_record(
             source_hash=source_hash,
         ),
         ground_truth=GroundTruth(
-            expected_text=str(case_payload.get('expectedText') or ''),
+            expectation_kind=expectation_kind,
+            expected_text=expected_text,
             frame_time_ms=_coerce_optional_int(case_payload.get('timeMs')),
             anchor_time_ms=_coerce_optional_int(case_payload.get('anchorTimeMs')),
             interval=dict(case_payload.get('interval')) if isinstance(case_payload.get('interval'), dict) else None,
             selected_target_box=dict(case_payload.get('selectedTargetBox')) if isinstance(case_payload.get('selectedTargetBox'), dict) else None,
+            selected_target_track_id=_normalize_text(case_payload.get('selectedTargetTrackId')),
+            ground_truth_frames=tuple(
+                dict(frame)
+                for frame in (case_payload.get('groundTruthFrames') or [])
+                if isinstance(frame, dict)
+            ),
         ),
         validation=CaseValidation(
             status=validation_status,

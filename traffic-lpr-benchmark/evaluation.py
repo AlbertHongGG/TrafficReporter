@@ -4,6 +4,7 @@ from collections import Counter, defaultdict
 from typing import Any
 
 from ledger import build_run_ledger
+from models import format_case_expectation
 from registry import BenchmarkSuiteRegistry
 
 
@@ -78,7 +79,9 @@ def build_run_evaluation(
                 'id': case.get('id'),
                 'dataset': dataset,
                 'category': metadata.get('category') or metadata.get('dominantCategory') or 'uncategorized',
+                'expectationKind': case.get('expectationKind') or 'readable',
                 'expectedText': case.get('expectedText'),
+                'expectedDisplay': format_case_expectation(str(case.get('expectationKind') or 'readable'), case.get('expectedText')),
                 'bestText': case.get('bestText'),
                 'failureReason': case.get('failureReason'),
                 'stage': attribution['stage'],
@@ -181,10 +184,11 @@ def build_evaluation_markdown(evaluation: dict[str, Any]) -> str:
     else:
         for row in regressions:
             lines.append(
-                '- {id}: dataset={dataset}, category={category}, failure={failure}, stage={stage}, component={component}, best={best}'.format(
+                '- {id}: dataset={dataset}, category={category}, expected={expected}, failure={failure}, stage={stage}, component={component}, best={best}'.format(
                     id=row.get('id') or '--',
                     dataset=row.get('dataset') or 'unknown',
                     category=row.get('category') or 'uncategorized',
+                    expected=row.get('expectedDisplay') or '--',
                     failure=row.get('failureReason') or 'unknown',
                     stage=row.get('stage') or 'unknown',
                     component=row.get('component') or 'unknown',

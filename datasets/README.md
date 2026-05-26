@@ -5,12 +5,14 @@ Recommended layout:
 - `datasets/aolp/`
 - `datasets/ufpr-alpr/`
 - `datasets/dev-videos/`
+- `datasets/LP2025/`
 
 Rules:
 
 - raw local datasets stay here instead of being scattered across the repository root
 - benchmark cases must carry provenance metadata such as `dataset`, plus `category` or `dominantCategory`
 - benchmark tooling may materialize immutable prepared copies into runtime-owned `.runtime/` workspaces, but the source dataset still starts here
+- benchmark preparation scripts can consume `AOLP`, `UFPR-ALPR`, and `LP2025` from this root when those local folders are present
 - desktop UI code must not treat arbitrary dataset paths as an implicit runtime dependency
 - user-facing exports do not belong here unless they are intentionally curated evaluation inputs
 

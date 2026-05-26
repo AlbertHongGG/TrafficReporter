@@ -17,12 +17,29 @@
       "items": {
         "type": "object",
         "additionalProperties": true,
-        "required": ["id", "mode", "sourcePath", "expectedText"],
+        "anyOf": [
+          { "required": ["expectedText"] },
+          { "required": ["expectation"] }
+        ],
         "properties": {
           "id": { "type": "string", "minLength": 1 },
           "mode": { "enum": ["frame", "interval"] },
           "sourcePath": { "type": "string", "minLength": 1 },
           "expectedText": { "type": "string", "minLength": 1 },
+          "expectation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind"],
+            "properties": {
+              "kind": { "type": "string", "enum": ["readable", "unreadable"] },
+              "text": {
+                "anyOf": [
+                  { "type": "string", "minLength": 1 },
+                  { "type": "null" }
+                ]
+              }
+            }
+          },
           "timeMs": { "type": ["integer", "number", "null"] },
           "anchorTimeMs": { "type": ["integer", "number", "null"] },
           "sampleEveryMs": { "type": ["integer", "number", "null"] },
@@ -54,6 +71,40 @@
               "y": { "type": "number" },
               "width": { "type": "number" },
               "height": { "type": "number" }
+            }
+          },
+          "selectedTargetTrackId": { "type": ["string", "null"] },
+          "groundTruthFrames": {
+            "type": ["array", "null"],
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["timeMs"],
+              "properties": {
+                "timeMs": { "type": ["integer", "number"] },
+                "plateBox": {
+                  "type": ["object", "null"],
+                  "additionalProperties": false,
+                  "required": ["x", "y", "width", "height"],
+                  "properties": {
+                    "x": { "type": "number" },
+                    "y": { "type": "number" },
+                    "width": { "type": "number" },
+                    "height": { "type": "number" }
+                  }
+                },
+                "targetBox": {
+                  "type": ["object", "null"],
+                  "additionalProperties": false,
+                  "required": ["x", "y", "width", "height"],
+                  "properties": {
+                    "x": { "type": "number" },
+                    "y": { "type": "number" },
+                    "width": { "type": "number" },
+                    "height": { "type": "number" }
+                  }
+                }
+              }
             }
           },
           "analysisOptions": { "type": ["object", "null"] },

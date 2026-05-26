@@ -14,7 +14,7 @@ from profile_sweep import apply_analysis_profile_to_suite, build_profile_sweep_p
 from reporting import create_run_id, write_run_artifacts
 from runtime_bridge import RuntimeInvokeError, run_benchmark_suite
 from validation import ValidationError, inspect_suite_payload, validate_profile_catalog_file, validate_suite_file, validate_suite_payload
-from workspace import default_runtime_root, default_workspace_root, ensure_workspace
+from workspace import default_run_root, default_runtime_root, default_workspace_root, ensure_workspace
 
 
 def build_parser() -> argparse.ArgumentParser:

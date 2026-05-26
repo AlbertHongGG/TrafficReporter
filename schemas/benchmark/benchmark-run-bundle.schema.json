@@ -119,6 +119,7 @@
       "required": [
         "id",
         "mode",
+        "expectationKind",
         "expectedText",
         "bestText",
         "bestSource",
@@ -142,7 +143,13 @@
       "properties": {
         "id": { "type": "string", "minLength": 1 },
         "mode": { "type": "string", "enum": ["frame", "interval"] },
-        "expectedText": { "type": "string" },
+        "expectationKind": { "type": "string", "enum": ["readable", "unreadable"] },
+        "expectedText": {
+          "anyOf": [
+            { "type": "string" },
+            { "type": "null" }
+          ]
+        },
         "bestText": { "type": "string" },
         "bestSource": { "type": "string" },
         "allSources": { "type": "array", "items": { "type": "string" } },

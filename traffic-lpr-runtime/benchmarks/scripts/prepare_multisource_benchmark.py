@@ -35,7 +35,7 @@ from common import (
 
 def main() -> int:
     parser = argparse.ArgumentParser(description='Prepare multi-source hard-case benchmark manifests from public and local datasets.')
-    parser.add_argument('--datasets', nargs='+', default=['ccpd', 'uc3m-lp'], choices=['ccpd', 'uc3m-lp', 'aolp', 'ufpr-alpr'], help='Datasets to include in the generated benchmark.')
+    parser.add_argument('--datasets', nargs='+', default=['ccpd', 'uc3m-lp'], choices=['ccpd', 'uc3m-lp', 'aolp', 'ufpr-alpr', 'lp2025'], help='Datasets to include in the generated benchmark.')
     parser.add_argument('--per-category', type=int, default=20, help='How many unique cases to keep per hard-case category across sources.')
     parser.add_argument('--seed', type=int, default=7, help='Deterministic sampling seed.')
     parser.add_argument('--runtime-root', type=Path, default=Path(__file__).resolve().parents[2], help='traffic-lpr-runtime project root.')
@@ -46,6 +46,8 @@ def main() -> int:
     parser.add_argument('--uc3m-split', choices=['test', 'train', 'all'], default='test', help='Which UC3M split to sample from.')
     parser.add_argument('--aolp-root', type=Path, default=None, help='Path to the local AOLP dataset root.')
     parser.add_argument('--aolp-subsets', nargs='+', default=['ac', 'le', 'rp'], choices=['ac', 'le', 'rp'], help='Which AOLP subsets to include.')
+    parser.add_argument('--lp2025-root', type=Path, default=None, help='Path to the local LP2025 dataset root.')
+    parser.add_argument('--lp2025-split', choices=['train', 'val', 'test', 'all'], default='test', help='Which LP2025 split to sample from.')
     parser.add_argument('--ufpr-root', type=Path, default=None, help='Path to the local UFPR-ALPR dataset root.')
     parser.add_argument('--ufpr-split', choices=['training', 'testing', 'validation', 'all'], default='testing', help='Which UFPR split to sample from.')
     parser.add_argument('--ufpr-video-fps', type=int, default=10, help='Frame rate to use when materializing UFPR track videos for interval benchmarks.')
@@ -54,13 +56,14 @@ def main() -> int:
     runtime_root = args.runtime_root.resolve()
     paths = resolve_benchmark_paths(runtime_root)
     cache_dir = (args.cache_dir or paths.cache_root).resolve()
-    contains_local_datasets = any(dataset in {'aolp', 'ufpr-alpr'} for dataset in args.datasets)
+    contains_local_datasets = any(dataset in {'aolp', 'ufpr-alpr', 'lp2025'} for dataset in args.datasets)
     default_manifest_root = (paths.local_manifest_root / 'multisource') if contains_local_datasets else paths.public_multisource_manifest_root
     output_manifest = (args.output_manifest or (default_manifest_root / 'all.json')).resolve()
     output_images = (args.output_images or (paths.dataset_root / ('local-multisource' if contains_local_datasets else 'multisource-hardcases'))).resolve()
     split_output_dir = (args.split_output_dir or default_manifest_root).resolve()
     dataset_root = runtime_root.parent / 'datasets'
     aolp_root = (args.aolp_root or (dataset_root / 'aolp')).resolve()
+    lp2025_root = (args.lp2025_root or (dataset_root / 'LP2025')).resolve()
     ufpr_root = (args.ufpr_root or (dataset_root / 'ufpr-alpr')).resolve()
 
     archive_sources: dict[str, ArchiveSource] = {}
@@ -84,6 +87,12 @@ def main() -> int:
         archive_sources['aolp'] = archive_source
         all_samples.extend(samples)
         summaries['aolp'] = summary
+
+    if 'lp2025' in args.datasets:
+        archive_source, samples, summary = _load_lp2025(lp2025_root, args.lp2025_split)
+        archive_sources['lp2025'] = archive_source
+        all_samples.extend(samples)
+        summaries['lp2025'] = summary
 
     if 'ufpr-alpr' in args.datasets:
         archive_source, samples, summary = _load_ufpr(ufpr_root, args.ufpr_split, args.ufpr_video_fps)
@@ -146,6 +155,7 @@ def _load_ccpd(cache_dir: Path) -> tuple[ArchiveSource, list[BenchmarkSourceSamp
             dataset_key='ccpd',
             dataset_name='CCPD subset 30k',
             archive_member=sample.archive_name,
+            expectation_kind='readable',
             expected_text=sample.expected_text,
             bbox=(sample.x1, sample.y1, sample.x2, sample.y2),
             split=sample.subset,
@@ -221,6 +231,7 @@ def _load_aolp(root: Path, subsets: list[str]) -> tuple[ArchiveSource, list[Benc
                 dataset_key='aolp',
                 dataset_name='AOLP',
                 archive_member=relative_image_path,
+                expectation_kind='readable',
                 expected_text=expected_text,
                 bbox=bbox,
                 split=subset_tag,
@@ -247,6 +258,104 @@ def _load_aolp(root: Path, subsets: list[str]) -> tuple[ArchiveSource, list[Benc
         'sampleCount': len(raw_samples),
         'subsetCounts': dict(subset_counts),
         'skippedSamples': skipped,
+        'thresholds': thresholds,
+        'sourceRoot': str(root),
+    }
+    return ArchiveSource(kind='filesystem', location=str(root)), raw_samples, summary
+
+
+def _load_lp2025(root: Path, split: str) -> tuple[ArchiveSource, list[BenchmarkSourceSample], dict[str, Any]]:
+    if not root.exists():
+        raise FileNotFoundError(f'LP2025 dataset root was not found: {root}')
+
+    split_names = ['train', 'val', 'test'] if split == 'all' else [split]
+    raw_samples: list[BenchmarkSourceSample] = []
+    split_counts: Counter[str] = Counter()
+    expectation_counts: Counter[str] = Counter()
+    skipped_images = 0
+    skipped_labels = 0
+
+    for split_name in split_names:
+        split_dir = root / split_name
+        image_dir = split_dir / 'images'
+        label_dir = split_dir / 'labels_gd'
+        if not image_dir.exists() or not label_dir.exists():
+            raise FileNotFoundError(f'LP2025 split is incomplete: {split_dir}')
+
+        image_paths = sorted(
+            image_dir.glob('*.jpg'),
+            key=lambda path: (0, int(path.stem)) if path.stem.isdigit() else (1, path.stem),
+        )
+        for image_path in image_paths:
+            image = cv2.imread(str(image_path))
+            if image is None:
+                skipped_images += 1
+                continue
+
+            label_path = label_dir / f'{image_path.stem}.txt'
+            if not label_path.exists():
+                skipped_images += 1
+                continue
+
+            annotations = _parse_lp2025_annotations(label_path.read_text(encoding='utf-8', errors='ignore'), image.shape[1], image.shape[0])
+            if not annotations:
+                skipped_images += 1
+                continue
+
+            brightness = _compute_brightness(image)
+            relative_image_path = image_path.relative_to(root).as_posix()
+            for annotation in annotations:
+                bbox = annotation.get('bbox')
+                if bbox is None:
+                    skipped_labels += 1
+                    continue
+                blur_score = _compute_blur_score(image, bbox)
+                plate_area_ratio = _compute_plate_area_ratio(bbox, image.shape[1], image.shape[0])
+                expectation_kind = str(annotation['expectation_kind'])
+                expected_text = annotation.get('expected_text')
+                label_index = int(annotation['label_index'])
+                tags = ['local-dataset', 'lp2025', 'taiwan', split_name]
+                tags.append('unreadable' if expectation_kind == 'unreadable' else 'readable')
+                split_counts[split_name] += 1
+                expectation_counts[expectation_kind] += 1
+                raw_samples.append(BenchmarkSourceSample(
+                    dataset_key='lp2025',
+                    dataset_name='LP2025',
+                    archive_member=relative_image_path,
+                    expectation_kind=expectation_kind,
+                    expected_text=expected_text,
+                    bbox=bbox,
+                    split=split_name,
+                    brightness=brightness,
+                    blur_score=blur_score,
+                    plate_area_ratio=plate_area_ratio,
+                    angle_degrees=annotation.get('angle_degrees'),
+                    tags=tags,
+                    instance_id=f'{image_path.stem}-{label_index}',
+                    country_hints=['TW'],
+                    metadata={
+                        'dataset': 'LP2025',
+                        'split': split_name,
+                        'relativeImagePath': relative_image_path,
+                        'labelIndex': label_index,
+                        'rawLabelText': annotation.get('raw_label'),
+                        'expectationKind': expectation_kind,
+                        'bbox': {'x1': bbox[0], 'y1': bbox[1], 'x2': bbox[2], 'y2': bbox[3]},
+                    },
+                ))
+
+    thresholds = _build_image_thresholds(raw_samples)
+    for sample in raw_samples:
+        _add_image_hard_case_tags(sample, thresholds)
+
+    summary = {
+        'dataset': 'LP2025',
+        'sampleCount': len(raw_samples),
+        'split': split,
+        'splitCounts': dict(split_counts),
+        'expectationCounts': dict(expectation_counts),
+        'skippedImages': skipped_images,
+        'skippedLabels': skipped_labels,
         'thresholds': thresholds,
         'sourceRoot': str(root),
     }
@@ -374,6 +483,7 @@ def _build_ufpr_track_sample(
         dataset_key='ufpr-alpr',
         dataset_name='UFPR-ALPR',
         archive_member=track_dir.relative_to(dataset_root).as_posix(),
+        expectation_kind='readable',
         expected_text=expected_text,
         bbox=anchor_frame['plateBBox'],
         split=split_name,
@@ -474,6 +584,7 @@ def _load_uc3m(split: str) -> tuple[ArchiveSource, list[BenchmarkSourceSample], 
                 dataset_key='uc3m-lp',
                 dataset_name='UC3M-LP',
                 archive_member=image_member,
+                expectation_kind='readable',
                 expected_text=expected_text,
                 bbox=bbox,
                 split=_resolve_uc3m_split(image_member),
@@ -514,6 +625,54 @@ def _parse_aolp_bbox(raw_text: str, image_width: int, image_height: int) -> tupl
     x1, x2 = sorted((values[0], values[2]))
     y1, y2 = sorted((values[1], values[3]))
     return _clamp_bbox((x1, y1, x2, y2), image_width, image_height)
+
+
+def _parse_lp2025_annotations(raw_text: str, image_width: int, image_height: int) -> list[dict[str, Any]]:
+    annotations: list[dict[str, Any]] = []
+    for label_index, raw_line in enumerate(raw_text.splitlines(), start=1):
+        line = raw_line.strip()
+        if not line:
+            continue
+        parts = line.split()
+        if len(parts) < 9:
+            continue
+        raw_label = parts[0]
+        try:
+            points = [
+                (float(parts[index]), float(parts[index + 1]))
+                for index in range(1, 9, 2)
+            ]
+        except ValueError:
+            continue
+
+        expectation_kind, expected_text = _parse_lp2025_label_token(raw_label)
+        xs = [point[0] for point in points]
+        ys = [point[1] for point in points]
+        bbox = _clamp_bbox((int(min(xs)), int(min(ys)), int(max(xs)), int(max(ys))), image_width, image_height)
+        annotations.append({
+            'label_index': label_index,
+            'raw_label': raw_label,
+            'expectation_kind': expectation_kind,
+            'expected_text': expected_text,
+            'bbox': bbox,
+            'angle_degrees': _polygon_tilt_degrees(points),
+        })
+    return annotations
+
+
+def _parse_lp2025_label_token(raw_label: str) -> tuple[str, str | None]:
+    normalized_label = raw_label.strip()
+    if not normalized_label:
+        return 'unreadable', None
+
+    upper_label = normalized_label.upper()
+    if upper_label in {'_', 'NONE', 'NULL', 'N/A', 'NA'}:
+        return 'unreadable', None
+
+    expected_text = normalize_expected_text(normalized_label)
+    if not expected_text:
+        return 'unreadable', None
+    return 'readable', expected_text
 
 
 def _parse_ufpr_annotation(raw_text: str, image_width: int, image_height: int) -> dict[str, Any] | None:
@@ -951,7 +1110,7 @@ def _materialize_manifest(
                 hardness = sample.hardness_score()
                 metadata = dict(sample.metadata)
                 metadata.setdefault('split', sample.split)
-                metadata.update({'dominantCategory': category, 'hardnessScore': hardness, 'sourceMode': sample.case_mode})
+                metadata.update({'dominantCategory': category, 'hardnessScore': hardness, 'sourceMode': sample.case_mode, 'expectationKind': sample.expectation_kind})
                 case_payload: dict[str, Any] = {
                     'id': f'{sample.dataset_key}-{category}-{index:03d}',
                     'sourcePath': destination.resolve().as_posix(),
@@ -961,10 +1120,13 @@ def _materialize_manifest(
                     'targetVehicleKind': str(metadata.get('vehicleType') or 'vehicle'),
                     'selectedTargetBox': build_marker_rect(sample.target_bbox, width, height),
                     'countryHints': sample.country_hints or _default_country_hints(sample.dataset_key),
-                    'expectedText': sample.expected_text,
                     'tags': case_tags,
                     'metadata': metadata,
                 }
+                if sample.expectation_kind == 'unreadable':
+                    case_payload['expectation'] = {'kind': 'unreadable'}
+                elif sample.expected_text:
+                    case_payload['expectedText'] = sample.expected_text
                 ground_truth_plate_box = build_marker_rect(sample.bbox, width, height)
                 if ground_truth_plate_box is not None:
                     case_payload['groundTruthPlateBox'] = ground_truth_plate_box
@@ -1119,6 +1281,8 @@ def _decode_archive_image(archive: Any, member_name: str) -> Any | None:
 
 def _default_country_hints(dataset_key: str) -> list[str]:
     if dataset_key == 'aolp':
+        return ['TW']
+    if dataset_key == 'lp2025':
         return ['TW']
     if dataset_key == 'uc3m-lp':
         return ['ES', 'EU']

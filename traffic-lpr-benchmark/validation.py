@@ -5,7 +5,13 @@ import json
 from pathlib import Path
 from typing import Any
 
-from models import BenchmarkCase, BenchmarkSuite
+from models import (
+    BenchmarkCase,
+    BenchmarkSuite,
+    READABLE_EXPECTATION_KIND,
+    normalize_expectation_kind,
+    resolve_case_expectation,
+)
 from registry import build_suite_registry, summarize_suite_registry
 from schema_registry import load_shared_schema
 from schema_validation import SchemaValidationError, validate_payload
@@ -81,6 +87,24 @@ def validate_suite_payload(payload: dict[str, Any], source: str = 'suite') -> No
 
 def _semantic_case_errors(case: BenchmarkCase, suite_analysis_profile_id: str | None, case_source: str) -> list[str]:
     errors: list[str] = []
+    expectation_payload = case.payload.get('expectation') if isinstance(case.payload.get('expectation'), dict) else None
+    expectation_kind, expected_text = resolve_case_expectation(case.payload)
+    if expectation_kind == READABLE_EXPECTATION_KIND and expected_text is None:
+        errors.append(f'{case_source} readable expectation requires expectedText or expectation.text')
+    if expectation_payload is not None:
+        declared_kind = normalize_expectation_kind(expectation_payload.get('kind'))
+        if declared_kind is None:
+            errors.append(f'{case_source}.expectation.kind must be one of ["readable", "unreadable"]')
+        elif declared_kind == READABLE_EXPECTATION_KIND:
+            declared_text = _normalize_expectation_text(expectation_payload.get('text'))
+            payload_text = _normalize_expectation_text(case.payload.get('expectedText'))
+            if declared_text is None and payload_text is None:
+                errors.append(f'{case_source}.expectation.text is required for readable expectations when expectedText is absent')
+            if declared_text is not None and payload_text is not None and declared_text != payload_text:
+                errors.append(f'{case_source}.expectation.text must match expectedText when both are declared')
+        elif _normalize_expectation_text(expectation_payload.get('text')) is not None:
+            errors.append(f'{case_source}.expectation.text must be omitted for unreadable expectations')
+
     metadata = case.payload.get('metadata') if isinstance(case.payload.get('metadata'), dict) else None
     if metadata is None:
         errors.append(f'{case_source}.metadata is required for benchmark semantics')
@@ -163,6 +187,13 @@ def _coerce_optional_int(value: Any) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _normalize_expectation_text(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = ''.join(character for character in value.strip().upper() if character.isalnum())
+    return normalized or None
 
 
 def inspect_suite_payload(payload: dict[str, Any], base_dir: Path | None = None) -> dict[str, Any]:

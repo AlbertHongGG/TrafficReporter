@@ -10,6 +10,10 @@ from traffic_lpr_runtime.domain.text import character_error_rate, normalize_plat
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect
 
 
+READABLE_EXPECTATION_KIND = 'readable'
+UNREADABLE_EXPECTATION_KIND = 'unreadable'
+
+
 class BenchmarkRunWorkflow:
     def __init__(
         self,
@@ -77,7 +81,7 @@ class BenchmarkRunWorkflow:
             case_id = str(case_payload.get('id') or f'case-{index + 1}')
             if case_id in completed_case_ids:
                 continue
-            expected_text = normalize_plate_text(case_payload.get('expectedText'))
+            expectation_kind, expected_text = _resolve_case_expectation(case_payload)
             case_metadata = dict(case_payload.get('metadata') or {})
             timer_started = time.perf_counter()
             request_payload = _build_case_request(case_payload, run_id=run_id, artifact_root=artifact_root, case_id=case_id)
@@ -98,12 +102,13 @@ class BenchmarkRunWorkflow:
             best_confidence = _candidate_confidence(candidates[0]) if candidates else 0.0
             second_confidence = _candidate_confidence(candidates[1]) if len(candidates) > 1 else 0.0
             accepted_margin = max(0.0, best_confidence - second_confidence)
-            exact_match = bool(expected_text and best_text == expected_text)
-            top3_match = bool(expected_text and expected_text in ranked_texts[:3])
-            case_character_error_rate = character_error_rate(best_text, expected_text)
+            exact_match = _matches_expectation(expectation_kind, expected_text, best_text)
+            top3_match = _top3_matches_expectation(expectation_kind, expected_text, ranked_texts[:3])
+            case_character_error_rate = _expectation_character_error_rate(expectation_kind, expected_text, best_text)
             localization = _evaluate_localization(case_payload, response)
-            track_metrics_case = _evaluate_track_consistency(response, expected_text) if mode != 'frame' else None
+            track_metrics_case = _evaluate_track_consistency(response, expectation_kind, expected_text) if mode != 'frame' else None
             failure_reason = _classify_failure_reason(
+                expectation_kind,
                 exact_match,
                 accepted_margin,
                 localization,
@@ -122,6 +127,7 @@ class BenchmarkRunWorkflow:
                 {
                     'id': case_id,
                     'mode': mode,
+                    'expectationKind': expectation_kind,
                     'expectedText': expected_text,
                     'bestText': best_text,
                     'bestSource': best_source,
@@ -565,18 +571,26 @@ def _evaluate_localization(case_payload: dict[str, Any], response: dict[str, Any
 
 
 def _evaluate_interval_localization(sample_payloads: list[Any], ground_truth_frames: list[Any], tolerance_ms: int) -> dict[str, Any]:
+    valid_samples = [sample for sample in sample_payloads if isinstance(sample, dict)]
+    valid_ground_truth_frames = [frame for frame in ground_truth_frames if isinstance(frame, dict)]
     matched_frames = 0
     plate_ious: list[float] = []
     target_ious: list[float] = []
     plate_hits = 0
     target_hits = 0
+    used_sample_indexes: set[int] = set()
 
-    for sample_payload in sample_payloads:
-        if not isinstance(sample_payload, dict):
+    for matched_ground_truth in valid_ground_truth_frames:
+        sample_index = _match_sample_index_for_ground_truth(
+            int(matched_ground_truth.get('timeMs') or 0),
+            valid_samples,
+            tolerance_ms,
+            used_sample_indexes,
+        )
+        if sample_index is None:
             continue
-        matched_ground_truth = _match_ground_truth_frame(int(sample_payload.get('timeMs') or 0), ground_truth_frames, tolerance_ms)
-        if matched_ground_truth is None:
-            continue
+        used_sample_indexes.add(sample_index)
+        sample_payload = valid_samples[sample_index]
         matched_frames += 1
         predicted_plate_box = _rect_from_payload(sample_payload.get('plateBox'))
         predicted_target_box = _rect_from_payload(sample_payload.get('targetBox'))
@@ -594,7 +608,7 @@ def _evaluate_interval_localization(sample_payloads: list[Any], ground_truth_fra
             if target_iou >= 0.5:
                 target_hits += 1
 
-    ground_truth_count = len(ground_truth_frames)
+    ground_truth_count = len(valid_ground_truth_frames)
     return {
         'groundTruthFrameCount': ground_truth_count,
         'matchedFrameCount': matched_frames,
@@ -605,22 +619,27 @@ def _evaluate_interval_localization(sample_payloads: list[Any], ground_truth_fra
     }
 
 
-def _match_ground_truth_frame(time_ms: int, ground_truth_frames: list[Any], tolerance_ms: int) -> dict[str, Any] | None:
-    best_entry: dict[str, Any] | None = None
+def _match_sample_index_for_ground_truth(
+    time_ms: int,
+    sample_payloads: list[dict[str, Any]],
+    tolerance_ms: int,
+    used_sample_indexes: set[int],
+) -> int | None:
+    best_index: int | None = None
     best_distance: int | None = None
-    for entry in ground_truth_frames:
-        if not isinstance(entry, dict):
+    for index, sample_payload in enumerate(sample_payloads):
+        if index in used_sample_indexes:
             continue
-        distance = abs(int(entry.get('timeMs') or 0) - time_ms)
+        distance = abs(int(sample_payload.get('timeMs') or 0) - time_ms)
         if best_distance is None or distance < best_distance:
             best_distance = distance
-            best_entry = entry
+            best_index = index
     if best_distance is None or best_distance > max(tolerance_ms, 1):
         return None
-    return best_entry
+    return best_index
 
 
-def _evaluate_track_consistency(response: dict[str, Any], expected_text: str) -> dict[str, Any] | None:
+def _evaluate_track_consistency(response: dict[str, Any], expectation_kind: str, expected_text: str | None) -> dict[str, Any] | None:
     sample_payloads = [sample for sample in (response.get('samples') or []) if isinstance(sample, dict)]
     if not sample_payloads:
         return None
@@ -629,16 +648,13 @@ def _evaluate_track_consistency(response: dict[str, Any], expected_text: str) ->
     text_counts: dict[str, int] = {}
     exact_matches = 0
     for sample in sample_payloads:
-        top_candidate = (sample.get('candidates') or [None])[0]
-        if not isinstance(top_candidate, dict):
-            continue
-        normalized_text = normalize_plate_text(top_candidate.get('text'))
-        if not normalized_text:
+        normalized_text = _sample_top_candidate_text(sample)
+        if expectation_kind != UNREADABLE_EXPECTATION_KIND and not normalized_text:
             continue
         sample_time_ms = int(sample.get('timeMs') or 0)
         ranked_texts.append((sample_time_ms, normalized_text))
         text_counts[normalized_text] = text_counts.get(normalized_text, 0) + 1
-        if expected_text and normalized_text == expected_text:
+        if _matches_expectation(expectation_kind, expected_text, normalized_text):
             exact_matches += 1
 
     if not ranked_texts:
@@ -658,18 +674,19 @@ def _evaluate_track_consistency(response: dict[str, Any], expected_text: str) ->
             prediction_switch_count += 1
 
     majority_text = max(text_counts.items(), key=lambda entry: (entry[1], len(entry[0])))[0]
-    time_to_first_correct_ms = next((time_ms for time_ms, text in ranked_texts if expected_text and text == expected_text), None)
+    time_to_first_correct_ms = next((time_ms for time_ms, text in ranked_texts if _matches_expectation(expectation_kind, expected_text, text)), None)
     return {
         'sampleCount': len(sample_payloads),
         'predictionSwitchCount': prediction_switch_count,
         'majorityText': majority_text,
-        'majorityExactMatch': bool(expected_text and majority_text == expected_text),
+        'majorityExactMatch': _matches_expectation(expectation_kind, expected_text, majority_text),
         'sampleExactMatchRate': exact_matches / max(len(ranked_texts), 1),
         'timeToFirstCorrectMs': time_to_first_correct_ms,
     }
 
 
 def _classify_failure_reason(
+    expectation_kind: str,
     exact_match: bool,
     accepted_margin: float,
     localization: dict[str, Any],
@@ -678,6 +695,8 @@ def _classify_failure_reason(
 ) -> str:
     if exact_match:
         return 'correct'
+    if expectation_kind == UNREADABLE_EXPECTATION_KIND:
+        return 'unexpected-read'
     if isinstance(localization.get('targetRecall'), (int, float)) and float(localization['targetRecall']) <= 0.25:
         return 'target-missed'
     if isinstance(localization.get('plateRecall'), (int, float)) and float(localization['plateRecall']) <= 0.25:
@@ -725,6 +744,52 @@ def _has_candidate_disagreement(response: dict[str, Any], accepted_margin: float
         if normalized_text:
             observed_texts.add(normalized_text)
     return len(observed_texts) >= 3
+
+
+def _resolve_case_expectation(case_payload: dict[str, Any]) -> tuple[str, str | None]:
+    expectation_payload = case_payload.get('expectation') if isinstance(case_payload.get('expectation'), dict) else None
+    expected_text = normalize_plate_text(case_payload.get('expectedText'))
+    if expectation_payload is None:
+        if expected_text:
+            return READABLE_EXPECTATION_KIND, expected_text
+        return UNREADABLE_EXPECTATION_KIND, None
+
+    expectation_kind = str(expectation_payload.get('kind') or '').strip().lower()
+    if expectation_kind == READABLE_EXPECTATION_KIND:
+        expectation_text = normalize_plate_text(expectation_payload.get('text'))
+        return READABLE_EXPECTATION_KIND, expectation_text or expected_text or None
+    if expectation_kind == UNREADABLE_EXPECTATION_KIND:
+        return UNREADABLE_EXPECTATION_KIND, None
+    if expected_text:
+        return READABLE_EXPECTATION_KIND, expected_text
+    return UNREADABLE_EXPECTATION_KIND, None
+
+
+def _matches_expectation(expectation_kind: str, expected_text: str | None, observed_text: str) -> bool:
+    if expectation_kind == UNREADABLE_EXPECTATION_KIND:
+        return not observed_text
+    return bool(expected_text and observed_text == expected_text)
+
+
+def _top3_matches_expectation(expectation_kind: str, expected_text: str | None, observed_texts: list[str]) -> bool:
+    if expectation_kind == UNREADABLE_EXPECTATION_KIND:
+        return not any(observed_texts)
+    return bool(expected_text and expected_text in observed_texts)
+
+
+def _expectation_character_error_rate(expectation_kind: str, expected_text: str | None, observed_text: str) -> float:
+    if expectation_kind == UNREADABLE_EXPECTATION_KIND:
+        return 0.0 if not observed_text else 1.0
+    if not expected_text:
+        return 0.0 if not observed_text else 1.0
+    return character_error_rate(observed_text, expected_text)
+
+
+def _sample_top_candidate_text(sample_payload: dict[str, Any]) -> str:
+    top_candidate = (sample_payload.get('candidates') or [None])[0]
+    if not isinstance(top_candidate, dict):
+        return ''
+    return normalize_plate_text(top_candidate.get('text'))
 
 
 def _rect_from_payload(payload: Any) -> NormalizedRect | None:
