@@ -4,26 +4,29 @@ Build benchmarks around target-centric hard cases from moving-camera footage.
 
 ## Layout
 
-- `benchmarks/scripts/` stores generator entrypoints and shared helpers.
-- `benchmarks/manifests/templates/` stores hand-authored templates such as the local sample manifest.
-- `benchmarks/manifests/public/` stores committed public benchmark manifests.
+- `benchmarks/config/` stores curated official-suite selection policies.
+- `benchmarks/scripts/` stores generator entrypoints and shared preparation helpers.
+- `benchmarks/manifests/templates/` stores hand-authored templates such as the local dashcam sample manifest.
+- `benchmarks/manifests/public/` stores checked-in legacy public manifests for exploratory or compatibility workflows.
 - `../.runtime/cache/benchmark/cache/` stores disposable download caches.
-- `../.runtime/cache/benchmark/datasets/` stores materialized benchmark images referenced by generated manifests.
-- `../.runtime/cache/benchmark/manifests/local/` stores generated machine-local manifests.
+- `../.runtime/cache/benchmark/datasets/` stores materialized benchmark images and interval clips.
+- `../.runtime/cache/benchmark/manifests/local/official/` stores generated official local manifests.
+- `../.runtime/cache/benchmark/manifests/public/official/` stores generated official public manifests.
+- `../.runtime/cache/benchmark/suites/official/` stores imported benchmark-tool suites for the official gates.
 
-Keep only reusable benchmark definitions under `benchmarks/`. Smoke outputs, extracted images, transient downloads, and one-off analysis artifacts belong under `.runtime/` and can be deleted safely.
+Keep only reusable benchmark definitions under `benchmarks/`. Generated manifests, extracted images, remote downloads, smoke outputs, and one-off analysis artifacts belong under `.runtime/` and can be deleted safely.
 
 Recommended annotation fields per case:
 
 - `id`: stable case identifier
 - `mode`: `frame` or `interval`
-- `sourcePath`: absolute path to the original video
+- `sourcePath`: absolute path to the original media
 - `interval`: the narrowest useful time window around the target vehicle
 - `anchorTimeMs`: frame where the target vehicle is easiest to select
 - `selectedTargetBox`: normalized vehicle box on the anchor frame
 - `expectedText`: normalized plate text without punctuation
-- `countryHints`: `['TW']` for Taiwan-first OCR priors
-- `tags`: conditions such as `night`, `blur`, `angle`, `small-plate`, `glare`, `occlusion`, `moving-camera`
+- `countryHints`: country priors such as `['TW']`, `['ES', 'EU']`, or `['BR']`
+- `tags`: conditions such as `blur`, `angle`, `small-plate`, `weather`, `low-light`, `high-exposure`, and `moving-camera`
 - `analysisOptions`: ablation switches for tracker, fusion, restoration, and OCR comparison
 
 Suggested benchmark splits:
@@ -32,9 +35,9 @@ Suggested benchmark splits:
 - `holdout`: cases you do not inspect while tuning
 - `challenge`: worst failure cases that are allowed to be slow but should improve over time
 
-The runtime returns per-case exact match, top-3 match, and character error rate. Use those three together; exact match alone hides whether you are close or far from the right answer.
+The runtime returns per-case exact match, top-3 match, and character error rate. Use those together; exact match alone hides whether you are close or far from the right answer.
 
-The benchmark runner now also reports:
+The benchmark runner also reports:
 
 - plate / target localization recall and mean IoU when a manifest includes ground-truth boxes
 - confidence calibration bins plus expected calibration error
@@ -42,97 +45,43 @@ The benchmark runner now also reports:
 - interval-track stability signals such as prediction switch count, majority-vote exact match, and time-to-first-correct
 - failure taxonomy buckets such as `target-missed`, `plate-localization-missed`, `ocr-disagreement`, and `fusion-unstable`
 
-## Public Dataset Workflow
+## Official Suite Workflow
 
-For a repeatable public hard-case benchmark that does not depend on your own footage, prepare a CCPD-based frame benchmark with:
-
-```powershell
-cd traffic-lpr-runtime
-.\.venv\Scripts\python.exe benchmarks\scripts\prepare_public_benchmark.py --per-category 25
-```
-
-The script downloads the public `zenitsu09/ccpd-subset-30k` archive from Hugging Face into `../.runtime/cache/benchmark/cache/hf-hub/`, samples a balanced hard-case mix, extracts only the sampled images into `../.runtime/cache/benchmark/datasets/ccpd-hardcases/`, and writes `benchmarks/manifests/public/ccpd-hardcases.json`.
-
-The generated manifest emphasizes these categories:
-
-- `blur`: native `ccpd_blur` samples plus the highest-blur decile
-- `angle`: `ccpd_tilt` and `ccpd_rotate`
-- `challenge`: `ccpd_challenge`
-- `small-plate`: `ccpd_fn`
-- `weather`: `ccpd_weather`
-- `low-light`: `ccpd_db` plus the darkest brightness decile
-- `high-exposure`: the brightest decile
-
-Run the benchmark with:
+Generate the official local gates with:
 
 ```powershell
 cd traffic-lpr-runtime
-.\.venv\Scripts\python.exe -m traffic_lpr_runtime benchmark-run < benchmarks\manifests\public\ccpd-hardcases.json
+.\.venv\Scripts\python.exe benchmarks\scripts\prepare_official_local_benchmarks.py
 ```
 
-This public benchmark is image-based, so it measures the OCR, rectification, restoration, and ranking stack on hard cases without overfitting to your own video. Keep interval/video benchmarks separate when you want to evaluate tracker behavior.
+That workflow materializes the current official AOLP, LP2025, UFPR, and local dashcam suites into `.runtime/cache/benchmark/manifests/local/official/` and `.runtime/cache/benchmark/suites/official/`.
 
-## Multi-Source Workflow
-
-To reduce China-only bias and keep a second public domain in the loop, build a combined CCPD + UC3M-LP manifest with:
+Generate the official public gates with:
 
 ```powershell
 cd traffic-lpr-runtime
-.\.venv\Scripts\python.exe benchmarks\scripts\prepare_multisource_benchmark.py --datasets ccpd uc3m-lp --per-category 20 --uc3m-split test
+.\.venv\Scripts\python.exe benchmarks\scripts\prepare_official_public_benchmarks.py --uc3m-split test
 ```
 
-This workflow:
+That workflow turns the public runtime-cache-only sources into first-class official suites:
 
-- keeps the existing CCPD hard-case buckets for blur, angle, weather, low-light, and small plates
-- adds `UC3M-LP` as a European/Spanish counterweight so public evaluation is not dominated by Chinese plates
-- reads the UC3M-LP archive through HTTP range requests instead of requiring a full 4.5 GB download up front
-- emits a combined manifest plus three stratified manifests under `benchmarks/manifests/public/multisource/`:
-development, holdout, and challenge
+- `ccpd-readable-ocr`
+- `uc3m-readable-ocr`
 
-The combined output is written to `benchmarks/manifests/public/multisource/all.json`, and sampled images are extracted under `../.runtime/cache/benchmark/datasets/multisource-hardcases/`.
+CCPD is downloaded through the Hugging Face cache under `.runtime/cache/benchmark/cache/hf-hub/`. UC3M-LP is accessed through HTTP range requests and only the selected benchmark images are materialized under `.runtime/cache/benchmark/datasets/official/`.
 
-Run the resulting benchmark exactly the same way:
+After preparation, validate or run any official suite from the repo root with the benchmark tool:
 
 ```powershell
-cd traffic-lpr-runtime
-.\.venv\Scripts\python.exe -m traffic_lpr_runtime benchmark-run < benchmarks\manifests\public\multisource\all.json
+traffic-lpr-runtime\.venv\Scripts\python.exe traffic-lpr-benchmark\cli.py doctor --suite .runtime\cache\benchmark\suites\official\ccpd-readable-ocr.json
+traffic-lpr-runtime\.venv\Scripts\python.exe traffic-lpr-benchmark\cli.py run --suite .runtime\cache\benchmark\suites\official\ccpd-readable-ocr.json --run-id official-ccpd-readable-ocr
 ```
 
-Use the split manifests when you want to separate daily iteration from the harder review set:
+## Legacy and Exploratory Flows
 
-```powershell
-cd traffic-lpr-runtime
-.\.venv\Scripts\python.exe -m traffic_lpr_runtime benchmark-run < benchmarks\manifests\public\multisource\development.json
-```
+The following generators still exist, but they are no longer the main official gate pipeline:
 
-## Local AOLP + UFPR Workflow
+- `prepare_public_benchmark.py`: one-off checked-in CCPD hard-case manifest generation
+- `prepare_multisource_benchmark.py`: ad hoc mixed-source manifests and development / holdout / challenge slicing
 
-When the full local datasets already exist under `datasets/aolp/` and `datasets/ufpr-alpr/`, generate a mixed local benchmark with:
-
-```powershell
-cd traffic-lpr-runtime
-.\.venv\Scripts\python.exe benchmarks\scripts\prepare_multisource_benchmark.py --datasets aolp ufpr-alpr --per-category 12 --ufpr-split testing
-```
-
-This local workflow:
-
-- parses AOLP `Subset_AC|LE|RP` images plus localization / recognition text files directly from disk
-- preserves AOLP subset identity as `subset-ac`, `subset-le`, and `subset-rp` instead of flattening them into one score
-- materializes UFPR tracks into short local interval videos under `../.runtime/cache/benchmark/datasets/local-multisource/ufpr-alpr/tracks/`
-- emits machine-local manifests under `../.runtime/cache/benchmark/manifests/local/multisource/`
-- writes `groundTruthPlateBox`, `groundTruthTargetBox`, and `groundTruthFrames` into the manifest so `benchmark-run` can score localization and interval stability
-
-Run the resulting suite with:
-
-```powershell
-cd traffic-lpr-runtime
-.\.venv\Scripts\python.exe -m traffic_lpr_runtime benchmark-run < ..\.runtime\cache\benchmark\manifests\local\multisource\all.json
-```
-
-Recommended usage:
-
-- treat AOLP as the Taiwan-primary OCR / localization gate
-- treat UFPR-ALPR as the moving-camera tracking / fusion reliability gate
-- compare `development`, `holdout`, and `challenge` manifests separately instead of only watching the merged average
-
-The split manifests are stratified per dataset-and-category group, so they are not expected to be equal-sized thirds. `development` is usually the largest slice, while `challenge` keeps the hardest examples from each group.
+Use these when exploring new mixes or comparing ideas. Use the official generators when you need the maintained benchmark gates that map cleanly onto the dataset catalog and suite catalog.

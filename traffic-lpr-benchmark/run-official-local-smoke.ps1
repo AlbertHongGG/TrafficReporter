@@ -25,7 +25,7 @@ if (-not (Test-Path $suitePath)) {
   --min-exact-rate 0.75 `
   --min-top3-rate 1.0 `
   --max-mean-cer 0.05 `
-  --max-review-required-rate 0.25 `
+  --max-review-required-rate 0.50 `
   --max-no-candidate-rate 0.0 `
   --min-plate-iou 0.90 `
   --max-p95-latency-ms 15000

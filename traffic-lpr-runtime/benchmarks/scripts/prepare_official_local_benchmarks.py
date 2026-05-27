@@ -3,8 +3,10 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import math
 import sys
 from collections import Counter, defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
@@ -39,13 +41,13 @@ def main() -> int:
     )
     parser.add_argument('--runtime-root', type=Path, default=Path(__file__).resolve().parents[2], help='traffic-lpr-runtime project root.')
     parser.add_argument('--analysis-profile', default='precision', help='Analysis profile id to stamp onto imported benchmark suites.')
-    parser.add_argument('--per-category', type=int, default=1, help='How many cases to keep per hard-case category inside each official local suite.')
-    parser.add_argument('--max-cases', type=int, default=4, help='Maximum number of cases to keep per official local suite after category selection.')
-    parser.add_argument('--ufpr-split', choices=['training', 'testing', 'validation', 'all'], default='testing', help='UFPR split to use for the official moving-camera suite.')
-    parser.add_argument('--lp2025-split', choices=['train', 'val', 'test', 'all'], default='test', help='LP2025 split to use for the official readable OCR suite.')
+    parser.add_argument('--per-category', type=int, default=3, help='How many cases to keep per hard-case category inside each official local suite.')
+    parser.add_argument('--max-cases', type=int, default=24, help='Maximum number of cases to keep per official local suite after category selection.')
+    parser.add_argument('--ufpr-split', choices=['training', 'testing', 'validation', 'all'], default='all', help='UFPR split to use for the official moving-camera suite.')
+    parser.add_argument('--lp2025-split', choices=['train', 'val', 'test', 'all'], default='all', help='LP2025 split to use for the official readable OCR suite.')
     parser.add_argument('--ufpr-video-fps', type=int, default=10, help='Frame rate for materialized UFPR interval videos.')
-    parser.add_argument('--lp2025-scan-limit', type=int, default=600, help='Maximum number of LP2025 label instances to scan for the official local suites.')
-    parser.add_argument('--ufpr-track-limit', type=int, default=60, help='Maximum number of UFPR tracks to scan for the official local suites.')
+    parser.add_argument('--lp2025-scan-limit', type=int, default=2400, help='Maximum number of LP2025 label instances to scan for the official local suites.')
+    parser.add_argument('--ufpr-track-limit', type=int, default=180, help='Maximum number of UFPR tracks to scan for the official local suites.')
     args = parser.parse_args()
 
     runtime_root = args.runtime_root.resolve()
@@ -56,6 +58,7 @@ def main() -> int:
     dataset_root = (paths.dataset_root / 'official').resolve()
     catalog = build_dataset_source_catalog(repo_root)
     official_suites = {policy.suite_id: policy for policy in build_official_suite_catalog(repo_root)}
+    curation_policies = _load_curation_policies(Path(__file__).resolve().parents[1] / 'config' / 'official_local_curation.json')
 
     prepared_suites: dict[str, dict[str, Any]] = {}
     smoke_cases: list[dict[str, Any]] = []
@@ -65,7 +68,7 @@ def main() -> int:
             suite_id='aolp-readable-ocr',
             dataset_id='aolp',
             title='Official AOLP Readable OCR Gate',
-            loader=lambda roots: _load_aolp(roots['aolp'], ['ac', 'le', 'rp']),
+            loader=lambda roots: _load_aolp(roots['aolp'], _detect_available_aolp_subsets(roots['aolp'])),
             include_case=lambda sample: sample.expectation_kind == 'readable',
         ),
         OfficialLocalSuiteDefinition(
@@ -101,11 +104,30 @@ def main() -> int:
             f'[official-benchmark] loaded suite={definition.suite_id} rawSamples={len(raw_samples)}',
             flush=True,
         )
+        curation_policy = curation_policies.get(definition.suite_id, OfficialCurationPolicy())
+        candidate_samples = [sample for sample in raw_samples if definition.include_case(sample)]
+        eligible_samples = [
+            sample
+            for sample in candidate_samples
+            if curation_policy.allows(sample)
+        ]
         selected_samples = _select_official_samples(
-            [sample for sample in raw_samples if definition.include_case(sample)],
-            per_category=args.per_category,
-            max_cases=args.max_cases,
+            eligible_samples,
+            per_category=curation_policy.resolve_per_category(args.per_category),
+            max_cases=curation_policy.resolve_target_case_count(args.max_cases),
+            curation_policy=curation_policy,
         )
+        selection_status = _build_selection_status(
+            candidate_samples=candidate_samples,
+            eligible_samples=eligible_samples,
+            selected_samples=selected_samples,
+            curation_policy=curation_policy,
+        )
+        if selection_status['underfilled']:
+            print(
+                f"[official-benchmark] warning suite={definition.suite_id} selected={selection_status['selectedCaseCount']} minimum={selection_status['minimumCaseCount']} eligible={selection_status['eligibleCaseCount']}",
+                flush=True,
+            )
         print(
             f'[official-benchmark] selected suite={definition.suite_id} cases={len(selected_samples)}',
             flush=True,
@@ -121,6 +143,8 @@ def main() -> int:
                 'title': definition.title,
                 'officialPolicy': policy.to_payload() if policy is not None else None,
                 'loaderSummary': loader_summary,
+                'selectionStatus': selection_status,
+                'curationPolicy': curation_policy.to_payload(),
             }
         )
         _write_json(manifest_path, manifest_payload)
@@ -150,6 +174,8 @@ def main() -> int:
             'materializedSourcePaths': [str(case.get('sourcePath')) for case in manifest_payload.get('cases') or []],
             'selectedArchiveMembers': _selected_archive_members(selected_samples),
             'loaderSummary': loader_summary,
+            'selectionStatus': selection_status,
+            'curationPolicy': curation_policy.to_payload(),
         }
 
     local_dashcam_manifest_path = manifest_root / 'local-dashcam-tracking' / 'all.json'
@@ -215,8 +241,10 @@ def main() -> int:
                 'resolvedSourceRoot': str(resolved_root),
                 'protectedArchives': [str(path.resolve()) for path in policy.protected_paths],
                 'materializedRoot': str(materialized_root.resolve()) if materialized_root is not None else None,
-                'safeToDeleteExtractedRoot': bool(materialized_root is not None and materialized_root.exists()),
-                'reason': 'Official benchmark suites now reference materialized copies under .runtime/cache/benchmark/datasets/official/.',
+                'selectedArchiveMembers': list(matching_suite.get('selectedArchiveMembers') or []) if matching_suite else [],
+                'safeToTrimToSelectedMembers': bool(materialized_root is not None and materialized_root.exists()),
+                'restoreScript': str((Path(__file__).resolve().parent / 'restore_minimal_local_datasets.py').resolve()),
+                'reason': 'Trim the extracted dataset root down to the selected members needed by the official suites; do not treat this as a whole-root deletion recommendation.',
             }
         )
 
@@ -249,31 +277,168 @@ class OfficialLocalSuiteDefinition:
         self.include_case = include_case
 
 
+@dataclass(frozen=True)
+class OfficialCurationPolicy:
+    per_category: int | None = None
+    target_case_count: int | None = None
+    minimum_case_count: int = 0
+    excluded_archive_members: frozenset[str] = frozenset()
+    difficulty_band_targets: dict[str, int] | None = None
+
+    def resolve_per_category(self, fallback: int) -> int:
+        return self.per_category if self.per_category is not None else fallback
+
+    def resolve_target_case_count(self, fallback: int) -> int:
+        return self.target_case_count if self.target_case_count is not None else fallback
+
+    def allows(self, sample: BenchmarkSourceSample) -> bool:
+        return sample.archive_member not in self.excluded_archive_members
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            'perCategory': self.per_category,
+            'targetCaseCount': self.target_case_count,
+            'minimumCaseCount': self.minimum_case_count,
+            'excludedArchiveMembers': sorted(self.excluded_archive_members),
+            'difficultyBandTargets': dict(self.difficulty_band_targets or {}),
+        }
+
+
+def _load_curation_policies(path: Path | None) -> dict[str, OfficialCurationPolicy]:
+    if path is None:
+        return {}
+    resolved_path = path.resolve()
+    if not resolved_path.exists():
+        return {}
+
+    payload = json.loads(resolved_path.read_text(encoding='utf-8'))
+    suites = payload.get('suites') if isinstance(payload, dict) else None
+    if not isinstance(suites, dict):
+        return {}
+
+    policies: dict[str, OfficialCurationPolicy] = {}
+    for suite_id, raw_policy in suites.items():
+        if not isinstance(suite_id, str) or not isinstance(raw_policy, dict):
+            continue
+        excluded_members = frozenset(
+            str(member).strip()
+            for member in raw_policy.get('excludedArchiveMembers') or []
+            if str(member).strip()
+        )
+        policies[suite_id] = OfficialCurationPolicy(
+            per_category=_coerce_optional_int(raw_policy.get('perCategory')),
+            target_case_count=_coerce_optional_int(raw_policy.get('targetCaseCount')),
+            minimum_case_count=max(_coerce_optional_int(raw_policy.get('minimumCaseCount')) or 0, 0),
+            excluded_archive_members=excluded_members,
+            difficulty_band_targets=_coerce_band_targets(raw_policy.get('difficultyBandTargets')),
+        )
+    return policies
+
+
+def _coerce_optional_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _coerce_band_targets(value: Any) -> dict[str, int] | None:
+    if not isinstance(value, dict):
+        return None
+    normalized: dict[str, int] = {}
+    for band in ('easy', 'medium', 'hard'):
+        count = _coerce_optional_int(value.get(band))
+        if count is not None and count > 0:
+            normalized[band] = count
+    return normalized or None
+
+
+def _build_selection_status(
+    *,
+    candidate_samples: list[BenchmarkSourceSample],
+    eligible_samples: list[BenchmarkSourceSample],
+    selected_samples: list[BenchmarkSourceSample],
+    curation_policy: OfficialCurationPolicy,
+) -> dict[str, Any]:
+    target_case_count = curation_policy.target_case_count
+    minimum_case_count = max(curation_policy.minimum_case_count, 0)
+    candidate_case_count = len(candidate_samples)
+    selected_case_count = len(selected_samples)
+    eligible_case_count = len(eligible_samples)
+    return {
+        'candidateCaseCount': candidate_case_count,
+        'eligibleCaseCount': eligible_case_count,
+        'selectedCaseCount': selected_case_count,
+        'targetCaseCount': target_case_count,
+        'minimumCaseCount': minimum_case_count,
+        'excludedCaseCount': max(candidate_case_count - eligible_case_count, 0),
+        'candidateDifficultyBands': _count_difficulty_bands(candidate_samples),
+        'eligibleDifficultyBands': _count_difficulty_bands(eligible_samples),
+        'selectedDifficultyBands': _count_difficulty_bands(selected_samples),
+        'underfilled': minimum_case_count > 0 and selected_case_count < minimum_case_count,
+    }
+
+
+def _detect_available_aolp_subsets(root: Path | None) -> list[str]:
+    if root is None or not root.exists():
+        raise FileNotFoundError(f'AOLP dataset root was not found: {root}')
+
+    available: list[str] = []
+    for subset in ('ac', 'le', 'rp'):
+        subset_code = subset.upper()
+        subset_dir = root / f'Subset_{subset_code}'
+        canonical = subset_dir / 'Image'
+        nested = subset_dir / f'Subset_{subset_code}' / 'Image'
+        if canonical.exists() or nested.exists():
+            available.append(subset)
+    if not available:
+        raise FileNotFoundError(f'No AOLP subsets were found under: {root}')
+    return available
+
+
 def _load_lp2025_fast(root: Path | None, split: str, scan_limit: int) -> tuple[ArchiveSource, list[BenchmarkSourceSample], dict[str, Any]]:
     if root is None or not root.exists():
         raise FileNotFoundError(f'LP2025 dataset root was not found: {root}')
 
-    split_names = ['train', 'val', 'test'] if split == 'all' else [split]
+    requested_split_names = ['train', 'val', 'test'] if split == 'all' else [split]
+    split_names: list[str] = []
+    missing_split_names: list[str] = []
+    for split_name in requested_split_names:
+        split_dir = root / split_name
+        image_dir = split_dir / 'images'
+        label_dir = split_dir / 'labels_gd'
+        if image_dir.exists() and label_dir.exists():
+            split_names.append(split_name)
+            continue
+        if split == 'all':
+            missing_split_names.append(split_name)
+            continue
+        raise FileNotFoundError(f'LP2025 split is incomplete: {split_dir}')
+    if not split_names:
+        raise FileNotFoundError(f'LP2025 has no complete splits under: {root}')
+
     raw_samples: list[BenchmarkSourceSample] = []
     split_counts: Counter[str] = Counter()
     expectation_counts: Counter[str] = Counter()
     skipped_images = 0
     skipped_labels = 0
     limit_reached = False
+    per_split_limit = _resolve_per_split_limit(scan_limit, len(split_names))
 
     for split_name in split_names:
+        split_sample_count = 0
         split_dir = root / split_name
         image_dir = split_dir / 'images'
         label_dir = split_dir / 'labels_gd'
-        if not image_dir.exists() or not label_dir.exists():
-            raise FileNotFoundError(f'LP2025 split is incomplete: {split_dir}')
 
         image_paths = sorted(
             image_dir.glob('*.jpg'),
             key=lambda path: (0, int(path.stem)) if path.stem.isdigit() else (1, path.stem),
         )
         for image_path in image_paths:
-            if scan_limit > 0 and len(raw_samples) >= scan_limit:
+            if per_split_limit > 0 and split_sample_count >= per_split_limit:
                 limit_reached = True
                 break
 
@@ -295,7 +460,7 @@ def _load_lp2025_fast(root: Path | None, split: str, scan_limit: int) -> tuple[A
             brightness = _compute_brightness(image)
             relative_image_path = image_path.relative_to(root).as_posix()
             for annotation in annotations:
-                if scan_limit > 0 and len(raw_samples) >= scan_limit:
+                if per_split_limit > 0 and split_sample_count >= per_split_limit:
                     limit_reached = True
                     break
                 bbox = annotation.get('bbox')
@@ -311,6 +476,7 @@ def _load_lp2025_fast(root: Path | None, split: str, scan_limit: int) -> tuple[A
                 tags.append('unreadable' if expectation_kind == 'unreadable' else 'readable')
                 split_counts[split_name] += 1
                 expectation_counts[expectation_kind] += 1
+                split_sample_count += 1
                 raw_samples.append(BenchmarkSourceSample(
                     dataset_key='lp2025',
                     dataset_name='LP2025',
@@ -349,6 +515,8 @@ def _load_lp2025_fast(root: Path | None, split: str, scan_limit: int) -> tuple[A
         'dataset': 'LP2025',
         'sampleCount': len(raw_samples),
         'split': split,
+        'availableSplits': split_names,
+        'missingSplits': missing_split_names,
         'splitCounts': dict(split_counts),
         'expectationCounts': dict(expectation_counts),
         'skippedImages': skipped_images,
@@ -356,6 +524,7 @@ def _load_lp2025_fast(root: Path | None, split: str, scan_limit: int) -> tuple[A
         'thresholds': thresholds,
         'sourceRoot': str(root),
         'scanLimit': scan_limit,
+        'perSplitScanLimit': per_split_limit,
         'scanLimitReached': limit_reached,
     }
     return ArchiveSource(kind='filesystem', location=str(root)), raw_samples, summary
@@ -365,21 +534,35 @@ def _load_ufpr_fast(root: Path | None, split: str, video_fps: int, track_limit: 
     if root is None or not root.exists():
         raise FileNotFoundError(f'UFPR-ALPR dataset root was not found: {root}')
 
-    split_names = ['training', 'testing', 'validation'] if split == 'all' else [split]
+    requested_split_names = ['training', 'testing', 'validation'] if split == 'all' else [split]
+    split_names: list[str] = []
+    missing_split_names: list[str] = []
+    for split_name in requested_split_names:
+        split_dir = root / split_name
+        if split_dir.exists():
+            split_names.append(split_name)
+            continue
+        if split == 'all':
+            missing_split_names.append(split_name)
+            continue
+        raise FileNotFoundError(f'UFPR split was not found: {split_dir}')
+    if not split_names:
+        raise FileNotFoundError(f'UFPR-ALPR has no available splits under: {root}')
+
     raw_samples: list[BenchmarkSourceSample] = []
     split_counts: Counter[str] = Counter()
     camera_counts: Counter[str] = Counter()
     skipped_tracks = 0
     total_frames = 0
     limit_reached = False
+    per_split_limit = _resolve_per_split_limit(track_limit, len(split_names))
 
     for split_name in split_names:
+        split_track_count = 0
         split_dir = root / split_name
-        if not split_dir.exists():
-            raise FileNotFoundError(f'UFPR split was not found: {split_dir}')
         track_dirs = sorted((path for path in split_dir.iterdir() if path.is_dir()), key=lambda path: path.name)
         for track_dir in track_dirs:
-            if track_limit > 0 and len(raw_samples) >= track_limit:
+            if per_split_limit > 0 and split_track_count >= per_split_limit:
                 limit_reached = True
                 break
             sample = _build_ufpr_track_sample(root, split_name, track_dir, video_fps)
@@ -388,6 +571,7 @@ def _load_ufpr_fast(root: Path | None, split: str, video_fps: int, track_limit: 
                 continue
             raw_samples.append(sample)
             split_counts[split_name] += 1
+            split_track_count += 1
             total_frames += int(sample.metadata.get('frameCount') or 0)
             camera_label = str(sample.metadata.get('camera') or 'unknown')
             camera_counts[camera_label] += 1
@@ -403,6 +587,8 @@ def _load_ufpr_fast(root: Path | None, split: str, video_fps: int, track_limit: 
         'trackCount': len(raw_samples),
         'frameCount': total_frames,
         'split': split,
+        'availableSplits': split_names,
+        'missingSplits': missing_split_names,
         'splitCounts': dict(split_counts),
         'cameraCounts': dict(camera_counts),
         'skippedTracks': skipped_tracks,
@@ -410,6 +596,7 @@ def _load_ufpr_fast(root: Path | None, split: str, video_fps: int, track_limit: 
         'sourceRoot': str(root),
         'materializedVideoFps': video_fps,
         'trackLimit': track_limit,
+        'perSplitTrackLimit': per_split_limit,
         'trackLimitReached': limit_reached,
     }
     return ArchiveSource(kind='filesystem', location=str(root)), raw_samples, summary
@@ -420,30 +607,262 @@ def _select_official_samples(
     *,
     per_category: int,
     max_cases: int,
+    curation_policy: OfficialCurationPolicy,
 ) -> list[BenchmarkSourceSample]:
     selected: list[BenchmarkSourceSample] = []
     used_names: set[str] = set()
+    used_archive_members: set[str] = set()
+    band_targets = _resolve_difficulty_band_targets(curation_policy, max_cases)
+    bucket_targets = _resolve_bucket_targets(samples, max_cases)
 
-    for category in HARD_CASE_CATEGORIES:
-        candidates = [sample for sample in samples if category in sample.tags and sample.unique_name not in used_names]
-        candidates.sort(key=_sample_rank)
-        for sample in candidates[:max(per_category, 0)]:
+    while max_cases <= 0 or len(selected) < max_cases:
+        band_order = _selection_band_order(selected, band_targets)
+        category_order = _selection_category_order(selected, per_category)
+        bucket_order = _selection_bucket_order(selected, bucket_targets)
+        picked: list[BenchmarkSourceSample] = []
+
+        for band in band_order:
+            for category in category_order:
+                for bucket in bucket_order:
+                    candidates = [
+                        sample
+                        for sample in samples
+                        if sample.unique_name not in used_names
+                        and sample.archive_member not in used_archive_members
+                        and _sample_bucket(sample) == bucket
+                        and _difficulty_band(sample) == band
+                        and category in sample.tags
+                    ]
+                    picked = _pick_diverse_samples(
+                        candidates,
+                        1,
+                        selected,
+                        used_names,
+                        used_archive_members,
+                        descending=(band != 'easy'),
+                    )
+                    if picked:
+                        break
+                if picked:
+                    break
+            if picked:
+                break
+
+        if not picked:
+            for band in band_order:
+                for bucket in bucket_order:
+                    candidates = [
+                        sample
+                        for sample in samples
+                        if sample.unique_name not in used_names
+                        and sample.archive_member not in used_archive_members
+                        and _sample_bucket(sample) == bucket
+                        and _difficulty_band(sample) == band
+                    ]
+                    picked = _pick_diverse_samples(
+                        candidates,
+                        1,
+                        selected,
+                        used_names,
+                        used_archive_members,
+                        descending=(band != 'easy'),
+                    )
+                    if picked:
+                        break
+                if picked:
+                    break
+
+        if not picked:
+            for category in category_order:
+                for bucket in bucket_order:
+                    candidates = [
+                        sample
+                        for sample in samples
+                        if sample.unique_name not in used_names
+                        and sample.archive_member not in used_archive_members
+                        and _sample_bucket(sample) == bucket
+                        and category in sample.tags
+                    ]
+                    picked = _pick_diverse_samples(
+                        candidates,
+                        1,
+                        selected,
+                        used_names,
+                        used_archive_members,
+                        descending=True,
+                    )
+                    if picked:
+                        break
+                if picked:
+                    break
+
+        if not picked:
+            fallback = [
+                sample
+                for sample in samples
+                if sample.unique_name not in used_names and sample.archive_member not in used_archive_members
+            ]
+            picked = _pick_diverse_samples(fallback, 1, selected, used_names, used_archive_members, descending=True)
+
+        if not picked:
+            break
+        selected.extend(picked)
+
+    return selected[:max_cases] if max_cases > 0 else selected
+
+
+def _resolve_per_split_limit(limit: int, split_count: int) -> int:
+    if limit <= 0 or split_count <= 0:
+        return limit
+    return max(math.ceil(limit / split_count), 1)
+
+
+def _resolve_difficulty_band_targets(
+    curation_policy: OfficialCurationPolicy,
+    max_cases: int,
+) -> dict[str, int]:
+    configured = dict(curation_policy.difficulty_band_targets or {})
+    if configured:
+        return configured
+    if max_cases <= 0:
+        return {'hard': 0, 'medium': 0, 'easy': 0}
+    easy = max(1, max_cases // 6)
+    medium = max(1, max_cases // 3)
+    hard = max(max_cases - easy - medium, 1)
+    return {'hard': hard, 'medium': medium, 'easy': easy}
+
+
+def _count_difficulty_bands(samples: list[BenchmarkSourceSample]) -> dict[str, int]:
+    counts = {'easy': 0, 'medium': 0, 'hard': 0}
+    for sample in samples:
+        counts[_difficulty_band(sample)] += 1
+    return counts
+
+
+def _difficulty_band(sample: BenchmarkSourceSample) -> str:
+    score = sample.hardness_score()
+    if score >= 0.45:
+        return 'hard'
+    if score >= 0.2:
+        return 'medium'
+    return 'easy'
+
+
+def _selection_band_order(
+    selected_samples: list[BenchmarkSourceSample],
+    band_targets: dict[str, int],
+) -> list[str]:
+    current = _count_difficulty_bands(selected_samples)
+    return sorted(
+        ('hard', 'medium', 'easy'),
+        key=lambda band: (-_remaining_quota_ratio(current.get(band, 0), band_targets.get(band, 0)), {'hard': 0, 'medium': 1, 'easy': 2}[band]),
+    )
+
+
+def _selection_category_order(
+    selected_samples: list[BenchmarkSourceSample],
+    per_category: int,
+) -> list[str]:
+    current = _count_selected_categories(selected_samples)
+    return sorted(
+        HARD_CASE_CATEGORIES,
+        key=lambda category: (-_remaining_quota_ratio(current.get(category, 0), per_category), HARD_CASE_CATEGORIES.index(category)),
+    )
+
+
+def _selection_bucket_order(
+    selected_samples: list[BenchmarkSourceSample],
+    bucket_targets: dict[str, int],
+) -> list[str]:
+    current = Counter(_sample_bucket(sample) for sample in selected_samples)
+    return sorted(bucket_targets, key=lambda bucket: (-_remaining_quota_ratio(current.get(bucket, 0), bucket_targets[bucket]), bucket))
+
+
+def _resolve_bucket_targets(samples: list[BenchmarkSourceSample], max_cases: int) -> dict[str, int]:
+    buckets = sorted({_sample_bucket(sample) for sample in samples})
+    if not buckets:
+        return {}
+    if max_cases <= 0:
+        return {bucket: 0 for bucket in buckets}
+    base = max_cases // len(buckets)
+    remainder = max_cases % len(buckets)
+    targets: dict[str, int] = {}
+    for index, bucket in enumerate(buckets):
+        targets[bucket] = base + (1 if index < remainder else 0)
+    return targets
+
+
+def _remaining_quota_ratio(current_count: int, target_count: int) -> float:
+    if target_count <= 0:
+        return -1.0
+    remaining = max(target_count - current_count, 0)
+    return remaining / target_count
+
+
+def _count_selected_categories(samples: list[BenchmarkSourceSample]) -> dict[str, int]:
+    counts = {category: 0 for category in HARD_CASE_CATEGORIES}
+    for sample in samples:
+        for category in HARD_CASE_CATEGORIES:
+            if category in sample.tags:
+                counts[category] += 1
+    return counts
+
+
+def _pick_diverse_samples(
+    candidates: list[BenchmarkSourceSample],
+    count: int,
+    selected_samples: list[BenchmarkSourceSample],
+    used_names: set[str],
+    used_archive_members: set[str],
+    *,
+    descending: bool,
+) -> list[BenchmarkSourceSample]:
+    if count <= 0:
+        return []
+    buckets: dict[str, list[BenchmarkSourceSample]] = defaultdict(list)
+    for sample in candidates:
+        if sample.unique_name in used_names or sample.archive_member in used_archive_members:
+            continue
+        buckets[_sample_bucket(sample)].append(sample)
+
+    for bucket in buckets.values():
+        bucket.sort(key=lambda sample: (_sample_sort_score(sample, descending), str(sample.archive_member), str(sample.instance_id or '')))
+
+    selected: list[BenchmarkSourceSample] = []
+    existing_bucket_counts = Counter(_sample_bucket(sample) for sample in selected_samples)
+    bucket_order = sorted(buckets, key=lambda bucket_key: (existing_bucket_counts.get(bucket_key, 0), bucket_key))
+    while len(selected) < count and any(buckets.values()):
+        progressed = False
+        for bucket_key in bucket_order:
+            bucket = buckets[bucket_key]
+            while bucket and bucket[0].unique_name in used_names:
+                bucket.pop(0)
+            if not bucket:
+                continue
+            sample = bucket.pop(0)
             selected.append(sample)
             used_names.add(sample.unique_name)
-            if max_cases > 0 and len(selected) >= max_cases:
-                return selected
-
-    if max_cases <= 0:
-        return selected
-
-    fallback = [sample for sample in samples if sample.unique_name not in used_names]
-    fallback.sort(key=_sample_rank)
-    for sample in fallback:
-        selected.append(sample)
-        used_names.add(sample.unique_name)
-        if len(selected) >= max_cases:
+            used_archive_members.add(sample.archive_member)
+            existing_bucket_counts[bucket_key] += 1
+            progressed = True
+            if len(selected) >= count:
+                break
+        if not progressed:
             break
+        bucket_order = sorted(buckets, key=lambda bucket_key: (existing_bucket_counts.get(bucket_key, 0), bucket_key))
     return selected
+
+
+def _sample_bucket(sample: BenchmarkSourceSample) -> str:
+    camera = str(sample.metadata.get('camera') or '').strip()
+    if camera:
+        return f'{sample.split}:{camera}'
+    return str(sample.split)
+
+
+def _sample_sort_score(sample: BenchmarkSourceSample, descending: bool) -> float:
+    score = sample.hardness_score()
+    return -score if descending else score
 
 
 def _sample_rank(sample: BenchmarkSourceSample) -> tuple[float, str, str, str]:

@@ -572,15 +572,31 @@ def _build_ufpr_track_sample(
     )
 
 
-def _load_uc3m(split: str) -> tuple[ArchiveSource, list[BenchmarkSourceSample], dict[str, Any]]:
+def _load_uc3m(split: str, scan_limit: int = 0) -> tuple[ArchiveSource, list[BenchmarkSourceSample], dict[str, Any]]:
     with RemoteZip(UC3M_ARCHIVE_CONTENT_URL) as archive:
         split_members = _read_uc3m_split_members(archive, split)
-        image_members = {Path(name).stem: name for name in archive.namelist() if name.lower().endswith('.jpg')}
-        json_members = [name for name in archive.namelist() if name.lower().endswith('.json') and f'/{split}/' in name.replace('\\', '/').lower()]
+        archive_names = archive.namelist()
+        image_members = {Path(name).stem: name for name in archive_names if name.lower().endswith('.jpg')}
+        json_members = [name for name in archive_names if name.lower().endswith('.json') and f'/{split}/' in name.replace('\\', '/').lower()]
+        print(
+            f'[uc3m-loader] split={split} archiveEntries={len(archive_names)} jsonCandidates={len(json_members)} scanLimit={scan_limit or "all"}',
+            flush=True,
+        )
 
         raw_samples: list[BenchmarkSourceSample] = []
         skipped = 0
+        scanned_annotations = 0
+        limit_reached = False
         for json_member in json_members:
+            if scan_limit > 0 and scanned_annotations >= scan_limit:
+                limit_reached = True
+                break
+            scanned_annotations += 1
+            if scanned_annotations == 1 or scanned_annotations % 25 == 0:
+                print(
+                    f'[uc3m-loader] scanned={scanned_annotations} collected={len(raw_samples)} skipped={skipped}',
+                    flush=True,
+                )
             annotation = json.loads(archive.read(json_member).decode('utf-8'))
             image_stem = _resolve_uc3m_image_stem(annotation, json_member)
             if image_stem is None or image_stem not in split_members:
@@ -632,8 +648,11 @@ def _load_uc3m(split: str) -> tuple[ArchiveSource, list[BenchmarkSourceSample], 
     summary = {
         'dataset': 'UC3M-LP',
         'sampleCount': len(raw_samples),
+        'scannedAnnotations': scanned_annotations,
         'skippedSamples': skipped,
         'split': split,
+        'scanLimit': scan_limit,
+        'scanLimitReached': limit_reached,
         'thresholds': thresholds,
         'archiveAccess': 'remote-range',
     }
