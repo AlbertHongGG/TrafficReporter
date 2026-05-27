@@ -87,7 +87,59 @@ class ScriptedTargetCentricTracker(TargetCentricTracker):
         return dict(self._motion_hints_by_time.get(time_ms, {}))
 
 
+class RecordingTracker:
+    def __init__(self) -> None:
+        self.calls: list[list[int]] = []
+
+    def track(
+        self,
+        source_path: str,
+        interval: dict[str, int],
+        anchor_time_ms: int,
+        vehicle_kind: str,
+        selected_target_box: NormalizedRect | None,
+        sample_times: list[int],
+        options: AnalysisOptions,
+    ) -> tuple[list[TrackedRegion], dict[str, object]]:
+        del source_path, interval, anchor_time_ms, vehicle_kind, selected_target_box, options
+        self.calls.append(list(sample_times))
+        return (
+            [
+                make_region(f'track-{time_ms}', time_ms, 0.12 + ((time_ms - sample_times[0]) / 10000.0), 0.22, 0.12, 0.26)
+                for time_ms in sample_times
+            ],
+            {'trackerMode': 'botsort'},
+        )
+
+
 class TargetTrackingTests(unittest.TestCase):
+    def test_interval_tracking_requests_dense_trajectory_and_marks_evidence_samples(self) -> None:
+        tracker = RecordingTracker()
+        service = IntervalTrackingService(
+            frame_reader=FrameReaderStub(),
+            detect_targets=lambda frame, time_ms, vehicle_kind, marker_rect: [],
+            tracker=tracker,
+        )
+
+        tracked_frames, diagnostics = service.track_target_across_interval(
+            source_path='demo.mp4',
+            interval={'startMs': 1000, 'endMs': 1600},
+            anchor_time_ms=1200,
+            vehicle_kind='motorcycle',
+            selected_target_box=NormalizedRect(x=0.12, y=0.22, width=0.12, height=0.26),
+            sample_every_ms=200,
+            max_samples=4,
+            options=AnalysisOptions(tracker_mode='botsort'),
+        )
+
+        self.assertEqual(tracker.calls[0], [1000, 1100, 1200, 1300, 1400, 1500, 1600])
+        self.assertEqual(diagnostics['requestedTrackingFrameCount'], 7)
+        self.assertEqual(diagnostics['requestedEvidenceSampleCount'], 4)
+        self.assertEqual(diagnostics['trajectoryStepMs'], 100)
+        evidence_times = [frame.time_ms for frame in tracked_frames if frame.diagnostics.get('isEvidenceSample') is True]
+        self.assertEqual(evidence_times, [1000, 1200, 1400, 1600])
+        self.assertEqual(tracked_frames[2].diagnostics.get('trajectoryRole'), 'anchor')
+
     def test_anchor_uses_selected_detection_when_tracker_anchor_points_to_other_vehicle(self) -> None:
         selected_target_box = NormalizedRect(x=0.12, y=0.22, width=0.12, height=0.26)
         detections_by_time = {
@@ -348,6 +400,85 @@ class TargetTrackingTests(unittest.TestCase):
         self.assertFalse(diagnostics['terminatedEarly'])
         self.assertEqual(diagnostics['missedFrames'], 1)
         self.assertEqual(diagnostics['identityBreaks'], 0)
+
+    def test_ultralytics_tracking_recovers_before_and_after_anchor_without_hard_breaking(self) -> None:
+        selected_target_box = NormalizedRect(x=0.22, y=0.28, width=0.12, height=0.24)
+        sample_times = list(range(0, 13000, 1000))
+        detections_by_time = {
+            time_ms: [
+                make_region(
+                    f'target-{time_ms}-0',
+                    time_ms,
+                    0.10 + ((time_ms / 1000) * 0.02),
+                    0.28,
+                    0.12,
+                    0.24,
+                    confidence=0.78,
+                    class_name='motorcycle',
+                ),
+            ]
+            for time_ms in sample_times
+        }
+        tracked_by_time = {
+            6000: [
+                make_region('track-1', 6000, 0.22, 0.28, 0.12, 0.24, confidence=0.82, class_name='motorcycle'),
+            ],
+        }
+        tracker = ScriptedTargetCentricTracker(detections_by_time, tracked_by_time)
+
+        tracked_frames, diagnostics = tracker.track(
+            source_path='dashcam.mp4',
+            interval={'startMs': 0, 'endMs': 12000},
+            anchor_time_ms=6000,
+            vehicle_kind='motorcycle',
+            selected_target_box=selected_target_box,
+            sample_times=sample_times,
+            options=AnalysisOptions(tracker_mode='botsort'),
+        )
+
+        tracked_times = [frame.time_ms for frame in tracked_frames]
+        self.assertIn(5000, tracked_times)
+        self.assertIn(7000, tracked_times)
+        self.assertLess(min(tracked_times), 6000)
+        self.assertGreater(max(tracked_times), 6000)
+        self.assertFalse(diagnostics['terminatedEarly'])
+        self.assertIn('backward', diagnostics['directionSummaries'])
+        self.assertIn('forward', diagnostics['directionSummaries'])
+        self.assertGreater(diagnostics['backwardTrackedFrameCount'], 0)
+        self.assertGreater(diagnostics['forwardTrackedFrameCount'], 0)
+
+    def test_ultralytics_tracking_reports_directional_soft_gaps_in_diagnostics(self) -> None:
+        selected_target_box = NormalizedRect(x=0.22, y=0.28, width=0.12, height=0.24)
+        detections_by_time = {
+            4000: [make_region('target-4000-0', 4000, 0.18, 0.28, 0.12, 0.24, class_name='motorcycle')],
+            5000: [make_region('target-5000-0', 5000, 0.20, 0.28, 0.12, 0.24, class_name='motorcycle')],
+            6000: [make_region('target-6000-0', 6000, 0.22, 0.28, 0.12, 0.24, class_name='motorcycle')],
+            7000: [make_region('target-7000-0', 7000, 0.24, 0.28, 0.12, 0.24, class_name='motorcycle')],
+            8000: [make_region('target-8000-0', 8000, 0.26, 0.28, 0.12, 0.24, class_name='motorcycle')],
+        }
+        tracked_by_time = {
+            6000: [make_region('track-1', 6000, 0.22, 0.28, 0.12, 0.24, class_name='motorcycle')],
+            7000: [make_region('track-99', 7000, 0.55, 0.18, 0.16, 0.28, confidence=0.95, class_name='motorcycle')],
+        }
+        tracker = ScriptedTargetCentricTracker(detections_by_time, tracked_by_time)
+
+        _tracked_frames, diagnostics = tracker.track(
+            source_path='dashcam.mp4',
+            interval={'startMs': 4000, 'endMs': 8000},
+            anchor_time_ms=6000,
+            vehicle_kind='motorcycle',
+            selected_target_box=selected_target_box,
+            sample_times=[4000, 5000, 6000, 7000, 8000],
+            options=AnalysisOptions(tracker_mode='botsort'),
+        )
+
+        forward_summary = diagnostics['directionSummaries']['forward']
+        backward_summary = diagnostics['directionSummaries']['backward']
+        self.assertEqual(forward_summary['direction'], 'forward')
+        self.assertEqual(backward_summary['direction'], 'backward')
+        self.assertIn('processedFrames', forward_summary)
+        self.assertIn('softGapFrames', forward_summary)
+        self.assertIn('lastProcessedTimeMs', forward_summary)
 
     def test_calibration_skips_when_anchor_box_does_not_match_selected_target(self) -> None:
         service = IntervalTrackingService(

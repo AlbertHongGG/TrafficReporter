@@ -184,6 +184,59 @@ class AiEvidenceWorkflowTests(unittest.TestCase):
             self.assertEqual(projection['analysisTrack']['id'], 'candidate-track-2')
             self.assertEqual(projection['analysisTrack']['diagnostics']['canonicalizedFromTrackId'], 'analysis-track-1')
 
+    def test_build_projection_prefers_explicit_interval_analysis_track(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workflow = self._build_workflow(runtime_root=Path(temp_dir))
+
+            projection = workflow._build_projection(
+                {
+                    'targetTracks': [{
+                        'id': 'legacy-track-1',
+                        'className': 'motorcycle',
+                        'label': 'legacy analysis target',
+                        'confidence': 0.81,
+                        'frames': [{
+                            'id': 'legacy-frame-1',
+                            'timeMs': 6000,
+                            'box': {'x': 0.2, 'y': 0.3, 'width': 0.18, 'height': 0.22},
+                            'confidence': 0.81,
+                            'className': 'motorcycle',
+                        }],
+                    }],
+                    'analysisTrack': {
+                        'id': 'candidate-track-2',
+                        'className': 'motorcycle',
+                        'label': 'explicit analysis target',
+                        'confidence': 0.93,
+                        'frames': [{
+                            'id': 'analysis-frame-1',
+                            'timeMs': 6060,
+                            'box': {'x': 0.44, 'y': 0.2, 'width': 0.16, 'height': 0.2},
+                            'confidence': 0.93,
+                            'className': 'motorcycle',
+                        }],
+                        'diagnostics': {
+                            'canonicalTargetId': 'candidate-track-2',
+                            'trajectoryFrameCount': 11,
+                        },
+                    },
+                    'samples': [],
+                    'candidates': [],
+                    'acceptedCandidateId': None,
+                    'review': None,
+                    'provenance': None,
+                },
+                {'startMs': 5800, 'endMs': 7200},
+                {
+                    'selectedTrackId': 'candidate-track-2',
+                    'candidateTracks': [],
+                },
+            )
+
+            self.assertEqual(projection['analysisTrack']['id'], 'candidate-track-2')
+            self.assertEqual(projection['analysisTrack']['label'], 'explicit analysis target')
+            self.assertEqual(projection['analysisTrack']['diagnostics']['trajectoryFrameCount'], 11)
+
     def test_resolve_target_deduplicates_overlapping_anchor_candidates(self) -> None:
         class ProviderStub:
             kind = 'stub'

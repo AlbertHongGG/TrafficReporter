@@ -60,6 +60,16 @@ def _selected_target_track_id(payload: dict[str, Any], track_diagnostics: dict[s
     return None
 
 
+def _is_evidence_sample_frame(frame: TrackedRegion) -> bool:
+    diagnostics = frame.diagnostics or {}
+    return diagnostics.get('isEvidenceSample') is True
+
+
+def _select_interval_evidence_frames(tracked_frames: list[TrackedRegion]) -> list[TrackedRegion]:
+    evidence_frames = [frame for frame in tracked_frames if _is_evidence_sample_frame(frame)]
+    return evidence_frames or tracked_frames
+
+
 def _tracking_identity_review_reasons(track_diagnostics: dict[str, Any]) -> list[str]:
     reasons: list[str] = []
     identity_breaks = int(track_diagnostics.get('identityBreaks') or 0)
@@ -315,7 +325,11 @@ class IntervalAnalysisWorkflow:
             payload.get('maxSamples'),
             options,
         )
-        requested_frame_count = max(requested_frame_count, len(tracked_frames), 1)
+        requested_tracking_frame_count = max(
+            requested_frame_count,
+            _safe_int(track_diagnostics.get('requestedTrackingFrameCount'), len(tracked_frames)),
+            1,
+        )
         canonical_target_track_id = _selected_target_track_id(payload, track_diagnostics)
         if canonical_target_track_id is not None:
             track_diagnostics = {
@@ -333,7 +347,7 @@ class IntervalAnalysisWorkflow:
         tracking = _build_tracking_summary(
             track_diagnostics,
             len(tracked_frames),
-            requested_frame_count,
+            requested_tracking_frame_count,
             anchor_ok,
             anchor_status,
         )
@@ -348,11 +362,12 @@ class IntervalAnalysisWorkflow:
             raise RuntimeFailure('Range analysis lost the selected target at the anchor frame. Reselect the vehicle on the intended frame and retry.')
 
         sample_options = options.for_interval_sample(sample_count_hint=len(tracked_frames))
+        evidence_frames = _select_interval_evidence_frames(tracked_frames)
 
         samples: list[FrameSample] = []
         observations: list[PlateObservation] = []
-        sample_count = len(tracked_frames)
-        for index, tracked_frame in enumerate(tracked_frames, start=1):
+        sample_count = len(evidence_frames)
+        for index, tracked_frame in enumerate(evidence_frames, start=1):
             raw_tracking_box = tracked_frame.box
             calibrated_target_box = calibrated_target_boxes.get(tracked_frame.time_ms)
             analysis_target_box = calibrated_target_box or raw_tracking_box
@@ -441,8 +456,11 @@ class IntervalAnalysisWorkflow:
         _emit_progress(0.92, 'Interval', 'Finalizing the interval analysis result.', trackingTier=tracking['trackingTier'], coverageRatio=tracking['coverageRatio'])
         runtime_status = self._status()
         job_status = 'degraded' if tracking['trackingTier'] != 'full' else 'completed'
+        analysis_tracks = self._build_track_payload(tracked_frames, track_diagnostics)
+        analysis_track = analysis_tracks[0].to_payload() if analysis_tracks else None
         return {
-            'targetTracks': [track.to_payload() for track in self._build_track_payload(tracked_frames, track_diagnostics)],
+            'targetTracks': [track.to_payload() for track in analysis_tracks],
+            'analysisTrack': analysis_track,
             'samples': [sample.to_payload() for sample in samples],
             'candidates': [candidate.to_payload() for candidate in candidates],
             'acceptedCandidateId': accepted_candidate_id,

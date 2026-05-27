@@ -233,6 +233,30 @@ function countSummary(label: string, value: number | null) {
   return value !== null && value > 0 ? `${label} ${value}` : null;
 }
 
+function buildDirectionDiagnosticsLine(label: string, diagnostics: Record<string, unknown> | null, trackedFrames: number | null) {
+  if (!diagnostics) {
+    return '';
+  }
+
+  const processedFrames = asNumber(diagnostics.processedFrames);
+  const softGapFrames = asNumber(diagnostics.softGapFrames);
+  const rejectedFrames = asNumber(diagnostics.rejectedFrames);
+  const uncertainOverflowFrames = asNumber(diagnostics.uncertainOverflowFrames);
+  const detectionFallbackFrames = asNumber(diagnostics.detectionFallbackFrames);
+  const lastProcessedTimeMs = asNumber(diagnostics.lastProcessedTimeMs);
+
+  return [
+    label,
+    trackedFrames !== null ? `tracked ${trackedFrames}` : null,
+    processedFrames !== null ? `processed ${processedFrames}` : null,
+    countSummary('gap', softGapFrames),
+    countSummary('reject', rejectedFrames),
+    countSummary('overflow', uncertainOverflowFrames),
+    countSummary('fallback', detectionFallbackFrames),
+    lastProcessedTimeMs !== null ? `last ${lastProcessedTimeMs}ms` : null,
+  ].filter(Boolean).join(' · ');
+}
+
 function buildTargetDiagnosticsLines(track: LprTargetTrack | null): string[] {
   if (!track) {
     return [];
@@ -247,6 +271,12 @@ function buildTargetDiagnosticsLines(track: LprTargetTrack | null): string[] {
   const anchorDetectionId = typeof diagnostics.anchorDetectionId === 'string' ? diagnostics.anchorDetectionId : null;
   const anchorTrackId = typeof diagnostics.anchorTrackId === 'string' ? diagnostics.anchorTrackId : null;
   const matchedFrames = asNumber(diagnostics.matchedFrames);
+  const trajectoryFrameCount = asNumber(diagnostics.trajectoryFrameCount);
+  const requestedTrackingFrameCount = asNumber(diagnostics.requestedTrackingFrameCount);
+  const requestedEvidenceSampleCount = asNumber(diagnostics.requestedEvidenceSampleCount);
+  const trajectoryStepMs = asNumber(diagnostics.trajectoryStepMs);
+  const backwardTrackedFrameCount = asNumber(diagnostics.backwardTrackedFrameCount);
+  const forwardTrackedFrameCount = asNumber(diagnostics.forwardTrackedFrameCount);
   const reassociatedFrames = asNumber(diagnostics.reassociatedFrames);
   const detectionFallbackFrames = asNumber(diagnostics.detectionFallbackFrames);
   const uncertainFrames = asNumber(diagnostics.uncertainFrames);
@@ -254,16 +284,31 @@ function buildTargetDiagnosticsLines(track: LprTargetTrack | null): string[] {
   const identityBreaks = asNumber(diagnostics.identityBreaks);
   const suppressedDuplicates = asNumber(targetDetection?.suppressedDuplicateDetections);
   const terminationReasons = asStringArray(diagnostics.terminationReasons);
+  const directionSummaries = asRecord(diagnostics.directionSummaries);
+  const backwardSummary = buildDirectionDiagnosticsLine(
+    'back',
+    asRecord(directionSummaries?.backward),
+    backwardTrackedFrameCount,
+  );
+  const forwardSummary = buildDirectionDiagnosticsLine(
+    'fwd',
+    asRecord(directionSummaries?.forward),
+    forwardTrackedFrameCount,
+  );
 
   const lines = [
     [
       canonicalTargetId ? `id ${canonicalTargetId}` : null,
       trackerMode ? `mode ${trackerMode}` : null,
       matchedFrames !== null ? `frames ${matchedFrames}` : null,
+      trajectoryFrameCount !== null ? `trajectory ${trajectoryFrameCount}` : null,
     ].filter(Boolean).join(' · '),
     [
       anchorDetectionId ? `anchor ${anchorDetectionId}` : null,
       anchorTrackId ? `track ${anchorTrackId}` : null,
+      requestedTrackingFrameCount !== null ? `requested ${requestedTrackingFrameCount}` : null,
+      requestedEvidenceSampleCount !== null ? `evidence ${requestedEvidenceSampleCount}` : null,
+      trajectoryStepMs !== null ? `step ${trajectoryStepMs}ms` : null,
       countSummary('deduped', suppressedDuplicates),
     ].filter(Boolean).join(' · '),
     [
@@ -274,6 +319,8 @@ function buildTargetDiagnosticsLines(track: LprTargetTrack | null): string[] {
       countSummary('identity', identityBreaks),
       diagnostics.terminatedEarly === true ? 'stopped early' : null,
     ].filter(Boolean).join(' · '),
+    backwardSummary,
+    forwardSummary,
     terminationReasons.length > 0 ? `stop ${terminationReasons.join(', ')}` : '',
   ];
 

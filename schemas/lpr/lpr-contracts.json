@@ -446,6 +446,7 @@
       "rustName": "LprIntervalAnalysisResponsePayload",
       "fields": [
         { "name": "targetTracks", "type": "array", "items": "LprTargetTrack" },
+        { "name": "analysisTrack", "type": "LprTargetTrack", "nullable": true },
         { "name": "samples", "type": "array", "items": "LprFrameSample" },
         { "name": "candidates", "type": "array", "items": "LprPlateCandidate" },
         { "name": "acceptedCandidateId", "type": "string", "nullable": true },

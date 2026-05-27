@@ -944,13 +944,15 @@ class AiEvidenceWorkflow:
         interval_target_tracks = interval_result.get('targetTracks') or []
         target_tracks = target_resolution.get('candidateTracks') or interval_target_tracks
         selected_target_track_id = _optional_string(target_resolution.get('selectedTrackId'))
-        analysis_track = next(
-            (
-                track for track in interval_target_tracks
-                if isinstance(track, dict) and _optional_string(track.get('id')) == selected_target_track_id
-            ),
-            None,
-        )
+        analysis_track = interval_result.get('analysisTrack') if isinstance(interval_result.get('analysisTrack'), dict) else None
+        if analysis_track is None:
+            analysis_track = next(
+                (
+                    track for track in interval_target_tracks
+                    if isinstance(track, dict) and _optional_string(track.get('id')) == selected_target_track_id
+                ),
+                None,
+            )
         if analysis_track is None:
             if len(interval_target_tracks) == 1 and selected_target_track_id is not None and isinstance(interval_target_tracks[0], dict):
                 analysis_track = _canonicalize_track_id(interval_target_tracks[0], selected_target_track_id)

@@ -276,6 +276,7 @@ export interface LprIntervalAnalysisRequest {
 
 export interface LprIntervalAnalysisResponse {
   targetTracks: LprTargetTrack[];
+  analysisTrack: LprTargetTrack | null;
   samples: LprFrameSample[];
   candidates: LprPlateCandidate[];
   acceptedCandidateId: string | null;

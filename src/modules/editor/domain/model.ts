@@ -329,6 +329,93 @@ export function findClosestTrackFrame(
   return Math.abs(closestFrame.timeMs - playheadMs) <= toleranceMs ? closestFrame : null;
 }
 
+export function clampNormalizedRect(markerRect: VideoMarkerRect): VideoMarkerRect {
+  const x1 = clampUnit(markerRect.x);
+  const y1 = clampUnit(markerRect.y);
+  const x2 = clamp(markerRect.x + markerRect.width, x1, 1);
+  const y2 = clamp(markerRect.y + markerRect.height, y1, 1);
+
+  return {
+    x: x1,
+    y: y1,
+    width: Math.max(0, x2 - x1),
+    height: Math.max(0, y2 - y1),
+  };
+}
+
+function interpolateNormalizedRect(left: VideoMarkerRect, right: VideoMarkerRect, ratio: number): VideoMarkerRect {
+  return clampNormalizedRect({
+    x: left.x + ((right.x - left.x) * ratio),
+    y: left.y + ((right.y - left.y) * ratio),
+    width: left.width + ((right.width - left.width) * ratio),
+    height: left.height + ((right.height - left.height) * ratio),
+  });
+}
+
+export function resolveTrackFrameAtPlayhead(
+  track: Pick<LprTargetTrack, 'frames'>,
+  playheadMs: number,
+  toleranceMs = 360,
+  maxInterpolationGapMs = 260,
+): LprTrackedRegion | null {
+  const { frames } = track;
+  if (frames.length === 0) {
+    return null;
+  }
+
+  let low = 0;
+  let high = frames.length - 1;
+
+  while (low <= high) {
+    const mid = (low + high) >> 1;
+    const frameTimeMs = frames[mid].timeMs;
+    if (frameTimeMs === playheadMs) {
+      return frames[mid];
+    }
+    if (frameTimeMs < playheadMs) {
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  const rightIndex = Math.min(low, frames.length - 1);
+  const leftIndex = Math.max(0, high);
+  const leftFrame = frames[leftIndex];
+  const rightFrame = frames[rightIndex];
+  const closestFrame = Math.abs(leftFrame.timeMs - playheadMs) <= Math.abs(rightFrame.timeMs - playheadMs)
+    ? leftFrame
+    : rightFrame;
+
+  const interpolationGapMs = rightFrame.timeMs - leftFrame.timeMs;
+  const shouldInterpolate = (
+    leftFrame !== rightFrame
+    && playheadMs > leftFrame.timeMs
+    && playheadMs < rightFrame.timeMs
+    && interpolationGapMs > 0
+    && interpolationGapMs <= maxInterpolationGapMs
+  );
+
+  if (shouldInterpolate) {
+    const ratio = (playheadMs - leftFrame.timeMs) / interpolationGapMs;
+    return {
+      id: `${leftFrame.id}:${rightFrame.id}:${Math.round(playheadMs)}`,
+      timeMs: playheadMs,
+      box: interpolateNormalizedRect(leftFrame.box, rightFrame.box, ratio),
+      confidence: leftFrame.confidence + ((rightFrame.confidence - leftFrame.confidence) * ratio),
+      className: leftFrame.className,
+      diagnostics: {
+        ...(leftFrame.diagnostics ?? {}),
+        interpolated: true,
+        interpolationWindowMs: interpolationGapMs,
+        interpolationSourceTimes: [leftFrame.timeMs, rightFrame.timeMs],
+      },
+    };
+  }
+
+  return Math.abs(closestFrame.timeMs - playheadMs) <= toleranceMs ? closestFrame : null;
+}
+
 export function findClipAtPlayhead(clips: TimelineClip[], playheadMs: number) {
   return clips.find((clip) => playheadMs >= clip.startMs && playheadMs < clipEndMs(clip)) ?? null;
 }

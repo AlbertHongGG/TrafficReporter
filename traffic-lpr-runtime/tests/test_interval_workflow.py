@@ -121,6 +121,8 @@ class IntervalWorkflowTests(unittest.TestCase):
 
         self.assertEqual(calls, [calibrated_box])
         self.assertEqual(result['samples'][0]['targetBox'], calibrated_box.to_payload())
+        self.assertEqual(result['analysisTrack']['frames'][0]['box'], calibrated_box.to_payload())
+        self.assertEqual(result['analysisTrack']['frames'][0]['diagnostics']['rawTrackingBox'], raw_box.to_payload())
         self.assertEqual(result['targetTracks'][0]['frames'][0]['box'], calibrated_box.to_payload())
         self.assertEqual(result['targetTracks'][0]['frames'][0]['diagnostics']['rawTrackingBox'], raw_box.to_payload())
 
@@ -277,6 +279,7 @@ class IntervalWorkflowTests(unittest.TestCase):
         self.assertEqual(result['tracking']['trackingTier'], 'detection-fallback')
         self.assertEqual(result['review']['status'], 'review-required')
         self.assertIn('tracking identity became ambiguous across the interval', result['review']['reasons'])
+        self.assertEqual(result['analysisTrack']['id'], 'target-11000-0')
         self.assertEqual(result['targetTracks'][0]['id'], 'target-11000-0')
 
 

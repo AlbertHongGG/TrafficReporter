@@ -242,6 +242,7 @@ pub struct LprIntervalAnalysisRequestPayload {
 #[serde(rename_all = "camelCase")]
 pub struct LprIntervalAnalysisResponsePayload {
     pub target_tracks: Vec<LprTargetTrackPayload>,
+    pub analysis_track: Option<LprTargetTrackPayload>,
     pub samples: Vec<LprFrameSamplePayload>,
     pub candidates: Vec<LprPlateCandidatePayload>,
     pub accepted_candidate_id: Option<String>,

@@ -7,6 +7,7 @@ import {
   buildEditorFileState,
   createRunFolderId,
   findClosestTrackFrame,
+  resolveTrackFrameAtPlayhead,
 } from './model'
 import { buildLprTargetAnchor, resolveLprAnalysisTargetVehicleKind } from './lprState'
 
@@ -75,6 +76,34 @@ describe('editor model', () => {
     expect(findClosestTrackFrame(track, 260)?.id).toBe('f2')
     expect(findClosestTrackFrame(track, 280)?.id).toBe('f2')
     expect(findClosestTrackFrame(track, 800, 100)).toBeNull()
+  })
+
+  it('interpolates interval analysis frames across nearby trajectory points', () => {
+    const track = {
+      frames: [
+        { id: 'f1', timeMs: 1000, box: { x: 0.1, y: 0.2, width: 0.16, height: 0.2 }, confidence: 0.8, className: 'motorcycle' },
+        { id: 'f2', timeMs: 1120, box: { x: 0.22, y: 0.24, width: 0.18, height: 0.22 }, confidence: 0.92, className: 'motorcycle' },
+      ],
+    }
+
+    const frame = resolveTrackFrameAtPlayhead(track, 1060, 60, 180)
+
+    expect(frame?.timeMs).toBe(1060)
+    expect(frame?.diagnostics?.interpolated).toBe(true)
+    expect(frame?.box.x).toBeCloseTo(0.16)
+    expect(frame?.box.y).toBeCloseTo(0.22)
+    expect(frame?.box.width).toBeCloseTo(0.17)
+  })
+
+  it('does not interpolate across large trajectory gaps', () => {
+    const track = {
+      frames: [
+        { id: 'f1', timeMs: 1000, box: { x: 0.1, y: 0.2, width: 0.16, height: 0.2 }, confidence: 0.8, className: 'motorcycle' },
+        { id: 'f2', timeMs: 1500, box: { x: 0.22, y: 0.24, width: 0.18, height: 0.22 }, confidence: 0.92, className: 'motorcycle' },
+      ],
+    }
+
+    expect(resolveTrackFrameAtPlayhead(track, 1250, 80, 180)).toBeNull()
   })
 
   it('creates run folder ids in the shared local-time format', () => {

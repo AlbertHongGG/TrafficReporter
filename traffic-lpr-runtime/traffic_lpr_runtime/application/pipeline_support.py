@@ -354,6 +354,8 @@ class TargetCentricTracker:
             detections_by_time,
             scene_motion_by_time,
             options,
+            traversal_direction='backward',
+            anchor_time_ms=anchor_time_ms,
         )
         forward_frames, forward_diagnostics = self._follow_ultralytics_direction(
             sorted(time_ms for time_ms in sample_times if time_ms > anchor_time_ms),
@@ -364,6 +366,8 @@ class TargetCentricTracker:
             detections_by_time,
             scene_motion_by_time,
             options,
+            traversal_direction='forward',
+            anchor_time_ms=anchor_time_ms,
         )
 
         tracked_frames: list[TrackedRegion] = list(reversed(backward_frames))
@@ -410,6 +414,12 @@ class TargetCentricTracker:
             'terminatedEarly': backward_diagnostics['terminatedEarly'] or forward_diagnostics['terminatedEarly'],
             'terminationReasons': termination_reasons,
             'canonicalTargetId': anchor_detection.id if anchor_detection is not None else anchor_track_id,
+            'directionSummaries': {
+                'backward': backward_diagnostics,
+                'forward': forward_diagnostics,
+            },
+            'backwardTrackedFrameCount': len(backward_frames),
+            'forwardTrackedFrameCount': len(forward_frames),
         }
         return tracked_frames, diagnostics
 
@@ -423,26 +433,42 @@ class TargetCentricTracker:
         detections_by_time: dict[int, list[TrackedRegion]],
         scene_motion_by_time: dict[int, dict[str, float]],
         options: AnalysisOptions,
+        traversal_direction: str,
+        anchor_time_ms: int,
     ) -> tuple[list[TrackedRegion], dict[str, Any]]:
         tracked_frames: list[TrackedRegion] = []
         direction_diagnostics = {
+            'direction': traversal_direction,
             'missedFrames': 0,
             'reassociatedFrames': 0,
             'detectionFallbackFrames': 0,
             'uncertainFrames': 0,
             'sceneMotionFrames': 0,
             'identityBreaks': 0,
+            'rejectedFrames': 0,
+            'softGapFrames': 0,
+            'uncertainOverflowFrames': 0,
+            'processedFrames': 0,
             'terminatedEarly': False,
             'terminationReason': None,
+            'anchorTimeMs': anchor_time_ms,
         }
         current_box = seed_box
         current_track_id = preferred_track_id
         pending_confirmation = False
         uncertain_streak = 0
+        last_reference_time_ms = anchor_time_ms
 
         for traversal_index, time_ms in enumerate(traversal_times):
             is_last_step = traversal_index == (len(traversal_times) - 1)
-            scene_motion = _normalize_scene_motion(scene_motion_by_time.get(time_ms) or {})
+            direction_diagnostics['processedFrames'] += 1
+            direction_diagnostics['lastProcessedTimeMs'] = time_ms
+            scene_motion = _resolve_directional_scene_motion(
+                scene_motion_by_time,
+                time_ms,
+                last_reference_time_ms,
+                traversal_direction,
+            )
             if _scene_motion_is_active(scene_motion):
                 direction_diagnostics['sceneMotionFrames'] += 1
             tracker_match, tracker_score, tracker_diagnostics = self._associate_tracked_regions(
@@ -527,15 +553,22 @@ class TargetCentricTracker:
                 tracker_diagnostics=tracker_diagnostics,
                 scene_motion=scene_motion,
                 pending_confirmation=pending_confirmation,
+                traversal_direction=traversal_direction,
             )
             if not transition.allowed:
                 if _should_soft_skip_identity_rejection(transition, diagnostics['selectionScore']):
                     direction_diagnostics['missedFrames'] += 1
+                    direction_diagnostics['softGapFrames'] += 1
+                    pending_confirmation = False
+                    last_reference_time_ms = time_ms
                     continue
                 direction_diagnostics['identityBreaks'] += 1
-                direction_diagnostics['terminatedEarly'] = True
-                direction_diagnostics['terminationReason'] = transition.reason
-                break
+                direction_diagnostics['rejectedFrames'] += 1
+                direction_diagnostics['softGapFrames'] += 1
+                pending_confirmation = False
+                uncertain_streak = 0
+                last_reference_time_ms = time_ms
+                continue
 
             diagnostics['trackingState'] = transition.tracking_state
             diagnostics['transition'] = {
@@ -552,9 +585,12 @@ class TargetCentricTracker:
                 direction_diagnostics['uncertainFrames'] += 1
                 if uncertain_streak > _uncertain_grace_limit(transition, diagnostics['selectionScore']) and not is_last_step:
                     direction_diagnostics['identityBreaks'] += 1
-                    direction_diagnostics['terminatedEarly'] = True
-                    direction_diagnostics['terminationReason'] = 'uncertain-identity-timeout'
-                    break
+                    direction_diagnostics['uncertainOverflowFrames'] += 1
+                    direction_diagnostics['softGapFrames'] += 1
+                    pending_confirmation = False
+                    uncertain_streak = 0
+                    last_reference_time_ms = time_ms
+                    continue
             else:
                 uncertain_streak = 0
                 pending_confirmation = transition.pending_confirmation
@@ -573,6 +609,7 @@ class TargetCentricTracker:
 
             tracked_frames.append(self._clone_tracked_region(selected, diagnostics))
             current_box = selected.box
+            last_reference_time_ms = time_ms
 
             if current_track_id_before is None and not selected.id.startswith('track-'):
                 current_track_id = None
@@ -977,6 +1014,7 @@ def _identity_transition_is_allowed(
     tracker_diagnostics: dict[str, Any],
     scene_motion: dict[str, float],
     pending_confirmation: bool,
+    traversal_direction: str,
 ) -> _TransitionDecision:
     if current_track_id is None:
         return _TransitionDecision(True, None, 'confirmed', 1.0, 0.0, False, False, False)
@@ -991,10 +1029,12 @@ def _identity_transition_is_allowed(
     tracker_center_distance = _to_float(tracker_diagnostics.get('centerDistance'), default=1.0)
     scene_motion_active = _scene_motion_is_active(scene_motion)
     continuity_credit = min(0.12, _to_float(scene_motion.get('magnitude')) * 1.15) if scene_motion_active else 0.0
+    directional_continuity_boost = 0.06 if traversal_direction == 'backward' and motion_ok else 0.0
     continuity_score = max(predicted_iou, previous_iou) + continuity_credit
+    continuity_score += directional_continuity_boost
     strong_continuity = motion_ok and (
         continuity_score >= 0.28
-        or center_distance <= max(0.055, 0.055 + (continuity_credit * 0.55))
+        or center_distance <= max(0.055, 0.055 + (continuity_credit * 0.55) + (0.03 if traversal_direction == 'backward' else 0.0))
     ) and selection_score >= max(0.24, 0.28 - (continuity_credit * 0.5))
 
     tracker_competitive = (
@@ -1015,6 +1055,8 @@ def _identity_transition_is_allowed(
                 return _TransitionDecision(True, None, 'uncertain', continuity_score, continuity_credit, True, scene_motion_active, True)
             return _TransitionDecision(False, 'detection-fallback-identity-break', 'rejected', continuity_score, continuity_credit, True, scene_motion_active, pending_confirmation)
         if strong_continuity:
+            return _TransitionDecision(True, None, 'uncertain', continuity_score, continuity_credit, False, scene_motion_active, True)
+        if traversal_direction == 'backward' and motion_ok and selection_score >= 0.16 and continuity_score >= 0.12:
             return _TransitionDecision(True, None, 'uncertain', continuity_score, continuity_credit, False, scene_motion_active, True)
         if motion_ok and scene_motion_active and selection_score >= 0.22 and continuity_score >= 0.18:
             return _TransitionDecision(True, None, 'uncertain', continuity_score, continuity_credit, False, True, True)
@@ -1128,6 +1170,27 @@ def _compensate_reference_box(reference_box: NormalizedRect, scene_motion: dict[
         return reference_box
     motion_weight = clamp(0.35 + min(normalized['score'], 1.0) * 0.45, 0.35, 0.8)
     return _shift_rect(reference_box, normalized['dx'] * motion_weight, normalized['dy'] * motion_weight, 0.0, 0.0)
+
+
+def _resolve_directional_scene_motion(
+    scene_motion_by_time: dict[int, dict[str, float]],
+    time_ms: int,
+    reference_time_ms: int,
+    traversal_direction: str,
+) -> dict[str, float]:
+    if traversal_direction == 'backward':
+        return _invert_scene_motion(scene_motion_by_time.get(reference_time_ms) or {})
+    return _normalize_scene_motion(scene_motion_by_time.get(time_ms) or {})
+
+
+def _invert_scene_motion(scene_motion: dict[str, Any]) -> dict[str, float]:
+    normalized = _normalize_scene_motion(scene_motion)
+    return {
+        'dx': -normalized['dx'],
+        'dy': -normalized['dy'],
+        'magnitude': normalized['magnitude'],
+        'score': normalized['score'],
+    }
 
 
 def _tracker_class_id(class_name: str) -> int:

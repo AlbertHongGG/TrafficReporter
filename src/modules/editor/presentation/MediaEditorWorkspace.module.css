@@ -542,10 +542,14 @@
 
 .lprOverlayTarget {
   position: absolute;
+  left: 0;
+  top: 0;
   border: 1px solid rgba(243, 195, 22, 0.42);
   background: rgba(243, 195, 22, 0.08);
   pointer-events: auto;
   cursor: pointer;
+  will-change: transform;
+  transform-origin: top left;
 }
 
 .lprOverlayTarget:hover,
