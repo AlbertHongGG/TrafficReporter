@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { open, save } from '@tauri-apps/plugin-dialog';
@@ -82,7 +82,7 @@ import {
   type PlateWindowSessionSnapshot,
 } from '../application/plateWindow';
 import { emitAiPanelWindowSession, openAiPanelWindow } from '../infrastructure/aiPanelApi';
-import { emitPlateWindowSession, openPlateWindow } from '../infrastructure/plateWindowApi';
+import { emitPlateWindowLiveTransport, emitPlateWindowSession, openPlateWindow } from '../infrastructure/plateWindowApi';
 import type {
   AiEvidenceProgress,
   AiEvidenceResponse,
@@ -100,6 +100,12 @@ import {
   type PlaybackTimelineEntry,
   usePlaybackController,
 } from '../application/usePlaybackController';
+import {
+  buildLiveTransportSnapshot,
+  createLiveTransportStore,
+  type LiveTransportSnapshot,
+  type LiveTransportStore,
+} from '../application/liveTransport';
 import { EDITOR_ENV } from '../../../shared/config/editorEnv';
 import { useEditorSessionController } from '../../../vnext/editor/application/useEditorSessionController';
 import styles from './MediaEditorWorkspace.module.css';
@@ -158,10 +164,6 @@ interface MediaEditorWorkspaceProps {
   isActive?: boolean;
 }
 
-type LprOverlayLayerHandle = {
-  setPlayheadMs: (playheadMs: number) => void;
-};
-
 type LprOverlayTargetEntry = {
   trackId: string;
   label: string;
@@ -175,7 +177,7 @@ type LprOverlayLayerProps = {
   targetTracks: LprTargetTrack[];
   analysisTrack: LprTargetTrack | null;
   selectedTargetTrackId: string | null;
-  basePlayheadMs: number;
+  liveTransportStore: LiveTransportStore;
   onSelectTrack: (targetTrackId: string, preferredTimeMs?: number | null) => void;
 };
 
@@ -207,57 +209,19 @@ const LprOverlayTargetButton = React.memo(function LprOverlayTargetButton({
   );
 });
 
-const LprPreviewOverlayLayer = React.memo(React.forwardRef<LprOverlayLayerHandle, LprOverlayLayerProps>(function LprPreviewOverlayLayer({
+const LprPreviewOverlayLayer = React.memo(function LprPreviewOverlayLayer({
   previewViewport,
   targetTracks,
   analysisTrack,
   selectedTargetTrackId,
-  basePlayheadMs,
+  liveTransportStore,
   onSelectTrack,
-}, ref) {
-  const [overlayPlayheadMs, setOverlayPlayheadMs] = useState(basePlayheadMs);
-  const queuedPlayheadMsRef = useRef(basePlayheadMs);
-  const committedPlayheadMsRef = useRef(basePlayheadMs);
-  const animationFrameRef = useRef<number | null>(null);
-
-  const commitOverlayPlayhead = useCallback((playheadMs: number) => {
-    if (Math.abs(playheadMs - committedPlayheadMsRef.current) < 1) {
-      return;
-    }
-    committedPlayheadMsRef.current = playheadMs;
-    setOverlayPlayheadMs(playheadMs);
-  }, []);
-
-  const flushQueuedPlayhead = useCallback(() => {
-    animationFrameRef.current = null;
-    commitOverlayPlayhead(queuedPlayheadMsRef.current);
-  }, [commitOverlayPlayhead]);
-
-  const schedulePlayhead = useCallback((playheadMs: number) => {
-    queuedPlayheadMsRef.current = playheadMs;
-    if (animationFrameRef.current !== null) {
-      return;
-    }
-    animationFrameRef.current = window.requestAnimationFrame(flushQueuedPlayhead);
-  }, [flushQueuedPlayhead]);
-
-  React.useImperativeHandle(ref, () => ({
-    setPlayheadMs(playheadMs: number) {
-      schedulePlayhead(playheadMs);
-    },
-  }), [schedulePlayhead]);
-
-  useEffect(() => {
-    queuedPlayheadMsRef.current = basePlayheadMs;
-    committedPlayheadMsRef.current = basePlayheadMs;
-    setOverlayPlayheadMs(basePlayheadMs);
-  }, [basePlayheadMs, targetTracks, analysisTrack, selectedTargetTrackId]);
-
-  useEffect(() => () => {
-    if (animationFrameRef.current !== null) {
-      window.cancelAnimationFrame(animationFrameRef.current);
-    }
-  }, []);
+}: LprOverlayLayerProps) {
+  const liveTransport = useSyncExternalStore(
+    liveTransportStore.subscribe,
+    liveTransportStore.getSnapshot,
+    liveTransportStore.getSnapshot,
+  );
 
   const overlayEntries = useMemo<LprOverlayTargetEntry[]>(() => {
     const targetLabels = new Map(targetTracks.map((track) => [track.id, track.label]));
@@ -265,7 +229,7 @@ const LprPreviewOverlayLayer = React.memo(React.forwardRef<LprOverlayLayerHandle
       ...targetTracks
         .filter((track) => track.id !== analysisTrack?.id)
         .flatMap((track) => {
-          const frame = findClosestTrackFrame(track, overlayPlayheadMs, EDITOR_ENV.lprTargetOverlayToleranceMs);
+          const frame = findClosestTrackFrame(track, liveTransport.playheadMs, EDITOR_ENV.lprTargetOverlayToleranceMs);
           if (!frame) {
             return [];
           }
@@ -280,7 +244,7 @@ const LprPreviewOverlayLayer = React.memo(React.forwardRef<LprOverlayLayerHandle
       ...(analysisTrack ? (() => {
         const frame = resolveTrackFrameAtPlayhead(
           analysisTrack,
-          overlayPlayheadMs,
+          liveTransport.playheadMs,
           EDITOR_ENV.lprTargetOverlayToleranceMs,
           EDITOR_ENV.lprAnalysisInterpolationGapMs,
         );
@@ -296,7 +260,7 @@ const LprPreviewOverlayLayer = React.memo(React.forwardRef<LprOverlayLayerHandle
         } satisfies LprOverlayTargetEntry];
       })() : []),
     ];
-  }, [analysisTrack, overlayPlayheadMs, selectedTargetTrackId, targetTracks]);
+  }, [analysisTrack, liveTransport.playheadMs, selectedTargetTrackId, targetTracks]);
 
   if (previewViewport.width <= 0) {
     return null;
@@ -314,7 +278,7 @@ const LprPreviewOverlayLayer = React.memo(React.forwardRef<LprOverlayLayerHandle
       ))}
     </>
   );
-}));
+});
 
 function rulerStepForZoom(zoom: number) {
   return (
@@ -469,7 +433,8 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
   const previewVideoRef = useRef<HTMLVideoElement>(null);
   const currentTimecodeRef = useRef<HTMLSpanElement>(null);
   const livePlayheadMsRef = useRef(0);
-  const lprOverlayLayerRef = useRef<LprOverlayLayerHandle | null>(null);
+  const liveTransportStore = useMemo(() => createLiveTransportStore(), []);
+  const plateWindowLiveSyncEnabledRef = useRef(false);
   const latestCountryHintDraftRef = useRef<string | null>(null);
   const activeLprRequestIdRef = useRef<string | null>(null);
   const cancelledLprRequestIdsRef = useRef(new Set<string>());
@@ -682,18 +647,28 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     return countryHints;
   }, [dispatch]);
 
-  const applyLiveTransportFrame = useCallback((playheadMs: number) => {
-    livePlayheadMsRef.current = playheadMs;
-    lprOverlayLayerRef.current?.setPlayheadMs(playheadMs);
+  const applyLiveTransportUpdate = useCallback((transport: LiveTransportSnapshot, emitPlateWindowLive = false) => {
+    livePlayheadMsRef.current = transport.playheadMs;
+    liveTransportStore.publish(transport);
+
+    if (emitPlateWindowLive && plateWindowLiveSyncEnabledRef.current) {
+      void emitPlateWindowLiveTransport(transport).catch(() => {
+        plateWindowLiveSyncEnabledRef.current = false;
+      });
+    }
 
     if (currentTimecodeRef.current) {
-      currentTimecodeRef.current.textContent = formatRulerLabel(playheadMs);
+      currentTimecodeRef.current.textContent = formatRulerLabel(transport.playheadMs);
     }
 
     if (timelineCanvasRef.current) {
-      timelineCanvasRef.current.style.setProperty('--playhead-left', `${msToPx(playheadMs, zoomRef.current)}px`);
+      timelineCanvasRef.current.style.setProperty('--playhead-left', `${msToPx(transport.playheadMs, zoomRef.current)}px`);
     }
-  }, []);
+  }, [liveTransportStore]);
+
+  const handleTransportUpdate = useCallback((transport: LiveTransportSnapshot) => {
+    applyLiveTransportUpdate(transport, true);
+  }, [applyLiveTransportUpdate]);
 
   const handlePreviewChange = useCallback((nextPreviewState: PlaybackPreviewState) => {
     setLivePreviewState((currentPreviewState) => {
@@ -717,7 +692,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     playbackEntries,
     videoRef: previewVideoRef,
     dispatch,
-    onTransportFrame: applyLiveTransportFrame,
+    onTransportUpdate: handleTransportUpdate,
     onPreviewChange: handlePreviewChange,
   });
 
@@ -752,12 +727,18 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
   }, [refreshLprRuntimeStatus]);
 
   useEffect(() => {
-    applyLiveTransportFrame(currentPlayheadMs);
-  }, [applyLiveTransportFrame, currentPlayheadMs, activeFile?.id]);
+    if (currentIsPlaying || isTimelineScrubbing) {
+      return;
+    }
+    applyLiveTransportUpdate(
+      buildLiveTransportSnapshot(currentPlayheadMs, 'paused'),
+      false,
+    );
+  }, [activeFile?.id, applyLiveTransportUpdate, currentIsPlaying, currentPlayheadMs, isTimelineScrubbing]);
 
   useEffect(() => {
-    applyLiveTransportFrame(livePlayheadMsRef.current);
-  }, [applyLiveTransportFrame, currentZoom, timelineWidthPx]);
+    applyLiveTransportUpdate(liveTransportStore.getSnapshot(), false);
+  }, [applyLiveTransportUpdate, currentZoom, liveTransportStore, timelineWidthPx]);
 
   useEffect(() => {
     if (!isActive && currentIsPlaying) {
@@ -1419,9 +1400,9 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     effectiveInterval: lprState.interval,
     canAnalyzeRange,
     topCandidate: lprTopCandidate,
-    anchorTimeMs: Math.max(0, Math.round(lprSelectedTargetAnchor?.timeMs ?? livePlayheadMsRef.current)),
-    playheadMs: Math.max(0, Math.round(livePlayheadMsRef.current)),
-  }), [activeFile, canAnalyzeRange, lprRuntimeStatus, lprSelectedTargetAnchor, lprState, lprTopCandidate, state.workspaceName]);
+    anchorTimeMs: Math.max(0, Math.round(lprSelectedTargetAnchor?.timeMs ?? currentPlayheadMs)),
+    playheadMs: Math.max(0, Math.round(currentPlayheadMs)),
+  }), [activeFile, canAnalyzeRange, currentPlayheadMs, lprRuntimeStatus, lprSelectedTargetAnchor, lprState, lprTopCandidate, state.workspaceName]);
 
   const buildAiPanelWindowSnapshot = useCallback((): AiPanelSessionSnapshot => ({
     workspaceName: state.workspaceName,
@@ -1430,8 +1411,8 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     runtimeStatus: lprRuntimeStatus,
     lpr: lprState,
     ai: aiState,
-    playheadMs: Math.max(0, Math.round(livePlayheadMsRef.current)),
-  }), [activeFile, aiState, lprRuntimeStatus, lprState, state.workspaceName]);
+    playheadMs: Math.max(0, Math.round(currentPlayheadMs)),
+  }), [activeFile, aiState, currentPlayheadMs, lprRuntimeStatus, lprState, state.workspaceName]);
 
   const updateAiJob = useCallback((fileId: string, job: Partial<typeof aiState.job>) => {
     dispatch({
@@ -1980,6 +1961,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
 
   const handleOpenPlateWindow = async () => {
     await openPlateWindow();
+    plateWindowLiveSyncEnabledRef.current = true;
     await emitPlateWindowSession(buildPlateWindowSnapshot(), sessionRevision).catch(() => undefined);
   };
 
@@ -2051,6 +2033,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
   });
 
   const handlePlateWindowSessionRequest = React.useEffectEvent(async () => {
+    plateWindowLiveSyncEnabledRef.current = true;
     await emitPlateWindowSession(buildPlateWindowSnapshot(), sessionRevision).catch(() => undefined);
   });
 
@@ -2227,7 +2210,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       actionCleanup?.();
       requestCleanup?.();
     };
-  }, [handleExportWindowSessionRequest]);
+  }, []);
 
   useEffect(() => {
     void emitPlateWindowSession(buildPlateWindowSnapshot(), sessionRevision).catch(() => undefined);
@@ -2471,12 +2454,11 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
               {activeFile && previewViewport.width > 0 && (
                 <div className={styles.previewMarkerLayer}>
                   <LprPreviewOverlayLayer
-                    ref={lprOverlayLayerRef}
                     previewViewport={previewViewport}
                     targetTracks={lprState.targetTracks}
                     analysisTrack={lprAnalysisTrack}
                     selectedTargetTrackId={lprState.selectedTargetTrackId}
-                    basePlayheadMs={currentPlayheadMs}
+                    liveTransportStore={liveTransportStore}
                     onSelectTrack={handleSelectTargetTrack}
                   />
                   {activeFile.markerRect && markerStyle && (

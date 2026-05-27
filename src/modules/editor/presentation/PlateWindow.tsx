@@ -23,8 +23,11 @@ import {
 } from 'lucide-react';
 import { Select } from '../../../components/Select/Select';
 import {
+  PLATE_LIVE_TRANSPORT_EVENT,
   samplePrimaryText,
   PLATE_SESSION_UPDATED_EVENT,
+  resolvePlateWindowPlayheadMs,
+  type PlateWindowLiveTransport,
   type RevisionedPlateWindowSessionSnapshot,
   type PlateWindowSessionSnapshot,
 } from '../application/plateWindow';
@@ -431,13 +434,14 @@ export const PlateWindow: React.FC = () => {
   const [selectedEvidenceSampleId, setSelectedEvidenceSampleId] = React.useState<string | null>(null);
   const [isEvidenceSelectionPinned, setIsEvidenceSelectionPinned] = React.useState(false);
   const latestRevisionRef = React.useRef(0);
+  const [liveTransport, setLiveTransport] = React.useState<PlateWindowLiveTransport | null>(null);
 
   const lprState = snapshot?.lpr ?? buildDefaultLprState();
   const runtimeStatus = snapshot?.runtimeStatus ?? null;
   const topCandidate = snapshot?.topCandidate ?? lprState.candidates[0] ?? null;
   const analysisProfiles = getLprAnalysisProfiles();
   const isBusy = lprState.job.status === 'queued' || lprState.job.status === 'running';
-  const currentPlayheadMs = snapshot?.playheadMs ?? 0;
+  const currentPlayheadMs = resolvePlateWindowPlayheadMs(snapshot, liveTransport);
   const evidenceSamples = React.useMemo(() => buildEvidenceSamples(lprState.samples, topCandidate), [lprState.samples, topCandidate]);
   const jobBadge = React.useMemo(() => buildJobBadge(lprState.job), [lprState.job]);
   const reviewBadge = React.useMemo(() => buildReviewBadge(lprState.review), [lprState.review]);
@@ -457,6 +461,7 @@ export const PlateWindow: React.FC = () => {
   React.useEffect(() => {
     let disposed = false;
     let removeSessionListener: (() => void) | undefined;
+    let removeLiveTransportListener: (() => void) | undefined;
 
     void listen<PlateWindowSessionSnapshot | RevisionedPlateWindowSessionSnapshot>(PLATE_SESSION_UPDATED_EVENT, (event) => {
       if (disposed) return;
@@ -465,10 +470,20 @@ export const PlateWindow: React.FC = () => {
         return;
       }
       latestRevisionRef.current = envelope.revision;
+      setLiveTransport(null);
       setSnapshot(envelope.snapshot);
       setErrorMessage(null);
     }).then((unlisten) => {
       removeSessionListener = unlisten;
+    });
+
+    void listen<PlateWindowLiveTransport>(PLATE_LIVE_TRANSPORT_EVENT, (event) => {
+      if (disposed) {
+        return;
+      }
+      setLiveTransport(event.payload);
+    }).then((unlisten) => {
+      removeLiveTransportListener = unlisten;
     });
 
     void requestPlateWindowSession().catch((error) => {
@@ -480,6 +495,7 @@ export const PlateWindow: React.FC = () => {
     return () => {
       disposed = true;
       removeSessionListener?.();
+      removeLiveTransportListener?.();
     };
   }, []);
 

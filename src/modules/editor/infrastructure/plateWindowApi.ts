@@ -3,10 +3,12 @@ import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import {
   MAIN_WINDOW_LABEL,
   PLATE_ACTION_EVENT,
+  PLATE_LIVE_TRANSPORT_EVENT,
   PLATE_SESSION_REQUEST_EVENT,
   PLATE_SESSION_UPDATED_EVENT,
   PLATE_WINDOW_LABEL,
   PLATE_WINDOW_URL,
+  type PlateWindowLiveTransport,
   type RevisionedPlateWindowSessionSnapshot,
   type PlateWindowAction,
   type PlateWindowSessionSnapshot,
@@ -94,6 +96,10 @@ export async function openPlateWindow() {
 export function emitPlateWindowSession(snapshot: PlateWindowSessionSnapshot, revision = 0) {
   const payload: RevisionedPlateWindowSessionSnapshot = createRevisionedWindowSnapshot(snapshot, revision);
   return emitTo(PLATE_WINDOW_LABEL, PLATE_SESSION_UPDATED_EVENT, payload);
+}
+
+export function emitPlateWindowLiveTransport(transport: PlateWindowLiveTransport) {
+  return emitTo(PLATE_WINDOW_LABEL, PLATE_LIVE_TRANSPORT_EVENT, transport);
 }
 
 export function requestPlateWindowSession() {

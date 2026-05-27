@@ -2,6 +2,11 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import type { EditorAsset, TimelineClip } from '../domain/model';
 import { clamp, clipEndMs } from '../domain/model';
 import type { EditorAction } from './editorReducer';
+import {
+  buildLiveTransportSnapshot,
+  resolveLiveTransportMode,
+  type LiveTransportSnapshot,
+} from './liveTransport';
 
 const PLAYING_RESYNC_THRESHOLD_SECONDS = 0.75;
 const PAUSED_SYNC_THRESHOLD_SECONDS = 0.04;
@@ -92,7 +97,7 @@ interface UsePlaybackControllerArgs {
   playbackEntries: PlaybackTimelineEntry[];
   videoRef: React.RefObject<HTMLVideoElement | null>;
   dispatch: React.Dispatch<EditorAction>;
-  onTransportFrame?: (playheadMs: number) => void;
+  onTransportUpdate?: (transport: LiveTransportSnapshot) => void;
   onPreviewChange?: (previewState: PlaybackPreviewState) => void;
 }
 
@@ -105,7 +110,7 @@ export function usePlaybackController({
   playbackEntries,
   videoRef,
   dispatch,
-  onTransportFrame,
+  onTransportUpdate,
   onPreviewChange,
 }: UsePlaybackControllerArgs) {
   const gapAnchorRef = useRef<{ originPlayheadMs: number; startedAt: number } | null>(null);
@@ -123,7 +128,7 @@ export function usePlaybackController({
     previewVolume,
     previewMuted,
     playbackEntries,
-    onTransportFrame,
+    onTransportUpdate,
     onPreviewChange,
   });
 
@@ -135,10 +140,10 @@ export function usePlaybackController({
       previewVolume,
       previewMuted,
       playbackEntries,
-      onTransportFrame,
+      onTransportUpdate,
       onPreviewChange,
     };
-  }, [isPlaying, onPreviewChange, onTransportFrame, playbackEntries, playheadMs, previewMuted, previewVolume, timelineDurationMs]);
+  }, [isPlaying, onPreviewChange, onTransportUpdate, playbackEntries, playheadMs, previewMuted, previewVolume, timelineDurationMs]);
 
   const emitPreviewState = useCallback((previewState: PlaybackPreviewState) => {
     const { onPreviewChange: handlePreviewChange } = latestStateRef.current;
@@ -304,17 +309,17 @@ export function usePlaybackController({
     [videoRef],
   );
 
-  const emitTransportState = React.useEffectEvent((targetPlayheadMs: number) => {
+  const emitTransportState = React.useEffectEvent((targetPlayheadMs: number, transportMode: LiveTransportSnapshot['mode']) => {
     const {
       timelineDurationMs: currentTimelineDurationMs,
       playbackEntries: currentPlaybackEntries,
-      onTransportFrame: handleTransportFrame,
+      onTransportUpdate: handleTransportUpdate,
     } = latestStateRef.current;
     const boundedPlayheadMs = clamp(targetPlayheadMs, 0, currentTimelineDurationMs);
     const snapshot = getPlaybackSnapshot(currentPlaybackEntries, boundedPlayheadMs);
 
     livePlayheadMsRef.current = boundedPlayheadMs;
-    handleTransportFrame?.(boundedPlayheadMs);
+    handleTransportUpdate?.(buildLiveTransportSnapshot(boundedPlayheadMs, transportMode));
     emitPreviewState({
       previewAsset: snapshot.previewAsset,
       hasActiveVideo: snapshot.hasActiveVideo,
@@ -335,7 +340,10 @@ export function usePlaybackController({
       previewMuted: isPreviewMuted,
       previewVolume: currentPreviewVolume,
     } satisfies SyncVideoOptions;
-    const result = emitTransportState(targetPlayheadMs);
+    const result = emitTransportState(
+      targetPlayheadMs,
+      resolveLiveTransportMode(nextOptions.playing, nextOptions.scrubbing),
+    );
     syncVideoElement(
       result.snapshot.activeVideoEntry,
       result.boundedPlayheadMs,
@@ -490,7 +498,7 @@ export function usePlaybackController({
           return;
         }
 
-        emitTransportState(nextPlayheadMs);
+        emitTransportState(nextPlayheadMs, 'playing');
         frameId = requestAnimationFrame(step);
         return;
       }
@@ -520,7 +528,7 @@ export function usePlaybackController({
         currentClipEndMs,
       );
       const reachedClipEnd = mediaDrivenPlayheadMs >= currentClipEndMs - CLIP_END_EPSILON_MS;
-      const nextTransport = emitTransportState(reachedClipEnd ? currentClipEndMs : mediaDrivenPlayheadMs);
+      const nextTransport = emitTransportState(reachedClipEnd ? currentClipEndMs : mediaDrivenPlayheadMs, 'playing');
 
       if (nextTransport.boundedPlayheadMs >= currentTimelineDurationMs) {
         finishPlayback(currentTimelineDurationMs);
