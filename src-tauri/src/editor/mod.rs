@@ -16,6 +16,7 @@ use crate::contracts::{
     LprEvidenceExportRequestPayload, LprEvidenceExportResponsePayload,
     LprFrameAnalysisRequestPayload, LprFrameAnalysisResponsePayload,
     LprIntervalAnalysisRequestPayload, LprIntervalAnalysisResponsePayload,
+    LprProgressPayload,
     OutputCompressionModePayload,
     LprReviewStatePayload, LprRuntimeStatusPayload,
     LprTargetScanRequestPayload, LprTargetScanResponsePayload, MediaProbePayload,
@@ -29,6 +30,7 @@ use crate::media::{
 use crate::platform::process::{find_bundled, find_lpr_runtime_root, hidden_command};
 
 const APP_LOG_EVENT: &str = "app/log";
+const LPR_PROGRESS_EVENT: &str = "editor/lpr-progress";
 const AI_EVIDENCE_PROGRESS_EVENT: &str = "editor/ai-evidence-progress";
 
 #[derive(Clone, Serialize)]
@@ -121,6 +123,34 @@ fn emit_ai_evidence_progress(
             done,
             failed,
             request_id: request_id.map(|value| value.to_string()),
+        },
+    );
+}
+
+fn emit_lpr_progress(
+    app_handle: &tauri::AppHandle,
+    request_id: Option<&str>,
+    progress: f64,
+    stage: &str,
+    detail: impl Into<String>,
+    done: bool,
+    failed: bool,
+    reason_code: Option<&str>,
+    tracking_tier: Option<&str>,
+    coverage_ratio: Option<f64>,
+) {
+    let _ = app_handle.emit(
+        LPR_PROGRESS_EVENT,
+        LprProgressPayload {
+            progress,
+            stage: stage.to_string(),
+            detail: detail.into(),
+            done,
+            failed,
+            request_id: request_id.map(|value| value.to_string()),
+            reason_code: reason_code.map(|value| value.to_string()),
+            tracking_tier: tracking_tier.map(|value| value.to_string()),
+            coverage_ratio,
         },
     );
 }
@@ -908,7 +938,21 @@ pub async fn analyze_lpr_frame(
             request.enable_developer_diagnostics.unwrap_or(false),
         );
         let response: LprFrameAnalysisResponsePayload =
-            invoke_lpr_runtime(app_handle.clone(), "analyze-frame", &request)?;
+            invoke_lpr_runtime(app_handle.clone(), "analyze-frame", &request)
+                .inspect_err(|error| {
+                    emit_lpr_progress(
+                        &app_handle,
+                        request.request_id.as_deref(),
+                        1.0,
+                        "Frame",
+                        error.clone(),
+                        true,
+                        true,
+                        Some("runtime-error"),
+                        None,
+                        None,
+                    );
+                })?;
         emit_lpr_result_log(&app_handle, &response.provenance, &response.review, response.candidates.len());
         Ok(response)
     })
@@ -930,7 +974,21 @@ pub async fn analyze_lpr_interval(
             request.enable_developer_diagnostics.unwrap_or(false),
         );
         let response: LprIntervalAnalysisResponsePayload =
-            invoke_lpr_runtime(app_handle.clone(), "analyze-interval", &request)?;
+            invoke_lpr_runtime(app_handle.clone(), "analyze-interval", &request)
+                .inspect_err(|error| {
+                    emit_lpr_progress(
+                        &app_handle,
+                        request.request_id.as_deref(),
+                        1.0,
+                        "Interval",
+                        error.clone(),
+                        true,
+                        true,
+                        Some("runtime-error"),
+                        None,
+                        None,
+                    );
+                })?;
         emit_lpr_result_log(&app_handle, &response.provenance, &response.review, response.candidates.len());
         Ok(response)
     })

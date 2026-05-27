@@ -6,7 +6,11 @@ import type { VideoMarkerRect } from './editor';
 
 export type LprWorkflowMode = 'idle' | 'range' | 'target' | 'review';
 
-export type LprJobStatus = 'idle' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+export type LprJobStatus = 'idle' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'degraded';
+
+export type LprTrackingTier = 'full' | 'partial' | 'detection-fallback' | 'anchor-only' | 'anchor-invalid';
+
+export type LprAnchorStatus = 'valid' | 'missing-selection' | 'outside-interval' | 'not-detected' | 'mismatched' | 'degraded';
 
 export type LprVehicleKind = 'any' | 'vehicle' | 'motorcycle' | 'car' | 'truck' | 'bus';
 
@@ -144,8 +148,33 @@ export interface LprJobState {
   detail: string;
   requestId: string | null;
   error: string | null;
+  reasonCode?: string | null;
   startedAt: string | null;
   updatedAt: string | null;
+  trackingTier?: LprTrackingTier | null;
+  coverageRatio?: number | null;
+}
+
+export interface LprProgress {
+  progress: number;
+  stage: string;
+  detail: string;
+  done: boolean;
+  failed: boolean;
+  requestId: string | null;
+  reasonCode?: string | null;
+  trackingTier?: LprTrackingTier | null;
+  coverageRatio?: number | null;
+}
+
+export interface LprTrackingSummary {
+  trackingTier: LprTrackingTier;
+  anchorStatus: LprAnchorStatus;
+  coverageRatio: number;
+  trackedFrameCount: number;
+  requestedFrameCount: number;
+  degradedReason: string | null;
+  terminatedEarly: boolean;
 }
 
 export interface LprResultHistoryEntry {
@@ -225,6 +254,7 @@ export interface LprFrameAnalysisResponse {
   review: LprReviewState;
   provenance: LprAnalysisProvenance;
   runtime: LprRuntimeStatus;
+  jobStatus?: LprJobStatus;
   diagnostics?: LprDiagnostics | null;
 }
 
@@ -253,6 +283,8 @@ export interface LprIntervalAnalysisResponse {
   provenance: LprAnalysisProvenance;
   summary: string;
   runtime: LprRuntimeStatus;
+  jobStatus?: LprJobStatus;
+  tracking?: LprTrackingSummary | null;
   diagnostics?: LprDiagnostics | null;
 }
 

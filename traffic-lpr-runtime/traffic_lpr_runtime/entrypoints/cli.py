@@ -10,7 +10,16 @@ from typing import Any
 
 from traffic_lpr_runtime.application.runtime_application import build_default_application
 from traffic_lpr_runtime.domain.errors import RuntimeFailure
-from traffic_lpr_runtime.protocol import RuntimeRequestContext, build_runtime_error, build_runtime_success, unwrap_runtime_request
+from traffic_lpr_runtime.protocol import (
+    RuntimeRequestContext,
+    build_runtime_error,
+    build_runtime_progress,
+    build_runtime_success,
+    emit_runtime_progress,
+    install_runtime_progress_sink,
+    reset_runtime_progress_sink,
+    unwrap_runtime_request,
+)
 
 
 LPR_RUNTIME_PROTOCOL_VERSION = 1
@@ -100,8 +109,21 @@ def serve(runtime_script: Path) -> int:
                 accepted_versions=(LPR_RUNTIME_PROTOCOL_VERSION,),
                 error_factory=RuntimeFailure,
             )
-            with contextlib.redirect_stdout(stdout_noise):
-                result = application.dispatch(subcommand, payload)
+            token = install_runtime_progress_sink(
+                lambda progress_payload: _write_progress(progress_payload, request_context),
+            )
+            try:
+                with contextlib.redirect_stdout(stdout_noise):
+                    emit_runtime_progress({
+                        'progress': 0.02,
+                        'stage': subcommand,
+                        'detail': f'Starting {subcommand} request.',
+                        'done': False,
+                        'failed': False,
+                    })
+                    result = application.dispatch(subcommand, payload)
+            finally:
+                reset_runtime_progress_sink(token)
             _flush_stdout_noise(stdout_noise)
             response = build_runtime_success(result, request_context=request_context)
         except RuntimeFailure as error:
@@ -124,6 +146,11 @@ def serve(runtime_script: Path) -> int:
         sys.stdout.flush()
 
     return 0
+
+
+def _write_progress(progress_payload: dict[str, Any], request_context: RuntimeRequestContext) -> None:
+    sys.stdout.write(json.dumps(build_runtime_progress(progress_payload, request_context=request_context)) + '\n')
+    sys.stdout.flush()
 
 def _flush_stdout_noise(stdout_noise: io.StringIO) -> None:
     noise = stdout_noise.getvalue().strip()

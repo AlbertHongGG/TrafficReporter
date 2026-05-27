@@ -49,8 +49,18 @@
     {
       "name": "LprJobStatus",
       "kind": "stringUnion",
-      "targets": ["ts"],
-      "values": ["idle", "queued", "running", "completed", "failed", "cancelled"]
+      "targets": ["ts", "rust"],
+      "values": ["idle", "queued", "running", "completed", "failed", "cancelled", "degraded"]
+    },
+    {
+      "name": "LprTrackingTier",
+      "kind": "stringUnion",
+      "values": ["full", "partial", "detection-fallback", "anchor-only", "anchor-invalid"]
+    },
+    {
+      "name": "LprAnchorStatus",
+      "kind": "stringUnion",
+      "values": ["valid", "missing-selection", "outside-interval", "not-detected", "mismatched", "degraded"]
     },
     {
       "name": "LprVehicleKind",
@@ -264,8 +274,41 @@
         { "name": "detail", "type": "string" },
         { "name": "requestId", "type": "string", "nullable": true },
         { "name": "error", "type": "string", "nullable": true },
+        { "name": "reasonCode", "type": "string", "nullable": true, "optional": true },
         { "name": "startedAt", "type": "string", "nullable": true },
-        { "name": "updatedAt", "type": "string", "nullable": true }
+        { "name": "updatedAt", "type": "string", "nullable": true },
+        { "name": "trackingTier", "type": "LprTrackingTier", "nullable": true, "optional": true },
+        { "name": "coverageRatio", "type": "number", "nullable": true, "optional": true }
+      ]
+    },
+    {
+      "name": "LprProgress",
+      "kind": "object",
+      "targets": ["ts", "rust"],
+      "rustName": "LprProgressPayload",
+      "fields": [
+        { "name": "progress", "type": "number" },
+        { "name": "stage", "type": "string" },
+        { "name": "detail", "type": "string" },
+        { "name": "done", "type": "boolean" },
+        { "name": "failed", "type": "boolean" },
+        { "name": "requestId", "type": "string", "nullable": true },
+        { "name": "reasonCode", "type": "string", "nullable": true, "optional": true },
+        { "name": "trackingTier", "type": "LprTrackingTier", "nullable": true, "optional": true },
+        { "name": "coverageRatio", "type": "number", "nullable": true, "optional": true }
+      ]
+    },
+    {
+      "name": "LprTrackingSummary",
+      "kind": "object",
+      "fields": [
+        { "name": "trackingTier", "type": "LprTrackingTier" },
+        { "name": "anchorStatus", "type": "LprAnchorStatus" },
+        { "name": "coverageRatio", "type": "number" },
+        { "name": "trackedFrameCount", "type": "number", "rustType": "u32" },
+        { "name": "requestedFrameCount", "type": "number", "rustType": "u32" },
+        { "name": "degradedReason", "type": "string", "nullable": true },
+        { "name": "terminatedEarly", "type": "boolean" }
       ]
     },
     {
@@ -373,6 +416,7 @@
         { "name": "review", "type": "LprReviewState" },
         { "name": "provenance", "type": "LprAnalysisProvenance" },
         { "name": "runtime", "type": "LprRuntimeStatus" },
+        { "name": "jobStatus", "type": "LprJobStatus", "optional": true },
         { "name": "diagnostics", "type": "LprDiagnostics", "optional": true, "nullable": true }
       ]
     },
@@ -409,6 +453,8 @@
         { "name": "provenance", "type": "LprAnalysisProvenance" },
         { "name": "summary", "type": "string" },
         { "name": "runtime", "type": "LprRuntimeStatus" },
+        { "name": "jobStatus", "type": "LprJobStatus", "optional": true },
+        { "name": "tracking", "type": "LprTrackingSummary", "optional": true, "nullable": true },
         { "name": "diagnostics", "type": "LprDiagnostics", "optional": true, "nullable": true }
       ]
     },

@@ -13,6 +13,8 @@ def build_gate_thresholds(args: Any) -> dict[str, float | None]:
         'maxReviewRequiredRate': _coerce_optional_float(getattr(args, 'max_review_required_rate', None)),
         'maxNoCandidateRate': _coerce_optional_float(getattr(args, 'max_no_candidate_rate', None)),
         'minPlateIou': _coerce_optional_float(getattr(args, 'min_plate_iou', None)),
+        'minMeanTrackingCoverageRatio': _coerce_optional_float(getattr(args, 'min_mean_tracking_coverage_ratio', None)),
+        'maxDegradedTrackingRate': _coerce_optional_float(getattr(args, 'max_degraded_tracking_rate', None)),
         'maxP95LatencyMs': _coerce_optional_float(getattr(args, 'max_p95_latency_ms', None)),
     }
 
@@ -48,6 +50,21 @@ def evaluate_runtime_result_gate(
     )
     plate_iou_values = _case_metric_values(cases, 'localization', 'plateMeanIoU')
     _append_min_check(checks, 'meanPlateIoU', _mean_values(plate_iou_values), thresholds.get('minPlateIou'), sample_size=len(plate_iou_values))
+    tracking_case_count = _coerce_optional_int(metrics.get('intervalTrackingCaseCount'))
+    _append_min_check(
+        checks,
+        'meanTrackingCoverageRatio',
+        metrics.get('meanTrackingCoverageRatio'),
+        thresholds.get('minMeanTrackingCoverageRatio'),
+        sample_size=tracking_case_count,
+    )
+    _append_max_check(
+        checks,
+        'degradedTrackingRate',
+        metrics.get('degradedTrackingRate'),
+        thresholds.get('maxDegradedTrackingRate'),
+        sample_size=tracking_case_count,
+    )
     latency_payload = metrics.get('latencyMs') if isinstance(metrics.get('latencyMs'), dict) else {}
     _append_max_check(checks, 'p95LatencyMs', latency_payload.get('p95'), thresholds.get('maxP95LatencyMs'), sample_size=total_cases)
 

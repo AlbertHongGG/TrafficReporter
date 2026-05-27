@@ -11,7 +11,7 @@
     "lint": "eslint .",
     "test": "npm run generate:lpr-contracts && vitest run",
     "test:watch": "npm run generate:lpr-contracts && vitest",
-    "test:vnext:frontend": "npm run generate:lpr-contracts && vitest run src/vnext/editor/application/sessionStore.test.ts src/vnext/windowing/revisionedSnapshot.test.ts",
+    "test:vnext:frontend": "npm run generate:lpr-contracts && vitest run src/vnext/editor/application/sessionStore.test.ts src/vnext/windowing/revisionedSnapshot.test.ts src/modules/editor/application/lprProgress.test.ts",
     "test:vnext:runtime": "python -m unittest discover -s traffic-lpr-runtime/tests -p \"test_runtime*.py\"",
     "test:vnext:benchmark": "python -m unittest discover -s traffic-lpr-benchmark/tests -p \"test_runtime_protocol.py\"",
     "check:vnext": "npm run check:lpr-contracts && npm run test:vnext:frontend && cargo check --manifest-path src-tauri/Cargo.toml && npm run test:vnext:runtime && npm run test:vnext:benchmark",

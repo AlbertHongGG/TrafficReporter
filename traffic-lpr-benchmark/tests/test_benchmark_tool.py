@@ -147,6 +147,92 @@ class BenchmarkToolTests(unittest.TestCase):
 
         self.assertEqual(result, {'summary': 'ok'})
 
+    def test_evaluate_runtime_result_gate_checks_tracking_survival_thresholds(self) -> None:
+        gate = evaluate_runtime_result_gate(
+            {
+                'metrics': {
+                    'totalCases': 2,
+                    'meanTrackingCoverageRatio': 0.55,
+                    'degradedTrackingRate': 0.5,
+                    'intervalTrackingCaseCount': 2,
+                    'latencyMs': {'p95': 1200.0},
+                },
+                'cases': [],
+            },
+            {
+                'minExactRate': None,
+                'minTop3Rate': None,
+                'maxMeanCer': None,
+                'maxReviewRequiredRate': None,
+                'maxNoCandidateRate': None,
+                'minPlateIou': None,
+                'minMeanTrackingCoverageRatio': 0.7,
+                'maxDegradedTrackingRate': 0.25,
+                'maxP95LatencyMs': None,
+            },
+        )
+
+        self.assertFalse(gate['passed'])
+        self.assertEqual(
+            {check['metric'] for check in gate['checks']},
+            {'meanTrackingCoverageRatio', 'degradedTrackingRate'},
+        )
+
+    def test_summarize_benchmark_results_includes_tracking_survival_metrics(self) -> None:
+        summary = summarize_benchmark_results(
+            [
+                {
+                    'id': 'case-001',
+                    'exactMatch': True,
+                    'top3Match': True,
+                    'characterErrorRate': 0.0,
+                    'acceptedConfidence': 0.9,
+                    'acceptedMargin': 0.4,
+                    'latencyMs': 100.0,
+                    'failureReason': 'correct',
+                    'bestSource': 'ocr:a',
+                    'localization': {},
+                    'trackMetrics': None,
+                    'tracking': {
+                        'trackingTier': 'full',
+                        'coverageRatio': 1.0,
+                        'trackedFrameCount': 8,
+                    },
+                    'review': {'status': 'accepted', 'reasons': []},
+                    'metadata': {'dataset': 'UFPR', 'split': 'smoke'},
+                    'tags': [],
+                },
+                {
+                    'id': 'case-002',
+                    'exactMatch': True,
+                    'top3Match': True,
+                    'characterErrorRate': 0.0,
+                    'acceptedConfidence': 0.88,
+                    'acceptedMargin': 0.35,
+                    'latencyMs': 120.0,
+                    'failureReason': 'correct',
+                    'bestSource': 'ocr:a',
+                    'localization': {},
+                    'trackMetrics': None,
+                    'tracking': {
+                        'trackingTier': 'detection-fallback',
+                        'coverageRatio': 0.5,
+                        'trackedFrameCount': 4,
+                    },
+                    'review': {'status': 'review-required', 'reasons': ['coverage-gap']},
+                    'metadata': {'dataset': 'UFPR', 'split': 'smoke'},
+                    'tags': [],
+                },
+            ],
+            {'status': 'ready'},
+        )
+
+        self.assertEqual(summary['metrics']['intervalTrackingCaseCount'], 2)
+        self.assertEqual(summary['metrics']['trackingTierBreakdown'], {'detection-fallback': 1, 'full': 1})
+        self.assertAlmostEqual(summary['metrics']['meanTrackingCoverageRatio'], 0.75)
+        self.assertAlmostEqual(summary['metrics']['degradedTrackingRate'], 0.5)
+        self.assertAlmostEqual(summary['metrics']['meanTrackedFrameCount'], 6.0)
+
     def test_validate_profile_catalog_file_accepts_shared_catalog(self) -> None:
         catalog_path = TOOL_ROOT.parent / 'src' / 'shared' / 'config' / 'lpr-analysis-profiles.json'
         payload = validate_profile_catalog_file(catalog_path)

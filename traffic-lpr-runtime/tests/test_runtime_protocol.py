@@ -10,6 +10,8 @@ from traffic_lpr_runtime.domain.errors import RuntimeFailure
 from traffic_lpr_runtime.protocol import (
     LEGACY_RUNTIME_PROTOCOL_VERSION,
     VNEXT_RUNTIME_PROTOCOL_VERSION,
+    RuntimeRequestContext,
+    build_runtime_progress,
     build_runtime_request_envelope,
     unwrap_runtime_request,
 )
@@ -60,6 +62,30 @@ class RuntimeProtocolTests(unittest.TestCase):
 
         self.assertEqual(payload['protocolVersion'], VNEXT_RUNTIME_PROTOCOL_VERSION)
         self.assertEqual(payload['idempotencyKey'], 'idem-003')
+
+    def test_build_runtime_progress_wraps_progress_payload_with_request_context(self) -> None:
+        payload = build_runtime_progress(
+            {
+                'progress': 0.42,
+                'stage': 'Interval',
+                'detail': 'Analyzing tracked sample 2/5.',
+                'done': False,
+                'failed': False,
+                'trackingTier': 'partial',
+                'coverageRatio': 0.4,
+            },
+            request_context=RuntimeRequestContext(
+                protocol_mode=True,
+                protocol_version=LEGACY_RUNTIME_PROTOCOL_VERSION,
+                request_id='req-004',
+                idempotency_key=None,
+            ),
+        )
+
+        self.assertEqual(payload['kind'], 'progress')
+        self.assertEqual(payload['requestId'], 'req-004')
+        self.assertEqual(payload['progress']['requestId'], 'req-004')
+        self.assertEqual(payload['progress']['trackingTier'], 'partial')
 
 
 if __name__ == '__main__':

@@ -4,6 +4,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use super::{OutputCompressionModePayload, VideoMarkerRectPayload};
 
+pub type LprJobStatus = String;
+
+pub type LprTrackingTier = String;
+
+pub type LprAnchorStatus = String;
+
 pub type LprVehicleKind = String;
 
 pub type LprLegibilityLevel = String;
@@ -132,6 +138,32 @@ pub struct LprFrameSamplePayload {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct LprProgressPayload {
+    pub progress: f64,
+    pub stage: String,
+    pub detail: String,
+    pub done: bool,
+    pub failed: bool,
+    pub request_id: Option<String>,
+    pub reason_code: Option<String>,
+    pub tracking_tier: Option<LprTrackingTier>,
+    pub coverage_ratio: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LprTrackingSummary {
+    pub tracking_tier: LprTrackingTier,
+    pub anchor_status: LprAnchorStatus,
+    pub coverage_ratio: f64,
+    pub tracked_frame_count: u32,
+    pub requested_frame_count: u32,
+    pub degraded_reason: Option<String>,
+    pub terminated_early: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LprRuntimeStatusPayload {
     pub available: bool,
     pub python_executable: Option<String>,
@@ -184,6 +216,7 @@ pub struct LprFrameAnalysisResponsePayload {
     pub review: LprReviewStatePayload,
     pub provenance: LprAnalysisProvenancePayload,
     pub runtime: LprRuntimeStatusPayload,
+    pub job_status: Option<LprJobStatus>,
     pub diagnostics: Option<LprDiagnostics>,
 }
 
@@ -216,6 +249,8 @@ pub struct LprIntervalAnalysisResponsePayload {
     pub provenance: LprAnalysisProvenancePayload,
     pub summary: String,
     pub runtime: LprRuntimeStatusPayload,
+    pub job_status: Option<LprJobStatus>,
+    pub tracking: Option<LprTrackingSummary>,
     pub diagnostics: Option<LprDiagnostics>,
 }
 

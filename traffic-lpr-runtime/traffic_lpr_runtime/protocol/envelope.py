@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextvars
 import json
 from dataclasses import dataclass
 from typing import Any, Callable, Sequence
@@ -12,6 +13,10 @@ SUPPORTED_RUNTIME_PROTOCOL_VERSIONS: tuple[int, ...] = (
     VNEXT_RUNTIME_PROTOCOL_VERSION,
 )
 DEFAULT_RUNTIME_PROTOCOL_VERSION = LEGACY_RUNTIME_PROTOCOL_VERSION
+_runtime_progress_sink: contextvars.ContextVar[Callable[[dict[str, Any]], None] | None] = contextvars.ContextVar(
+    'runtime_progress_sink',
+    default=None,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,6 +154,25 @@ def build_runtime_error(
     return payload
 
 
+def build_runtime_progress(
+    progress_payload: dict[str, Any],
+    *,
+    request_context: RuntimeRequestContext,
+) -> dict[str, Any]:
+    payload = {
+        'protocolVersion': request_context.protocol_version or DEFAULT_RUNTIME_PROTOCOL_VERSION,
+        'requestId': request_context.request_id,
+        'kind': 'progress',
+        'progress': {
+            **progress_payload,
+            'requestId': progress_payload.get('requestId', request_context.request_id),
+        },
+    }
+    if request_context.idempotency_key is not None:
+        payload['idempotencyKey'] = request_context.idempotency_key
+    return payload
+
+
 def unwrap_runtime_response(
     payload: Any,
     *,
@@ -175,6 +199,20 @@ def unwrap_runtime_response(
     if not isinstance(result, dict):
         raise error_factory('Runtime returned success without a result payload.')
     return result
+
+
+def install_runtime_progress_sink(sink: Callable[[dict[str, Any]], None]) -> contextvars.Token[Callable[[dict[str, Any]], None] | None]:
+    return _runtime_progress_sink.set(sink)
+
+
+def reset_runtime_progress_sink(token: contextvars.Token[Callable[[dict[str, Any]], None] | None]) -> None:
+    _runtime_progress_sink.reset(token)
+
+
+def emit_runtime_progress(progress_payload: dict[str, Any]) -> None:
+    sink = _runtime_progress_sink.get()
+    if sink is not None:
+        sink(progress_payload)
 
 
 def _optional_string(value: Any) -> str | None:

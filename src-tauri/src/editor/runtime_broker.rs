@@ -6,7 +6,7 @@ use std::time::Duration;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::contracts::LprRuntimeStatusPayload;
+use crate::contracts::{LprProgressPayload, LprRuntimeStatusPayload};
 use crate::platform::process::{find_lpr_runtime_root, find_python_runtime, hidden_command};
 
 const LPR_RUNTIME_RETRY_LIMIT: usize = 1;
@@ -41,16 +41,78 @@ struct RuntimeWorkerRequest<'a, TRequest: Serialize> {
 struct RuntimeWorkerResponse<TResponse> {
     protocol_version: u8,
     request_id: u64,
-    ok: bool,
+    kind: Option<String>,
+    ok: Option<bool>,
+    progress: Option<LprProgressPayload>,
     result: Option<TResponse>,
     error: Option<String>,
     runtime: Option<LprRuntimeStatusPayload>,
     traceback: Option<String>,
 }
 
+#[derive(Debug)]
 enum RuntimeWorkerInvokeError {
     Recoverable(String),
     Unrecoverable(String),
+}
+
+enum RuntimeWorkerEnvelope<TResponse> {
+    Progress(LprProgressPayload),
+    Success(TResponse),
+    Error(RuntimeWorkerResponse<TResponse>),
+}
+
+fn parse_worker_response_line<TResponse>(
+    response_line: &str,
+    request_id: u64,
+    protocol_version: u8,
+) -> Result<RuntimeWorkerEnvelope<TResponse>, RuntimeWorkerInvokeError>
+where
+    TResponse: DeserializeOwned,
+{
+    let response: RuntimeWorkerResponse<TResponse> = serde_json::from_str(response_line.trim_end()).map_err(|error| {
+        RuntimeWorkerInvokeError::Recoverable(format!(
+            "Failed to parse the LPR runtime worker response: {}\n{}",
+            error,
+            response_line.trim()
+        ))
+    })?;
+
+    if response.request_id != request_id {
+        return Err(RuntimeWorkerInvokeError::Recoverable(format!(
+            "Mismatched LPR runtime worker response: expected request {}, received {}.",
+            request_id,
+            response.request_id,
+        )));
+    }
+
+    if response.protocol_version != protocol_version {
+        return Err(RuntimeWorkerInvokeError::Recoverable(format!(
+            "Mismatched LPR runtime worker protocol: expected version {}, received {}.",
+            protocol_version,
+            response.protocol_version,
+        )));
+    }
+
+    if response.kind.as_deref() == Some("progress") {
+        let progress = response.progress.ok_or_else(|| {
+            RuntimeWorkerInvokeError::Recoverable(
+                "The local LPR runtime worker emitted a progress envelope without a progress payload.".to_string(),
+            )
+        })?;
+        return Ok(RuntimeWorkerEnvelope::Progress(progress));
+    }
+
+    if response.ok == Some(true) {
+        let result = response.result.ok_or_else(|| {
+            RuntimeWorkerInvokeError::Unrecoverable(
+                "The local LPR runtime worker returned success without a payload.".to_string(),
+            )
+        })?;
+        return Ok(RuntimeWorkerEnvelope::Success(result));
+    }
+
+    Ok(RuntimeWorkerEnvelope::Error(response))
 }
 
 impl RuntimeBroker {
@@ -104,7 +166,7 @@ impl RuntimeBroker {
                 .as_mut()
                 .ok_or_else(|| "The local LPR runtime worker could not be initialized.".to_string())?;
 
-            match worker.invoke(subcommand, payload) {
+            match worker.invoke(&app_handle, subcommand, payload) {
                 Ok(response) => return Ok(response),
                 Err(RuntimeWorkerInvokeError::Unrecoverable(error)) => return Err(error),
                 Err(RuntimeWorkerInvokeError::Recoverable(error)) => {
@@ -227,6 +289,7 @@ impl PersistentLprRuntime {
 
     fn invoke<TRequest, TResponse>(
         &mut self,
+        app_handle: &tauri::AppHandle,
         subcommand: &str,
         payload: &TRequest,
     ) -> Result<TResponse, RuntimeWorkerInvokeError>
@@ -268,40 +331,30 @@ impl PersistentLprRuntime {
             ))
         })?;
 
-        let response_line = self.read_response_line()?;
-        let response: RuntimeWorkerResponse<TResponse> = serde_json::from_str(response_line.trim_end()).map_err(|error| {
-            RuntimeWorkerInvokeError::Recoverable(format!(
-                "Failed to parse the LPR runtime worker response: {}\n{}",
-                error,
-                response_line.trim()
-            ))
-        })?;
-
-        if response.request_id != request.request_id {
-            return Err(RuntimeWorkerInvokeError::Recoverable(format!(
-                "Mismatched LPR runtime worker response: expected request {}, received {}.",
-                request.request_id,
-                response.request_id,
-            )));
+        loop {
+            let response_line = self.read_response_line()?;
+            match parse_worker_response_line(&response_line, request.request_id, request.protocol_version)? {
+                RuntimeWorkerEnvelope::Progress(progress) => {
+                    super::emit_lpr_progress(
+                        app_handle,
+                        progress.request_id.as_deref(),
+                        progress.progress,
+                        &progress.stage,
+                        progress.detail,
+                        progress.done,
+                        progress.failed,
+                        progress.reason_code.as_deref(),
+                        progress.tracking_tier.as_deref(),
+                        progress.coverage_ratio,
+                    );
+                    continue;
+                }
+                RuntimeWorkerEnvelope::Success(result) => return Ok(result),
+                RuntimeWorkerEnvelope::Error(response) => {
+                    return Err(RuntimeWorkerInvokeError::Unrecoverable(format_worker_error(response)));
+                }
+            }
         }
-
-        if response.protocol_version != request.protocol_version {
-            return Err(RuntimeWorkerInvokeError::Recoverable(format!(
-                "Mismatched LPR runtime worker protocol: expected version {}, received {}.",
-                request.protocol_version,
-                response.protocol_version,
-            )));
-        }
-
-        if response.ok {
-            return response.result.ok_or_else(|| {
-                RuntimeWorkerInvokeError::Unrecoverable(
-                    "The local LPR runtime worker returned success without a payload.".to_string(),
-                )
-            });
-        }
-
-        Err(RuntimeWorkerInvokeError::Unrecoverable(format_worker_error(response)))
     }
 
     fn read_response_line(&mut self) -> Result<String, RuntimeWorkerInvokeError> {
@@ -435,4 +488,73 @@ pub(crate) fn terminate_lpr_runtime_process(
     reason: &str,
 ) -> Result<bool, String> {
     runtime_broker().terminate(app_handle, reason)
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::Value;
+
+    use super::{parse_worker_response_line, RuntimeWorkerEnvelope, RuntimeWorkerInvokeError};
+
+    #[test]
+    fn parse_worker_response_line_accepts_progress_envelopes() {
+        let envelope = parse_worker_response_line::<Value>(
+            r#"{"protocolVersion":1,"requestId":7,"kind":"progress","progress":{"requestId":"req-7","progress":0.4,"stage":"Interval","detail":"Analyzing tracked sample 2/5.","done":false,"failed":false,"reasonCode":null,"trackingTier":"partial","coverageRatio":0.4}}"#,
+            7,
+            1,
+        )
+        .expect("progress envelope should parse");
+
+        match envelope {
+            RuntimeWorkerEnvelope::Progress(progress) => {
+                assert_eq!(progress.request_id.as_deref(), Some("req-7"));
+                assert_eq!(progress.stage, "Interval");
+                assert_eq!(progress.detail, "Analyzing tracked sample 2/5.");
+                assert!((progress.progress - 0.4).abs() < f64::EPSILON);
+                assert_eq!(progress.tracking_tier.as_deref(), Some("partial"));
+                assert_eq!(progress.coverage_ratio, Some(0.4));
+            }
+            RuntimeWorkerEnvelope::Success(_) | RuntimeWorkerEnvelope::Error(_) => {
+                panic!("expected a progress envelope")
+            }
+        }
+    }
+
+    #[test]
+    fn parse_worker_response_line_accepts_success_envelopes() {
+        let envelope = parse_worker_response_line::<Value>(
+            r#"{"protocolVersion":1,"requestId":8,"ok":true,"result":{"status":"ok","samples":3}}"#,
+            8,
+            1,
+        )
+        .expect("success envelope should parse");
+
+        match envelope {
+            RuntimeWorkerEnvelope::Success(result) => {
+                assert_eq!(result.get("status").and_then(Value::as_str), Some("ok"));
+                assert_eq!(result.get("samples").and_then(Value::as_i64), Some(3));
+            }
+            RuntimeWorkerEnvelope::Progress(_) | RuntimeWorkerEnvelope::Error(_) => {
+                panic!("expected a success envelope")
+            }
+        }
+    }
+
+    #[test]
+    fn parse_worker_response_line_rejects_progress_without_payload() {
+        let result = parse_worker_response_line::<Value>(
+            r#"{"protocolVersion":1,"requestId":9,"kind":"progress"}"#,
+            9,
+            1,
+        );
+
+        match result {
+            Err(RuntimeWorkerInvokeError::Recoverable(message)) => {
+                assert!(message.contains("without a progress payload"));
+            }
+            Ok(_) | Err(RuntimeWorkerInvokeError::Unrecoverable(_)) => {
+                panic!("expected a recoverable progress payload error")
+            }
+        }
+    }
 }

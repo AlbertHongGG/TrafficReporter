@@ -20,8 +20,11 @@ export const DEFAULT_LPR_JOB_STATE: LprJobState = {
   detail: '',
   requestId: null,
   error: null,
+  reasonCode: null,
   startedAt: null,
   updatedAt: null,
+  trackingTier: null,
+  coverageRatio: null,
 };
 
 function cloneIntervalSelection(interval: TimelineIntervalSelection | null) {

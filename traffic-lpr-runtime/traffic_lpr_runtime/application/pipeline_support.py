@@ -96,6 +96,16 @@ class AnalysisOptions:
     def ocr_models(self) -> list[str]:
         return self.ocr_model_names if self.enable_recognizer_comparison else self.ocr_model_names[:1]
 
+    def for_interactive_frame(self) -> 'AnalysisOptions':
+        restoration_mode = self.restoration_mode
+        if restoration_mode not in {'off', 'classical'}:
+            restoration_mode = 'classical'
+        return replace(
+            self,
+            enable_recognizer_comparison=False,
+            restoration_mode=restoration_mode,
+        )
+
     def for_interval_sample(self, sample_count_hint: int | None = None) -> 'AnalysisOptions':
         restoration_mode = self.restoration_mode
         if (

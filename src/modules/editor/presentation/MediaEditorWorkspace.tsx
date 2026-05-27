@@ -72,6 +72,7 @@ import {
   type AiPanelAction,
   type AiPanelSessionSnapshot,
 } from '../application/aiPanelWindow';
+import { buildLprJobUpdateFromProgress, shouldApplyLprProgress } from '../application/lprProgress';
 import {
   PLATE_ACTION_EVENT,
   PLATE_SESSION_REQUEST_EVENT,
@@ -83,6 +84,7 @@ import { emitPlateWindowSession, openPlateWindow } from '../infrastructure/plate
 import type {
   AiEvidenceProgress,
   AiEvidenceResponse,
+  LprProgress,
   LprPlateCandidate,
   LprReviewState,
   LprSessionState,
@@ -477,7 +479,10 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       stage,
       detail,
       error: null,
+      reasonCode: null,
       startedAt: new Date().toISOString(),
+      trackingTier: null,
+      coverageRatio: null,
     });
     return requestId;
   }, [updateLprJob]);
@@ -505,6 +510,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       stage: lprJob.stage || 'LPR',
       detail: 'Cancelling current LPR task.',
       error: null,
+      reasonCode: null,
     });
 
     try {
@@ -518,6 +524,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         stage: lprJob.stage || 'LPR',
         detail: 'Current LPR task cancelled.',
         error: null,
+        reasonCode: null,
       });
       await refreshLprRuntimeStatus();
     } catch (error) {
@@ -529,6 +536,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         stage: lprJob.stage || 'LPR',
         detail: 'Unable to cancel the current LPR task.',
         error: summary,
+        reasonCode: 'cancel-failed',
       });
       setWorkspaceFeedback(summary);
     }
@@ -1618,10 +1626,13 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         });
       }
       updateLprJob({
-        status: 'completed',
+        status: response.jobStatus ?? 'completed',
         progress: 1,
         stage: 'Frame',
         detail: buildLprCompletionDetail(response.candidates, response.review),
+        reasonCode: null,
+        trackingTier: null,
+        coverageRatio: null,
       });
     } catch (error) {
       if (shouldIgnoreLprRequestResult(requestId)) {
@@ -1634,6 +1645,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         stage: 'Frame',
         detail: 'Frame analysis failed.',
         error: getErrorSummary(error, 'Unable to analyze the current frame.'),
+        reasonCode: 'frame-analysis-failed',
       });
       setWorkspaceFeedback(getErrorSummary(error, 'Unable to analyze the current frame.'));
     } finally {
@@ -1735,7 +1747,9 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       dispatch({ type: 'set-lpr-review', review: response.review ?? null });
       dispatch({ type: 'accept-lpr-candidate', candidateId: response.acceptedCandidateId ?? null });
       dispatch({ type: 'set-lpr-provenance', provenance: response.provenance ?? null });
-      const intervalDetail = buildLprCompletionDetail(response.candidates, response.review) ?? response.summary;
+      const intervalDetail = response.jobStatus === 'degraded'
+        ? response.summary
+        : (buildLprCompletionDetail(response.candidates, response.review) ?? response.summary);
       dispatch({
         type: 'append-lpr-history',
         entry: {
@@ -1752,10 +1766,13 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       });
       dispatch({ type: 'set-lpr-mode', workflowMode: response.candidates.length > 0 ? 'review' : 'target' });
       updateLprJob({
-        status: 'completed',
+        status: response.jobStatus ?? 'completed',
         progress: 1,
         stage: 'Interval',
         detail: intervalDetail,
+        reasonCode: response.tracking?.degradedReason ?? null,
+        trackingTier: response.tracking?.trackingTier ?? null,
+        coverageRatio: response.tracking?.coverageRatio ?? null,
       });
     } catch (error) {
       if (shouldIgnoreLprRequestResult(requestId)) {
@@ -1768,6 +1785,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         stage: 'Interval',
         detail: 'Interval analysis failed.',
         error: getErrorSummary(error, 'Unable to analyze the selected interval.'),
+        reasonCode: 'interval-analysis-failed',
       });
       setWorkspaceFeedback(getErrorSummary(error, 'Unable to analyze the selected interval.'));
     } finally {
@@ -1939,6 +1957,31 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       // Ignore export-session requests when no exportable timeline is available.
     }
   });
+
+  useEffect(() => {
+    let disposed = false;
+    let progressCleanup: (() => void) | undefined;
+
+    void listen<LprProgress>('editor/lpr-progress', (event) => {
+      if (disposed) {
+        return;
+      }
+
+      const activeRequestId = activeLprRequestIdRef.current;
+      if (!shouldApplyLprProgress(activeRequestId, event.payload)) {
+        return;
+      }
+
+      updateLprJob(buildLprJobUpdateFromProgress(activeRequestId, event.payload));
+    }).then((unlisten) => {
+      progressCleanup = unlisten;
+    });
+
+    return () => {
+      disposed = true;
+      progressCleanup?.();
+    };
+  }, [updateLprJob]);
 
   useEffect(() => {
     let disposed = false;

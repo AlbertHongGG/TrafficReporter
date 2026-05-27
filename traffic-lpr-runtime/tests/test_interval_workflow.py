@@ -124,7 +124,7 @@ class IntervalWorkflowTests(unittest.TestCase):
         self.assertEqual(result['targetTracks'][0]['frames'][0]['box'], calibrated_box.to_payload())
         self.assertEqual(result['targetTracks'][0]['frames'][0]['diagnostics']['rawTrackingBox'], raw_box.to_payload())
 
-    def test_interval_analysis_rejects_anchor_mismatch_after_tracking(self) -> None:
+    def test_interval_analysis_returns_degraded_result_when_anchor_mismatch_still_has_samples(self) -> None:
         selected_target_box = NormalizedRect(x=0.12, y=0.22, width=0.12, height=0.26)
         tracked_region = TrackedRegion(
             id='track-1',
@@ -179,15 +179,21 @@ class IntervalWorkflowTests(unittest.TestCase):
             ],
         )
 
-        with self.assertRaises(RuntimeFailure):
-            workflow.run({
-                'sourcePath': 'demo.mp4',
-                'interval': {'startMs': 10000, 'endMs': 12000},
-                'anchorTimeMs': 11000,
-                'targetVehicleKind': 'motorcycle',
-                'selectedTargetBox': selected_target_box.to_payload(),
-                'countryHints': ['tw'],
-            })
+        result = workflow.run({
+            'sourcePath': 'demo.mp4',
+            'interval': {'startMs': 10000, 'endMs': 12000},
+            'anchorTimeMs': 11000,
+            'targetVehicleKind': 'motorcycle',
+            'selectedTargetBox': selected_target_box.to_payload(),
+            'countryHints': ['tw'],
+            'maxSamples': 4,
+        })
+
+        self.assertEqual(result['jobStatus'], 'degraded')
+        self.assertEqual(result['tracking']['trackingTier'], 'anchor-invalid')
+        self.assertEqual(result['tracking']['anchorStatus'], 'mismatched')
+        self.assertGreater(result['tracking']['coverageRatio'], 0.0)
+        self.assertEqual(result['review']['status'], 'review-required')
 
     def test_interval_analysis_forces_review_when_tracking_identity_breaks(self) -> None:
         selected_target_box = NormalizedRect(x=0.32, y=0.2, width=0.18, height=0.24)
@@ -263,9 +269,12 @@ class IntervalWorkflowTests(unittest.TestCase):
             'selectedTargetBox': selected_target_box.to_payload(),
             'selectedTargetTrackId': 'target-11000-0',
             'countryHints': ['tw'],
+            'maxSamples': 4,
         })
 
         self.assertIsNone(result['acceptedCandidateId'])
+        self.assertEqual(result['jobStatus'], 'degraded')
+        self.assertEqual(result['tracking']['trackingTier'], 'detection-fallback')
         self.assertEqual(result['review']['status'], 'review-required')
         self.assertIn('tracking identity became ambiguous across the interval', result['review']['reasons'])
         self.assertEqual(result['targetTracks'][0]['id'], 'target-11000-0')

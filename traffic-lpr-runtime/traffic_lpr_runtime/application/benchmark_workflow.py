@@ -142,6 +142,7 @@ class BenchmarkRunWorkflow:
                     'latencyMs': latency_ms,
                     'localization': localization,
                     'trackMetrics': track_metrics_case,
+                    'tracking': dict(response.get('tracking') or {}) if isinstance(response.get('tracking'), dict) else None,
                     'failureReason': failure_reason,
                     'review': dict(review_payload),
                     'provenance': dict(provenance_payload),
@@ -220,6 +221,11 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
     failure_counts: dict[str, int] = {}
     review_status_counts: dict[str, int] = {}
     review_reason_counts: dict[str, int] = {}
+    tracking_tier_counts: dict[str, int] = {}
+    tracking_coverage_values: list[float] = []
+    tracked_frame_counts: list[int] = []
+    degraded_tracking_cases = 0
+    interval_tracking_cases = 0
 
     for result in benchmark_results:
         exact_match = bool(result.get('exactMatch'))
@@ -232,6 +238,7 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
         best_source = str(result.get('bestSource') or '')
         localization = dict(result.get('localization') or {})
         track_metrics_case = dict(result.get('trackMetrics') or {}) if isinstance(result.get('trackMetrics'), dict) else None
+        tracking_payload = dict(result.get('tracking') or {}) if isinstance(result.get('tracking'), dict) else None
         metadata = dict(result.get('metadata') or {})
         review_payload = _normalized_review_payload(result)
         review_status = review_payload['status']
@@ -247,6 +254,18 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
             review_reason_counts[reason] = review_reason_counts.get(reason, 0) + 1
         if best_source:
             source_wins[best_source] = source_wins.get(best_source, 0) + 1
+        if tracking_payload:
+            interval_tracking_cases += 1
+            tracking_tier = str(tracking_payload.get('trackingTier') or 'unknown')
+            tracking_tier_counts[tracking_tier] = tracking_tier_counts.get(tracking_tier, 0) + 1
+            if tracking_tier != 'full':
+                degraded_tracking_cases += 1
+            coverage_ratio = _coerce_optional_float(tracking_payload.get('coverageRatio'))
+            if coverage_ratio is not None:
+                tracking_coverage_values.append(coverage_ratio)
+            tracked_frame_count = _coerce_optional_int(tracking_payload.get('trackedFrameCount'))
+            if tracked_frame_count is not None:
+                tracked_frame_counts.append(tracked_frame_count)
 
         case_metrics = {
             'exactMatch': exact_match,
@@ -265,6 +284,8 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
             'predictionSwitchCount': (track_metrics_case or {}).get('predictionSwitchCount'),
             'sampleExactMatchRate': (track_metrics_case or {}).get('sampleExactMatchRate'),
             'timeToFirstCorrectMs': (track_metrics_case or {}).get('timeToFirstCorrectMs'),
+            'trackingCoverageRatio': (tracking_payload or {}).get('coverageRatio'),
+            'trackedFrameCount': (tracking_payload or {}).get('trackedFrameCount'),
         }
 
         for tag in list(result.get('tags') or []):
@@ -295,6 +316,11 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
         },
         'confidenceCalibration': _build_confidence_calibration(calibration_points),
         'failureBreakdown': failure_counts,
+        'intervalTrackingCaseCount': interval_tracking_cases,
+        'trackingTierBreakdown': dict(sorted(tracking_tier_counts.items())),
+        'meanTrackingCoverageRatio': _mean_values(tracking_coverage_values),
+        'degradedTrackingRate': (degraded_tracking_cases / interval_tracking_cases) if interval_tracking_cases else None,
+        'meanTrackedFrameCount': (sum(tracked_frame_counts) / len(tracked_frame_counts)) if tracked_frame_counts else None,
         'tagBreakdown': {
             tag: _finalize_metric_bucket(values)
             for tag, values in sorted(tag_metrics.items())
@@ -312,6 +338,7 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
         f"{total_cases} cases, exact={metrics['exactMatchRate']:.1%}, "
         f"top3={metrics['top3MatchRate']:.1%}, cer={metrics['meanCharacterErrorRate']:.3f}, "
         f"review={metrics['reviewRequiredRate']:.1%}, noCandidate={metrics['noCandidateRate']:.1%}, "
+        f"coverage={_format_optional_ratio(metrics['meanTrackingCoverageRatio'])}, "
         f"plateIoU={_safe_metric_average(benchmark_results, 'localization', 'plateMeanIoU'):.3f}, "
         f"p95={metrics['latencyMs']['p95']:.1f}ms"
     )
@@ -447,6 +474,36 @@ def _candidate_confidence(candidate: dict[str, Any] | None) -> float:
         return float(candidate.get('confidence') or 0.0)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _coerce_optional_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _coerce_optional_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _mean_values(values: list[float]) -> float | None:
+    if not values:
+        return None
+    return sum(values) / len(values)
+
+
+def _format_optional_ratio(value: Any) -> str:
+    if isinstance(value, (int, float)):
+        return f'{float(value):.1%}'
+    return '--'
 
 
 def _new_metric_bucket() -> dict[str, float]:
