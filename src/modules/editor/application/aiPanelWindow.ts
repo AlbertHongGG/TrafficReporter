@@ -1,4 +1,5 @@
 import type { AiEvidenceSessionState, LprRuntimeStatus, LprSessionState } from '../../../shared/contracts';
+import type { RevisionedWindowSnapshot } from '../../../vnext/windowing/revisionedSnapshot';
 
 export const MAIN_WINDOW_LABEL = 'main';
 export const AI_PANEL_WINDOW_LABEL = 'ai-panel';
@@ -16,6 +17,8 @@ export interface AiPanelSessionSnapshot {
   ai: AiEvidenceSessionState;
   playheadMs: number;
 }
+
+export type RevisionedAiPanelSessionSnapshot = RevisionedWindowSnapshot<AiPanelSessionSnapshot>;
 
 export type AiPanelAction =
   | { type: 'run-analysis'; prompt: string }

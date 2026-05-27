@@ -24,6 +24,12 @@ from traffic_lpr_runtime.infrastructure.model_runtime import (
     ModelRegistry,
     UltralyticsTargetDetector,
 )
+from traffic_lpr_runtime.vnext import (
+    CallableRuntimeUseCase,
+    RuntimeUseCaseRegistry,
+    RuntimeServiceContainer,
+    build_default_runtime_service_container,
+)
 
 
 class LprRuntimeApplication:
@@ -94,24 +100,21 @@ class LprRuntimeApplication:
             provider=self._ai_provider,
         )
         self._contract_registry = LprContractRegistry()
+        self._use_case_registry = RuntimeUseCaseRegistry([
+            CallableRuntimeUseCase(name='status', handler=lambda payload: self.status()),
+            CallableRuntimeUseCase(name='scan-targets', handler=self.scan_targets),
+            CallableRuntimeUseCase(name='ai-evidence', handler=self.ai_evidence),
+            CallableRuntimeUseCase(name='analyze-frame', handler=self.analyze_frame),
+            CallableRuntimeUseCase(name='analyze-interval', handler=self.analyze_interval),
+            CallableRuntimeUseCase(name='benchmark-run', handler=self.benchmark_run),
+        ])
 
     def dispatch(self, subcommand: str, payload: dict[str, Any]) -> dict[str, Any]:
-        if subcommand == 'status':
-            return self.status()
-        if subcommand == 'benchmark-run':
-            return self.benchmark_run(payload)
-        self._contract_registry.validate_request(subcommand, payload)
-        if subcommand == 'scan-targets':
-            result = self.scan_targets(payload)
-        elif subcommand == 'ai-evidence':
-            result = self.ai_evidence(payload)
-        elif subcommand == 'analyze-frame':
-            result = self.analyze_frame(payload)
-        elif subcommand == 'analyze-interval':
-            result = self.analyze_interval(payload)
-        else:
-            raise RuntimeFailure(f'Unsupported LPR runtime subcommand: {subcommand}')
-        self._contract_registry.validate_response(subcommand, result)
+        if subcommand not in {'status', 'benchmark-run'}:
+            self._contract_registry.validate_request(subcommand, payload)
+        result = self._use_case_registry.run(subcommand, payload)
+        if subcommand not in {'status', 'benchmark-run'}:
+            self._contract_registry.validate_response(subcommand, result)
         return result
 
     def status(self) -> dict[str, Any]:
@@ -415,16 +418,11 @@ def _looks_like_plate_roi(rect: NormalizedRect) -> bool:
 
 
 def build_default_application(runtime_script: Path) -> LprRuntimeApplication:
-    dependencies = DependencyRegistry.load(runtime_script)
-    frame_reader = OpenCvFrameReader(dependencies)
-    quality_scorer = QualityScorer(dependencies)
-    model_registry = ModelRegistry(dependencies)
-    target_detector = UltralyticsTargetDetector(model_registry)
-    primary_recognizer = FastAlprPlateRecognizer(model_registry, quality_scorer)
+    container = build_default_runtime_service_container(runtime_script)
     return LprRuntimeApplication(
-        dependencies=dependencies,
-        frame_reader=frame_reader,
-        target_detector=target_detector,
-        primary_recognizer=primary_recognizer,
-        quality_scorer=quality_scorer,
+        dependencies=container.dependencies,
+        frame_reader=container.frame_reader,
+        target_detector=container.target_detector,
+        primary_recognizer=container.primary_recognizer,
+        quality_scorer=container.quality_scorer,
     )

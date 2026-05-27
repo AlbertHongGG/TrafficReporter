@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "traffic://schemas/protocol/runtime-envelope.v2.schema.json",
+  "title": "Traffic Runtime Envelope v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocolVersion",
+    "subcommand",
+    "payload",
+    "requestId",
+    "idempotencyKey"
+  ],
+  "properties": {
+    "protocolVersion": {
+      "const": 2
+    },
+    "requestId": {
+      "type": ["string", "integer"]
+    },
+    "idempotencyKey": {
+      "type": "string",
+      "minLength": 1
+    },
+    "subcommand": {
+      "type": "string",
+      "minLength": 1
+    },
+    "payload": {
+      "type": "object"
+    }
+  }
+}

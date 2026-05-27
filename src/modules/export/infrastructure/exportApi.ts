@@ -3,28 +3,30 @@ import { invoke } from '@tauri-apps/api/core';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { ExportSnapshot, TimelineExportRequest } from '../application/exportTypes';
 import { createLogger, getErrorMessage, serializeError } from '../../../utils/logger';
+import { createRevisionedWindowSnapshot, type RevisionedWindowSnapshot } from '../../../vnext/windowing/revisionedSnapshot';
+import {
+  EXPORT_SESSION_REQUEST_EVENT,
+  EXPORT_SESSION_UPDATED_EVENT,
+  EXPORT_WINDOW_LABEL,
+  EXPORT_WINDOW_URL,
+  MAIN_WINDOW_LABEL,
+} from '../application/exportWindow';
 
-const EXPORT_WINDOW_LABEL = 'export';
-const EXPORT_WINDOW_URL = 'export.html';
 const log = createLogger('ExportWindowApi');
-
-export function setPendingExportSession(snapshot: ExportSnapshot) {
-  return invoke<void>('set_pending_export_session', { session: snapshot });
-}
-
-export function getPendingExportSession() {
-  return invoke<ExportSnapshot | null>('get_pending_export_session');
-}
 
 export function processTimelineExport(request: TimelineExportRequest) {
   return invoke<void>('process_timeline_export', { request });
 }
 
-export async function syncExportWindowSession(snapshot: ExportSnapshot) {
-  await setPendingExportSession(snapshot);
-  await emitTo(EXPORT_WINDOW_LABEL, 'editor/export-session-updated', snapshot).catch((error) => {
+export async function syncExportWindowSession(snapshot: ExportSnapshot, revision = 0) {
+  const payload: RevisionedWindowSnapshot<ExportSnapshot> = createRevisionedWindowSnapshot(snapshot, revision);
+  await emitTo(EXPORT_WINDOW_LABEL, EXPORT_SESSION_UPDATED_EVENT, payload).catch((error) => {
     log.debug('Skipped pushing export session to a closed export window.', serializeError(error));
   });
+}
+
+export function requestExportWindowSession() {
+  return emitTo(MAIN_WINDOW_LABEL, EXPORT_SESSION_REQUEST_EVENT);
 }
 
 function waitForWindowCreation(exportWindow: WebviewWindow) {
@@ -85,14 +87,14 @@ function waitForWindowCreation(exportWindow: WebviewWindow) {
   });
 }
 
-export async function openExportWindow(snapshot: ExportSnapshot) {
+export async function openExportWindow(snapshot: ExportSnapshot, revision = 0) {
   log.info('Opening export window.', {
     workspaceName: snapshot.workspaceName,
     clipCount: snapshot.clips.length,
     trackCount: snapshot.tracks.length,
   });
 
-  await syncExportWindowSession(snapshot);
+  await syncExportWindowSession(snapshot, revision);
 
   const existingWindow = await WebviewWindow.getByLabel(EXPORT_WINDOW_LABEL);
   if (existingWindow) {

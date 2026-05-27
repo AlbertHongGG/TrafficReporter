@@ -21,11 +21,13 @@ import {
 import { requestAiPanelWindowSession, saveGeneratedMediaAsset, sendAiPanelAction } from '../infrastructure/aiPanelApi';
 import {
   AI_PANEL_SESSION_UPDATED_EVENT,
+  type RevisionedAiPanelSessionSnapshot,
   type AiPanelAction,
   type AiPanelSessionSnapshot,
 } from '../application/aiPanelWindow';
 import { buildDefaultAiEvidenceState } from '../domain/aiEvidenceState';
 import { formatRulerLabel, formatTransportTime } from '../domain/model';
+import { shouldApplyRevisionedWindowSnapshot, unwrapRevisionedWindowSnapshot } from '../../../vnext/windowing/revisionedSnapshot';
 import styles from './AiEvidenceWindow.module.css';
 
 function clamp01(value: number | null | undefined) {
@@ -52,6 +54,7 @@ export const AiEvidenceWindow: React.FC = () => {
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const [isFocused, setIsFocused] = React.useState(false);
   const [elapsedSeconds, setElapsedSeconds] = React.useState(0);
+  const latestRevisionRef = React.useRef(0);
 
   const aiState = snapshot?.ai ?? buildDefaultAiEvidenceState();
   const result = aiState.result;
@@ -72,9 +75,14 @@ export const AiEvidenceWindow: React.FC = () => {
     let disposed = false;
     let removeSessionListener: (() => void) | undefined;
 
-    void listen<AiPanelSessionSnapshot>(AI_PANEL_SESSION_UPDATED_EVENT, (event) => {
+    void listen<AiPanelSessionSnapshot | RevisionedAiPanelSessionSnapshot>(AI_PANEL_SESSION_UPDATED_EVENT, (event) => {
       if (disposed) return;
-      setSnapshot(event.payload);
+      const envelope = unwrapRevisionedWindowSnapshot(event.payload);
+      if (!shouldApplyRevisionedWindowSnapshot(latestRevisionRef.current, envelope.revision)) {
+        return;
+      }
+      latestRevisionRef.current = envelope.revision;
+      setSnapshot(envelope.snapshot);
       setErrorMessage(null);
     }).then((unlisten) => {
       removeSessionListener = unlisten;

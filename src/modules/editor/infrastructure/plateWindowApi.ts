@@ -7,9 +7,11 @@ import {
   PLATE_SESSION_UPDATED_EVENT,
   PLATE_WINDOW_LABEL,
   PLATE_WINDOW_URL,
+  type RevisionedPlateWindowSessionSnapshot,
   type PlateWindowAction,
   type PlateWindowSessionSnapshot,
 } from '../application/plateWindow';
+import { createRevisionedWindowSnapshot } from '../../../vnext/windowing/revisionedSnapshot';
 
 function waitForWindowCreation(plateWindow: WebviewWindow) {
   return new Promise<WebviewWindow>((resolve, reject) => {
@@ -89,8 +91,9 @@ export async function openPlateWindow() {
   return waitForWindowCreation(plateWindow);
 }
 
-export function emitPlateWindowSession(snapshot: PlateWindowSessionSnapshot) {
-  return emitTo(PLATE_WINDOW_LABEL, PLATE_SESSION_UPDATED_EVENT, snapshot);
+export function emitPlateWindowSession(snapshot: PlateWindowSessionSnapshot, revision = 0) {
+  const payload: RevisionedPlateWindowSessionSnapshot = createRevisionedWindowSnapshot(snapshot, revision);
+  return emitTo(PLATE_WINDOW_LABEL, PLATE_SESSION_UPDATED_EVENT, payload);
 }
 
 export function requestPlateWindowSession() {

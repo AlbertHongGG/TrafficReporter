@@ -8,9 +8,11 @@ import {
   AI_PANEL_WINDOW_LABEL,
   AI_PANEL_WINDOW_URL,
   MAIN_WINDOW_LABEL,
+  type RevisionedAiPanelSessionSnapshot,
   type AiPanelAction,
   type AiPanelSessionSnapshot,
 } from '../application/aiPanelWindow';
+import { createRevisionedWindowSnapshot } from '../../../vnext/windowing/revisionedSnapshot';
 
 function waitForWindowCreation(aiPanelWindow: WebviewWindow) {
   return new Promise<WebviewWindow>((resolve, reject) => {
@@ -88,8 +90,9 @@ export async function openAiPanelWindow() {
   return waitForWindowCreation(aiPanelWindow);
 }
 
-export function emitAiPanelWindowSession(snapshot: AiPanelSessionSnapshot) {
-  return emitTo(AI_PANEL_WINDOW_LABEL, AI_PANEL_SESSION_UPDATED_EVENT, snapshot);
+export function emitAiPanelWindowSession(snapshot: AiPanelSessionSnapshot, revision = 0) {
+  const payload: RevisionedAiPanelSessionSnapshot = createRevisionedWindowSnapshot(snapshot, revision);
+  return emitTo(AI_PANEL_WINDOW_LABEL, AI_PANEL_SESSION_UPDATED_EVENT, payload);
 }
 
 export function requestAiPanelWindowSession() {

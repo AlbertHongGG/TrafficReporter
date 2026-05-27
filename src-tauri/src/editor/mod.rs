@@ -1,14 +1,14 @@
+mod runtime_broker;
+
 use std::collections::BTreeMap;
 use std::fs;
-use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdin, ChildStdout, Stdio};
-use std::sync::{Mutex, OnceLock};
+use std::process::Stdio;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tauri::Emitter;
+use runtime_broker::{invoke_lpr_runtime, terminate_lpr_runtime_process};
 
 use crate::contracts::{
     AiEvidenceProgressPayload, AiEvidenceRequestPayload, AiEvidenceResponsePayload,
@@ -26,48 +26,10 @@ use crate::media::{
     resolve_still_image_quantization_max_colors, resolve_video_compression_settings,
     StillImageOutputTarget, VideoCompressionTarget,
 };
-use crate::platform::process::{find_bundled, find_lpr_runtime_root, find_python_runtime, hidden_command};
+use crate::platform::process::{find_bundled, find_lpr_runtime_root, hidden_command};
 
-const LPR_RUNTIME_RETRY_LIMIT: usize = 1;
-const LPR_RUNTIME_PROTOCOL_VERSION: u8 = 1;
 const APP_LOG_EVENT: &str = "app/log";
 const AI_EVIDENCE_PROGRESS_EVENT: &str = "editor/ai-evidence-progress";
-
-static LPR_RUNTIME_WORKER: OnceLock<Mutex<Option<PersistentLprRuntime>>> = OnceLock::new();
-static LPR_RUNTIME_WORKER_PID: OnceLock<Mutex<Option<u32>>> = OnceLock::new();
-
-struct PersistentLprRuntime {
-    child: Child,
-    stdin: ChildStdin,
-    stdout: BufReader<ChildStdout>,
-    next_request_id: u64,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct RuntimeWorkerRequest<'a, TRequest: Serialize> {
-    protocol_version: u8,
-    request_id: u64,
-    subcommand: &'a str,
-    payload: &'a TRequest,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RuntimeWorkerResponse<TResponse> {
-    protocol_version: u8,
-    request_id: u64,
-    ok: bool,
-    result: Option<TResponse>,
-    error: Option<String>,
-    runtime: Option<LprRuntimeStatusPayload>,
-    traceback: Option<String>,
-}
-
-enum RuntimeWorkerInvokeError {
-    Recoverable(String),
-    Unrecoverable(String),
-}
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -94,249 +56,6 @@ fn emit_app_log(app_handle: &tauri::AppHandle, level: &str, scope: &str, message
             message,
         },
     );
-}
-
-impl PersistentLprRuntime {
-    fn start(app_handle: tauri::AppHandle) -> Result<Self, String> {
-        let python = find_python_runtime()?;
-        let runtime_root = find_lpr_runtime_root()?;
-        emit_app_log(&app_handle, "info", "LprRuntimeWorker", "Starting persistent Python runtime worker.");
-        let mut command = hidden_command(&python.program);
-        for arg in &python.args {
-            command.arg(arg);
-        }
-
-        let mut child = command
-            .current_dir(&runtime_root)
-            .arg("-m")
-            .arg("traffic_lpr_runtime")
-            .arg("serve")
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|error| format!("Failed to start the local LPR runtime worker: {}", error))?;
-        let child_pid = child.id();
-
-        if let Some(stderr) = child.stderr.take() {
-            let stderr_app_handle = app_handle.clone();
-            std::thread::spawn(move || {
-                let mut reader = BufReader::new(stderr);
-                let mut line = String::new();
-                loop {
-                    line.clear();
-                    match reader.read_line(&mut line) {
-                        Ok(0) => break,
-                        Ok(_) => {
-                            let message = line.trim();
-                            if !message.is_empty() {
-                                emit_app_log(&stderr_app_handle, "warn", "LprRuntimeWorker", message.to_string());
-                            }
-                        }
-                        Err(error) => {
-                            emit_app_log(
-                                &stderr_app_handle,
-                                "warn",
-                                "LprRuntimeWorker",
-                                format!("Failed to read LPR runtime worker stderr: {}", error),
-                            );
-                            break;
-                        }
-                    }
-                }
-            });
-        }
-
-        let stdin = child
-            .stdin
-            .take()
-            .ok_or_else(|| "Failed to open stdin for the local LPR runtime worker.".to_string())?;
-        let stdout = child
-            .stdout
-            .take()
-            .ok_or_else(|| "Failed to open stdout for the local LPR runtime worker.".to_string())?;
-
-        set_runtime_worker_pid(Some(child_pid));
-
-        Ok(Self {
-            child,
-            stdin,
-            stdout: BufReader::new(stdout),
-            next_request_id: 1,
-        })
-    }
-
-    fn is_alive(&mut self) -> bool {
-        matches!(self.child.try_wait(), Ok(None))
-    }
-
-    fn invoke<TRequest, TResponse>(
-        &mut self,
-        subcommand: &str,
-        payload: &TRequest,
-    ) -> Result<TResponse, RuntimeWorkerInvokeError>
-    where
-        TRequest: Serialize,
-        TResponse: DeserializeOwned,
-    {
-        let request = RuntimeWorkerRequest {
-            protocol_version: LPR_RUNTIME_PROTOCOL_VERSION,
-            request_id: self.next_request_id,
-            subcommand,
-            payload,
-        };
-        self.next_request_id += 1;
-
-        let serialized_request = serde_json::to_vec(&request).map_err(|error| {
-            RuntimeWorkerInvokeError::Unrecoverable(format!(
-                "Failed to serialize LPR runtime worker request: {}",
-                error
-            ))
-        })?;
-
-        self.stdin.write_all(&serialized_request).map_err(|error| {
-            RuntimeWorkerInvokeError::Recoverable(format!(
-                "Failed to write to the local LPR runtime worker: {}",
-                error
-            ))
-        })?;
-        self.stdin.write_all(b"\n").map_err(|error| {
-            RuntimeWorkerInvokeError::Recoverable(format!(
-                "Failed to finalize the LPR runtime worker request: {}",
-                error
-            ))
-        })?;
-        self.stdin.flush().map_err(|error| {
-            RuntimeWorkerInvokeError::Recoverable(format!(
-                "Failed to flush the LPR runtime worker request: {}",
-                error
-            ))
-        })?;
-
-        let mut response_line = String::new();
-        let bytes_read = self.stdout.read_line(&mut response_line).map_err(|error| {
-            RuntimeWorkerInvokeError::Recoverable(format!(
-                "Failed to read the LPR runtime worker response: {}",
-                error
-            ))
-        })?;
-
-        if bytes_read == 0 {
-            return Err(RuntimeWorkerInvokeError::Recoverable(
-                "The local LPR runtime worker exited unexpectedly.".to_string(),
-            ));
-        }
-
-        let response: RuntimeWorkerResponse<TResponse> = serde_json::from_str(response_line.trim_end()).map_err(|error| {
-            RuntimeWorkerInvokeError::Recoverable(format!(
-                "Failed to parse the LPR runtime worker response: {}\n{}",
-                error,
-                response_line.trim()
-            ))
-        })?;
-
-        if response.request_id != request.request_id {
-            return Err(RuntimeWorkerInvokeError::Recoverable(format!(
-                "Mismatched LPR runtime worker response: expected request {}, received {}.",
-                request.request_id,
-                response.request_id,
-            )));
-        }
-
-        if response.protocol_version != request.protocol_version {
-            return Err(RuntimeWorkerInvokeError::Recoverable(format!(
-                "Mismatched LPR runtime worker protocol: expected version {}, received {}.",
-                request.protocol_version,
-                response.protocol_version,
-            )));
-        }
-
-        if response.ok {
-            return response.result.ok_or_else(|| {
-                RuntimeWorkerInvokeError::Unrecoverable(
-                    "The local LPR runtime worker returned success without a payload.".to_string(),
-                )
-            });
-        }
-
-        Err(RuntimeWorkerInvokeError::Unrecoverable(format_worker_error(response)))
-    }
-}
-
-fn runtime_worker_slot() -> &'static Mutex<Option<PersistentLprRuntime>> {
-    LPR_RUNTIME_WORKER.get_or_init(|| Mutex::new(None))
-}
-
-fn runtime_worker_pid_slot() -> &'static Mutex<Option<u32>> {
-    LPR_RUNTIME_WORKER_PID.get_or_init(|| Mutex::new(None))
-}
-
-fn set_runtime_worker_pid(pid: Option<u32>) {
-    if let Ok(mut guard) = runtime_worker_pid_slot().lock() {
-        *guard = pid;
-    }
-}
-
-fn active_runtime_worker_pid() -> Result<Option<u32>, String> {
-    runtime_worker_pid_slot()
-        .lock()
-        .map(|guard| *guard)
-        .map_err(|_| "Failed to lock the local LPR runtime worker pid slot.".to_string())
-}
-
-#[cfg(target_os = "windows")]
-fn kill_process_tree(pid: u32) -> Result<(), String> {
-    let output = hidden_command("taskkill")
-        .args(["/PID", &pid.to_string(), "/T", "/F"])
-        .output()
-        .map_err(|error| format!("Failed to execute taskkill for pid {}: {}", pid, error))?;
-
-    if output.status.success() {
-        return Ok(());
-    }
-
-    let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    Err(if detail.is_empty() {
-        format!("taskkill failed for pid {}.", pid)
-    } else {
-        detail
-    })
-}
-
-#[cfg(not(target_os = "windows"))]
-fn kill_process_tree(pid: u32) -> Result<(), String> {
-    let output = hidden_command("kill")
-        .args(["-TERM", &pid.to_string()])
-        .output()
-        .map_err(|error| format!("Failed to execute kill for pid {}: {}", pid, error))?;
-
-    if output.status.success() {
-        return Ok(());
-    }
-
-    let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    Err(if detail.is_empty() {
-        format!("kill failed for pid {}.", pid)
-    } else {
-        detail
-    })
-}
-
-fn terminate_lpr_runtime_process(app_handle: &tauri::AppHandle, reason: &str) -> Result<bool, String> {
-    let Some(pid) = active_runtime_worker_pid()? else {
-        emit_app_log(app_handle, "debug", "LprRuntimeWorker", format!("Cancellation skipped: no active worker. reason={}", reason));
-        return Ok(false);
-    };
-
-    emit_app_log(
-        app_handle,
-        "warn",
-        "LprRuntimeWorker",
-        format!("Terminating persistent Python runtime worker pid={} reason={}", pid, reason),
-    );
-    kill_process_tree(pid)?;
-    set_runtime_worker_pid(None);
-    Ok(true)
 }
 
 fn emit_lpr_request_log(
@@ -404,28 +123,6 @@ fn emit_ai_evidence_progress(
             request_id: request_id.map(|value| value.to_string()),
         },
     );
-}
-
-fn format_worker_error<TResponse>(response: RuntimeWorkerResponse<TResponse>) -> String {
-    let mut detail = response
-        .error
-        .unwrap_or_else(|| "The local LPR runtime worker reported an error.".to_string());
-
-    if let Some(runtime) = response.runtime {
-        let runtime_detail = runtime.detail.trim();
-        if !runtime_detail.is_empty() && runtime_detail != detail {
-            detail = format!("{}\n{}", detail, runtime_detail);
-        }
-    }
-
-    if let Some(traceback) = response.traceback {
-        let traceback = traceback.trim();
-        if !traceback.is_empty() {
-            detail = format!("{}\n{}", detail, traceback);
-        }
-    }
-
-    detail
 }
 
 fn parse_decimal_seconds_to_ms(value: &str) -> Option<u64> {
@@ -706,51 +403,6 @@ fn build_drawbox_filter(marker_rect: &VideoMarkerRectPayload) -> String {
     format!(
         "drawbox=x=iw*{x:.6}:y=ih*{y:.6}:w=iw*{width:.6}:h=ih*{height:.6}:color=red@1:thickness=4",
     )
-}
-
-fn invoke_lpr_runtime<TRequest, TResponse>(
-    app_handle: tauri::AppHandle,
-    subcommand: &str,
-    payload: &TRequest,
-) -> Result<TResponse, String>
-where
-    TRequest: Serialize,
-    TResponse: DeserializeOwned,
-{
-    let worker_slot = runtime_worker_slot();
-    let mut worker_guard = worker_slot
-        .lock()
-        .map_err(|_| "Failed to lock the local LPR runtime worker slot.".to_string())?;
-    let mut attempt = 0usize;
-
-    loop {
-        let needs_restart = worker_guard
-            .as_mut()
-            .map(|worker| !worker.is_alive())
-            .unwrap_or(true);
-        if needs_restart {
-            set_runtime_worker_pid(None);
-            *worker_guard = Some(PersistentLprRuntime::start(app_handle.clone())?);
-        }
-
-        let worker = worker_guard.as_mut().ok_or_else(|| {
-            "The local LPR runtime worker could not be initialized.".to_string()
-        })?;
-
-        match worker.invoke(subcommand, payload) {
-            Ok(response) => return Ok(response),
-            Err(RuntimeWorkerInvokeError::Unrecoverable(error)) => return Err(error),
-            Err(RuntimeWorkerInvokeError::Recoverable(error)) => {
-                emit_app_log(&app_handle, "warn", "LprRuntimeWorker", format!("Worker request failed and will be restarted: {}", error));
-                set_runtime_worker_pid(None);
-                *worker_guard = None;
-                if attempt >= LPR_RUNTIME_RETRY_LIMIT {
-                    return Err(error);
-                }
-                attempt += 1;
-            }
-        }
-    }
 }
 
 fn probe_with_ffprobe(path: &str) -> Result<MediaProbePayload, String> {

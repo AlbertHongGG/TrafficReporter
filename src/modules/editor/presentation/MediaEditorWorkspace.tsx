@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { open, save } from '@tauri-apps/plugin-dialog';
@@ -23,7 +23,6 @@ import {
   VolumeX,
   X,
 } from 'lucide-react';
-import { editorReducer, initialEditorState } from '../application/editorReducer';
 import {
   clamp,
   clipDurationMs,
@@ -66,6 +65,7 @@ import {
 import { createLogger, getErrorMessage, getErrorSummary, serializeError } from '../../../utils/logger';
 import { openExportWindow, syncExportWindowSession } from '../../export/infrastructure/exportApi';
 import { preparePendingExportSession } from '../../export/application/exportSession';
+import { EXPORT_SESSION_REQUEST_EVENT } from '../../export/application/exportWindow';
 import {
   AI_PANEL_ACTION_EVENT,
   AI_PANEL_SESSION_REQUEST_EVENT,
@@ -97,6 +97,7 @@ import {
   usePlaybackController,
 } from '../application/usePlaybackController';
 import { EDITOR_ENV } from '../../../shared/config/editorEnv';
+import { useEditorSessionController } from '../../../vnext/editor/application/useEditorSessionController';
 import styles from './MediaEditorWorkspace.module.css';
 
 const log = createLogger('MediaEditorWorkspace');
@@ -283,7 +284,7 @@ function isAnchorWithinInterval(anchorTimeMs: number, interval: TimelineInterval
 }
 
 export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isActive = true }) => {
-  const [state, dispatch] = useReducer(editorReducer, initialEditorState);
+  const { state, dispatch, sessionRevision } = useEditorSessionController();
   const [workspaceFeedback, setWorkspaceFeedback] = useState<string | null>(null);
   const [importFeedback, setImportFeedback] = useState<string | null>(null);
   const [isExternalDropActive, setIsExternalDropActive] = useState(false);
@@ -1100,7 +1101,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
 
     try {
       const snapshot = preparePendingExportSession(state);
-      await openExportWindow(snapshot);
+      await openExportWindow(snapshot, sessionRevision);
     } catch (error) {
       log.error('Failed to open export window.', {
         error: serializeError(error),
@@ -1124,11 +1125,11 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         ...snapshot.renderProfile,
         compressionMode,
       };
-      void syncExportWindowSession(snapshot);
+      void syncExportWindowSession(snapshot, sessionRevision);
     } catch {
       // Ignore export-session sync failures when no exportable timeline is available.
     }
-  }, [activeFile, dispatch, state]);
+  }, [activeFile, dispatch, sessionRevision, state]);
 
   const handleExportCurrentFrame = async () => {
     const fileState = activeFile;
@@ -1828,12 +1829,12 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
 
   const handleOpenPlateWindow = async () => {
     await openPlateWindow();
-    await emitPlateWindowSession(buildPlateWindowSnapshot()).catch(() => undefined);
+    await emitPlateWindowSession(buildPlateWindowSnapshot(), sessionRevision).catch(() => undefined);
   };
 
   const handleOpenAiPanelWindow = async () => {
     await openAiPanelWindow();
-    await emitAiPanelWindowSession(buildAiPanelWindowSnapshot()).catch(() => undefined);
+    await emitAiPanelWindowSession(buildAiPanelWindowSnapshot(), sessionRevision).catch(() => undefined);
   };
 
   const handlePlateWindowAction = React.useEffectEvent(async (action: PlateWindowAction) => {
@@ -1899,7 +1900,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
   });
 
   const handlePlateWindowSessionRequest = React.useEffectEvent(async () => {
-    await emitPlateWindowSession(buildPlateWindowSnapshot()).catch(() => undefined);
+    await emitPlateWindowSession(buildPlateWindowSnapshot(), sessionRevision).catch(() => undefined);
   });
 
   const handleAiPanelAction = React.useEffectEvent(async (action: AiPanelAction) => {
@@ -1927,7 +1928,16 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
   });
 
   const handleAiPanelSessionRequest = React.useEffectEvent(async () => {
-    await emitAiPanelWindowSession(buildAiPanelWindowSnapshot()).catch(() => undefined);
+    await emitAiPanelWindowSession(buildAiPanelWindowSnapshot(), sessionRevision).catch(() => undefined);
+  });
+
+  const handleExportWindowSessionRequest = React.useEffectEvent(async () => {
+    try {
+      const snapshot = preparePendingExportSession(state);
+      await syncExportWindowSession(snapshot, sessionRevision).catch(() => undefined);
+    } catch {
+      // Ignore export-session requests when no exportable timeline is available.
+    }
   });
 
   useEffect(() => {
@@ -2001,6 +2011,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
 
   useEffect(() => {
     let disposed = false;
+    let exportRequestCleanup: (() => void) | undefined;
     let actionCleanup: (() => void) | undefined;
     let requestCleanup: (() => void) | undefined;
 
@@ -2024,20 +2035,31 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       requestCleanup = unlisten;
     });
 
+    void listen(EXPORT_SESSION_REQUEST_EVENT, () => {
+      if (disposed) {
+        return;
+      }
+
+      void handleExportWindowSessionRequest();
+    }).then((unlisten) => {
+      exportRequestCleanup = unlisten;
+    });
+
     return () => {
       disposed = true;
+      exportRequestCleanup?.();
       actionCleanup?.();
       requestCleanup?.();
     };
-  }, []);
+  }, [handleExportWindowSessionRequest]);
 
   useEffect(() => {
-    void emitPlateWindowSession(buildPlateWindowSnapshot()).catch(() => undefined);
-  }, [buildPlateWindowSnapshot]);
+    void emitPlateWindowSession(buildPlateWindowSnapshot(), sessionRevision).catch(() => undefined);
+  }, [buildPlateWindowSnapshot, sessionRevision]);
 
   useEffect(() => {
-    void emitAiPanelWindowSession(buildAiPanelWindowSnapshot()).catch(() => undefined);
-  }, [buildAiPanelWindowSnapshot]);
+    void emitAiPanelWindowSession(buildAiPanelWindowSnapshot(), sessionRevision).catch(() => undefined);
+  }, [buildAiPanelWindowSnapshot, sessionRevision]);
 
   const handleMarkerPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!activeFile?.markerRect) {

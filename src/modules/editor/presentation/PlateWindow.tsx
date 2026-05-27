@@ -25,6 +25,7 @@ import { Select } from '../../../components/Select/Select';
 import {
   samplePrimaryText,
   PLATE_SESSION_UPDATED_EVENT,
+  type RevisionedPlateWindowSessionSnapshot,
   type PlateWindowSessionSnapshot,
 } from '../application/plateWindow';
 import { requestPlateWindowSession, sendPlateWindowAction } from '../infrastructure/plateWindowApi';
@@ -33,6 +34,7 @@ import { buildDefaultLprState } from '../domain/lprState';
 import type { LprFrameSample, LprJobState, LprPlateCandidate, LprReviewState, LprTargetTrack, TimelineIntervalSelection } from '../../../shared/contracts';
 import { getLprAnalysisProfileLabel, getLprAnalysisProfiles } from '../../../shared/lprAnalysisProfiles';
 import { createLogger, getErrorSummary, serializeError } from '../../../utils/logger';
+import { shouldApplyRevisionedWindowSnapshot, unwrapRevisionedWindowSnapshot } from '../../../vnext/windowing/revisionedSnapshot';
 import styles from './PlateWindow.module.css';
 
 const log = createLogger('PlateWindow');
@@ -381,6 +383,7 @@ export const PlateWindow: React.FC = () => {
   const [activeTab, setActiveTab] = React.useState<TabType>('targets');
   const [selectedEvidenceSampleId, setSelectedEvidenceSampleId] = React.useState<string | null>(null);
   const [isEvidenceSelectionPinned, setIsEvidenceSelectionPinned] = React.useState(false);
+  const latestRevisionRef = React.useRef(0);
 
   const lprState = snapshot?.lpr ?? buildDefaultLprState();
   const runtimeStatus = snapshot?.runtimeStatus ?? null;
@@ -408,9 +411,14 @@ export const PlateWindow: React.FC = () => {
     let disposed = false;
     let removeSessionListener: (() => void) | undefined;
 
-    void listen<PlateWindowSessionSnapshot>(PLATE_SESSION_UPDATED_EVENT, (event) => {
+    void listen<PlateWindowSessionSnapshot | RevisionedPlateWindowSessionSnapshot>(PLATE_SESSION_UPDATED_EVENT, (event) => {
       if (disposed) return;
-      setSnapshot(event.payload);
+      const envelope = unwrapRevisionedWindowSnapshot(event.payload);
+      if (!shouldApplyRevisionedWindowSnapshot(latestRevisionRef.current, envelope.revision)) {
+        return;
+      }
+      latestRevisionRef.current = envelope.revision;
+      setSnapshot(envelope.snapshot);
       setErrorMessage(null);
     }).then((unlisten) => {
       removeSessionListener = unlisten;

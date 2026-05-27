@@ -2,11 +2,10 @@ use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader};
 use std::process::Stdio;
 
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter};
 
-use crate::app::AppState;
 use crate::contracts::{
-    ExportProgressPayload, ExportSnapshotPayload, ExportSource, RenderProfilePayload,
+    ExportProgressPayload, ExportSource, RenderProfilePayload,
     TimelineClipPayload, TimelineExportRequest,
 };
 use crate::media::{
@@ -90,28 +89,6 @@ fn resolved_export_fps(request: &TimelineExportRequest) -> u32 {
         .find(|source| source.has_video)
         .and_then(|source| probe_source_video_fps(&source.path));
     clamp_export_fps(request.profile.fps, source_fps)
-}
-
-#[tauri::command]
-pub fn set_pending_export_session(
-    state: State<AppState>,
-    session: ExportSnapshotPayload,
-) -> Result<(), String> {
-    let mut guard = state
-        .pending_export_snapshot
-        .lock()
-        .map_err(|_| "Failed to lock export session state.".to_string())?;
-    *guard = Some(session);
-    Ok(())
-}
-
-#[tauri::command]
-pub fn get_pending_export_session(state: State<AppState>) -> Result<Option<ExportSnapshotPayload>, String> {
-    let guard = state
-        .pending_export_snapshot
-        .lock()
-        .map_err(|_| "Failed to lock export session state.".to_string())?;
-    Ok(guard.clone())
 }
 
 fn seconds_from_ms(value: u64) -> String {

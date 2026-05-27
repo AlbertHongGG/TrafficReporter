@@ -10,6 +10,7 @@ from typing import Any
 
 from traffic_lpr_runtime.application.runtime_application import build_default_application
 from traffic_lpr_runtime.domain.errors import RuntimeFailure
+from traffic_lpr_runtime.protocol import RuntimeRequestContext, build_runtime_error, build_runtime_success, unwrap_runtime_request
 
 
 LPR_RUNTIME_PROTOCOL_VERSION = 1
@@ -24,38 +25,38 @@ def main() -> int:
     application = None
     stdout_noise = io.StringIO()
     protocol_mode = subcommand == 'benchmark-run'
-    request_id: Any = None
+    request_context = RuntimeRequestContext(protocol_mode=False, protocol_version=None, request_id=None)
 
     try:
         raw_payload = '' if sys.stdin.isatty() else sys.stdin.buffer.read().decode('utf-8').strip()
-        payload, protocol_mode, request_id = _unwrap_protocol_request(
+        payload, request_context = unwrap_runtime_request(
             raw_payload,
             subcommand,
             require_protocol=protocol_mode,
+            accepted_versions=(LPR_RUNTIME_PROTOCOL_VERSION,),
+            error_factory=RuntimeFailure,
         )
         with contextlib.redirect_stdout(stdout_noise):
             application = build_default_application(runtime_script)
             result = application.dispatch(subcommand, payload)
         _flush_stdout_noise(stdout_noise)
-        sys.stdout.write(json.dumps(_wrap_protocol_success(result, request_id=request_id, protocol_mode=protocol_mode)))
+        sys.stdout.write(json.dumps(build_runtime_success(result, request_context=request_context)))
         return 0
     except RuntimeFailure as error:
         _flush_stdout_noise(stdout_noise)
-        detail = _wrap_protocol_error(
+        detail = build_runtime_error(
             str(error),
             _runtime_status_payload(application) | {'detail': str(error)},
-            request_id=request_id,
-            protocol_mode=protocol_mode,
+            request_context=request_context,
         )
         sys.stderr.write(json.dumps(detail))
         return 1
     except Exception as error:
         _flush_stdout_noise(stdout_noise)
-        failure = _wrap_protocol_error(
+        failure = build_runtime_error(
             str(error),
             _runtime_status_payload(application) | {'detail': 'Unexpected LPR runtime failure.'},
-            request_id=request_id,
-            protocol_mode=protocol_mode,
+            request_context=request_context,
             traceback_text=traceback.format_exc(),
         )
         sys.stderr.write(json.dumps(failure))
@@ -84,7 +85,7 @@ def serve(runtime_script: Path) -> int:
         if not line:
             continue
 
-        request_id: Any = None
+        request_context = RuntimeRequestContext(protocol_mode=True, protocol_version=LPR_RUNTIME_PROTOCOL_VERSION, request_id=None)
         response: dict[str, Any]
 
         try:
@@ -92,26 +93,30 @@ def serve(runtime_script: Path) -> int:
             if not isinstance(request, dict):
                 raise RuntimeFailure('Runtime worker request must be a JSON object.')
             subcommand = str(request.get('subcommand') or 'status')
-            payload, _, request_id = _unwrap_protocol_request(line, subcommand, require_protocol=True)
+            payload, request_context = unwrap_runtime_request(
+                line,
+                subcommand,
+                require_protocol=True,
+                accepted_versions=(LPR_RUNTIME_PROTOCOL_VERSION,),
+                error_factory=RuntimeFailure,
+            )
             with contextlib.redirect_stdout(stdout_noise):
                 result = application.dispatch(subcommand, payload)
             _flush_stdout_noise(stdout_noise)
-            response = _wrap_protocol_success(result, request_id=request_id, protocol_mode=True)
+            response = build_runtime_success(result, request_context=request_context)
         except RuntimeFailure as error:
             _flush_stdout_noise(stdout_noise)
-            response = _wrap_protocol_error(
+            response = build_runtime_error(
                 str(error),
                 _runtime_status_payload(application) | {'detail': str(error)},
-                request_id=request_id,
-                protocol_mode=True,
+                request_context=request_context,
             )
         except Exception as error:
             _flush_stdout_noise(stdout_noise)
-            response = _wrap_protocol_error(
+            response = build_runtime_error(
                 str(error),
                 _runtime_status_payload(application) | {'detail': 'Unexpected LPR runtime failure.'},
-                request_id=request_id,
-                protocol_mode=True,
+                request_context=request_context,
                 traceback_text=traceback.format_exc(),
             )
 
@@ -119,76 +124,6 @@ def serve(runtime_script: Path) -> int:
         sys.stdout.flush()
 
     return 0
-
-
-def _unwrap_protocol_request(
-    raw_payload: str,
-    subcommand: str,
-    *,
-    require_protocol: bool,
-) -> tuple[dict[str, Any], bool, Any]:
-    payload = json.loads(raw_payload) if raw_payload else {}
-    if not isinstance(payload, dict):
-        raise RuntimeFailure('Runtime request must be a JSON object.')
-
-    protocol_version = payload.get('protocolVersion')
-    if protocol_version is None:
-        if require_protocol:
-            raise RuntimeFailure('Missing runtime protocolVersion in broker request.')
-        return payload, False, payload.get('requestId')
-    if protocol_version != LPR_RUNTIME_PROTOCOL_VERSION:
-        raise RuntimeFailure(
-            f'Unsupported runtime protocolVersion {protocol_version}; expected {LPR_RUNTIME_PROTOCOL_VERSION}.',
-        )
-
-    envelope_subcommand = payload.get('subcommand')
-    if isinstance(envelope_subcommand, str) and envelope_subcommand and envelope_subcommand != subcommand:
-        raise RuntimeFailure(
-            f'Runtime broker subcommand mismatch: expected {subcommand}, received {envelope_subcommand}.',
-        )
-
-    envelope_payload = payload.get('payload')
-    if envelope_payload is None:
-        envelope_payload = {}
-    if not isinstance(envelope_payload, dict):
-        raise RuntimeFailure('Runtime broker payload must be a JSON object.')
-    return envelope_payload, True, payload.get('requestId')
-
-
-def _wrap_protocol_success(result: dict[str, Any], *, request_id: Any, protocol_mode: bool) -> dict[str, Any]:
-    if not protocol_mode:
-        return result
-    return {
-        'protocolVersion': LPR_RUNTIME_PROTOCOL_VERSION,
-        'requestId': request_id,
-        'ok': True,
-        'result': result,
-    }
-
-
-def _wrap_protocol_error(
-    error_message: str,
-    runtime_payload: dict[str, Any],
-    *,
-    request_id: Any,
-    protocol_mode: bool,
-    traceback_text: str | None = None,
-) -> dict[str, Any]:
-    detail: dict[str, Any] = {
-        'runtime': runtime_payload,
-        'error': error_message,
-    }
-    if traceback_text:
-        detail['traceback'] = traceback_text
-    if not protocol_mode:
-        return detail
-    return {
-        'protocolVersion': LPR_RUNTIME_PROTOCOL_VERSION,
-        'requestId': request_id,
-        'ok': False,
-        **detail,
-    }
-
 
 def _flush_stdout_noise(stdout_noise: io.StringIO) -> None:
     noise = stdout_noise.getvalue().strip()

@@ -1,6 +1,16 @@
-# Media Editor
+# Traffic Editor
 
-A Tauri-based desktop application for media editing and YouTube downloading. Built with React, TypeScript, and Rust.
+A Tauri-based desktop application for traffic video review, LPR analysis, and AI evidence workflows. Built with React, TypeScript, Rust, and a Python analysis runtime.
+
+The repository is now in a vNext transition state:
+
+- `src/vnext/` holds the new frontend session/windowing boundary.
+- `schemas/protocol/` holds the new runtime envelope schema spine.
+- `src-tauri/src/editor/runtime_broker.rs` is the new host-side runtime broker boundary.
+- `traffic-lpr-runtime/traffic_lpr_runtime/vnext/` holds the new Python runtime registry/container layer.
+- legacy downloader entrypoints have been removed from the active desktop host; the current product surface is analysis-first.
+
+See `docs/traffic-vnext-architecture.md` for the current vNext cut line and verification rules.
 
 ## Getting Started
 
@@ -16,21 +26,27 @@ The following binaries must be placed in `src-tauri/bin/` for full functionality
 
 | Binary | Purpose | Source |
 |--------|---------|--------|
-| `yt-dlp.exe` | YouTube media downloading | [yt-dlp releases](https://github.com/yt-dlp/yt-dlp/releases) |
 | `ffmpeg.exe` | Media encoding & export | `winget install Gyan.FFmpeg` |
 | `ffprobe.exe` | Media file inspection | Included with ffmpeg |
 
 > **Note:** These binaries are **not** tracked by Git (`.gitignore`). After cloning, you must manually place them in `src-tauri/bin/`.
-
-### Additional System Dependencies
-
-- **Deno**: Required by yt-dlp for solving YouTube signature challenges. Install via `winget install DenoLand.Deno`.
 
 ### Install & Run
 
 ```bash
 npm install
 npm run tauri dev
+```
+
+### vNext Verification
+
+The new architecture guardrails can be checked independently from the full legacy test suite:
+
+```bash
+npm run test:vnext:frontend
+npm run test:vnext:runtime
+npm run test:vnext:benchmark
+npm run check:vnext
 ```
 
 ### Independent Benchmark Tool
@@ -107,8 +123,8 @@ The editor toolbar now includes a `Compact` toggle. It controls current-frame ex
 
 | Command | Description | Output |
 |---------|-------------|--------|
-| `npm run build:exe` | Build standalone exe only (fast, no installer) | `src-tauri/target/release/media-editor.exe` |
-| `npm run build:installer` | Build NSIS installer (includes bundled binaries) | `src-tauri/target/release/bundle/nsis/media-editor_*_x64-setup.exe` |
+| `npm run build:exe` | Build standalone exe only (fast, no installer) | `src-tauri/target/release/traffic-editor.exe` |
+| `npm run build:installer` | Build NSIS installer (includes bundled binaries) | `src-tauri/target/release/bundle/nsis/traffic-editor_*_x64-setup.exe` |
 | `npm run build:portable` | Build exe + copy binaries into portable folder | `dist-portable/` |
 
 ### Standalone EXE (Portable)
@@ -117,11 +133,10 @@ The portable distribution requires the exe and `bin/` folder together:
 
 ```
 dist-portable/
-├── media-editor.exe
+├── traffic-editor.exe
 └── bin/
     ├── ffmpeg.exe
-    ├── ffprobe.exe
-    └── yt-dlp.exe
+    └── ffprobe.exe
 ```
 
 To create this package:
@@ -140,24 +155,4 @@ For a full installer that bundles everything including WebView2:
 npm run build:installer
 ```
 
-The installer will be at `src-tauri/target/release/bundle/nsis/media-editor_0.1.0_x64-setup.exe`.
-
----
-
-## Troubleshooting (YouTube Downloader)
-
-### 1. yt-dlp version: Use Nightly
-The **stable** version of yt-dlp cannot access most YouTube formats due to PO Token requirements. The **nightly** build includes improved client strategies that bypass these restrictions.
-- **Update to nightly**: `yt-dlp.exe --update-to nightly`
-
-### 2. Signature solving failed
-Ensure **Deno** is installed and accessible in your terminal (`deno --version`). yt-dlp uses Deno to solve YouTube's JavaScript signature challenges.
-
-### 3. `[Errno 22] Invalid argument` during download
-Caused by **IPv6** connectivity issues with YouTube CDN on Windows. The app uses `--force-ipv4` to force all connections through IPv4.
-
-### 4. Failed to decrypt with DPAPI (Windows)
-Avoid `--cookies-from-browser` on Windows — Chrome/Edge lock the cookie database while running, and DPAPI decryption fails. The current implementation avoids cookies entirely.
-
-### 5. HTTP Error 429: Too Many Requests
-Usually resolved by having Deno installed (for JS challenge solving) and using the nightly build.
+The installer will be at `src-tauri/target/release/bundle/nsis/traffic-editor_0.1.0_x64-setup.exe`.

@@ -1,20 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct VideoInfo {
-    pub title: String,
-    pub thumbnail: String,
-    pub duration: u32,
-}
-
-#[derive(Clone, Serialize)]
-pub struct DownloadProgressPayload {
-    pub percent: f64,
-    pub status: String,
-    pub status_text: String,
-    pub phase: String,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MediaProbePayload {

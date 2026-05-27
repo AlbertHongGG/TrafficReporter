@@ -5,6 +5,7 @@ import type {
   LprSessionState,
   TimelineIntervalSelection,
 } from '../../../shared/contracts';
+import type { RevisionedWindowSnapshot } from '../../../vnext/windowing/revisionedSnapshot';
 
 export const MAIN_WINDOW_LABEL = 'main';
 export const PLATE_WINDOW_LABEL = 'plate';
@@ -26,6 +27,8 @@ export interface PlateWindowSessionSnapshot {
   anchorTimeMs: number;
   playheadMs: number;
 }
+
+export type RevisionedPlateWindowSessionSnapshot = RevisionedWindowSnapshot<PlateWindowSessionSnapshot>;
 
 export type PlateWindowAction =
   | { type: 'refresh-runtime' }

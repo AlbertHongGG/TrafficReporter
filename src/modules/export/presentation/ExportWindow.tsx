@@ -16,7 +16,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { createLogger, getErrorMessage, serializeError } from '../../../utils/logger';
-import { getPendingExportSession, processTimelineExport } from '../infrastructure/exportApi';
+import { processTimelineExport, requestExportWindowSession } from '../infrastructure/exportApi';
 import type {
   AudioBitrateKbps,
   ExportSnapshot,
@@ -25,6 +25,12 @@ import type {
   VideoQuality,
 } from '../application/exportTypes';
 import { formatTransportTime } from '../../editor/domain/model';
+import {
+  shouldApplyRevisionedWindowSnapshot,
+  unwrapRevisionedWindowSnapshot,
+  type RevisionedWindowSnapshot,
+} from '../../../vnext/windowing/revisionedSnapshot';
+import { EXPORT_SESSION_UPDATED_EVENT } from '../application/exportWindow';
 import styles from './ExportWindow.module.css';
 import { Select } from '../../../components/Select/Select';
 
@@ -147,12 +153,14 @@ export const ExportWindow: React.FC = () => {
   const [progress, setProgress] = React.useState<ExportProgressPayload>(DEFAULT_PROGRESS);
   const [status, setStatus] = React.useState<ExportStatus>('loading');
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
+  const latestRevisionRef = React.useRef(0);
 
   const usesAudioBitrate = true;
   const videoQualityOptions = React.useMemo(() => buildVideoQualityOptions(snapshot), [snapshot]);
 
   const applySnapshot = React.useCallback((nextSnapshot: ExportSnapshot | null) => {
     if (!nextSnapshot) {
+      latestRevisionRef.current = 0;
       setSnapshot(null);
       setStatus('error');
       setErrorMessage('No timeline is queued for export yet.');
@@ -169,27 +177,20 @@ export const ExportWindow: React.FC = () => {
     setErrorMessage(null);
   }, []);
 
-  const loadPendingSession = React.useCallback(async () => {
-    const nextSnapshot = await getPendingExportSession();
-    log.info('Loaded pending export session.', nextSnapshot ? {
-      workspaceName: nextSnapshot.workspaceName,
-      clipCount: nextSnapshot.clips.length,
-    } : 'empty');
-    return nextSnapshot;
-  }, []);
-
-  const refreshSession = React.useCallback(async () => {
-    setStatus('loading');
-    setErrorMessage(null);
-
-    try {
-      applySnapshot(await loadPendingSession());
-    } catch (error) {
-      log.error('Failed to load export session.', serializeError(error));
-      setStatus('error');
-      setErrorMessage(getErrorMessage(error, 'Failed to load export session.'));
+  const applySessionUpdate = React.useCallback((payload: ExportSnapshot | RevisionedWindowSnapshot<ExportSnapshot> | null) => {
+    if (!payload) {
+      applySnapshot(null);
+      return;
     }
-  }, [applySnapshot, loadPendingSession]);
+
+    const envelope = unwrapRevisionedWindowSnapshot(payload);
+    if (!shouldApplyRevisionedWindowSnapshot(latestRevisionRef.current, envelope.revision)) {
+      return;
+    }
+
+    latestRevisionRef.current = envelope.revision;
+    applySnapshot(envelope.snapshot);
+  }, [applySnapshot]);
 
   const handleFormatChange = React.useCallback((nextFormat: ExportFormat) => {
     setFormat(nextFormat);
@@ -201,32 +202,24 @@ export const ExportWindow: React.FC = () => {
     let removeSessionListener: (() => void) | undefined;
     let removeProgressListener: (() => void) | undefined;
 
-    const loadInitialSession = async () => {
-      try {
-        const nextSnapshot = await loadPendingSession();
-        if (disposed) {
-          return;
-        }
+    setStatus('loading');
+    setErrorMessage(null);
 
-        applySnapshot(nextSnapshot);
-      } catch (error) {
-        if (disposed) {
-          return;
-        }
-
-        log.error('Failed to load export session.', serializeError(error));
-        setStatus('error');
-        setErrorMessage(getErrorMessage(error, 'Failed to load export session.'));
-      }
-    };
-
-    void loadInitialSession();
-
-    void listen<ExportSnapshot>('editor/export-session-updated', (event) => {
+    void listen<ExportSnapshot | RevisionedWindowSnapshot<ExportSnapshot>>(EXPORT_SESSION_UPDATED_EVENT, (event) => {
       if (disposed) return;
-      applySnapshot(event.payload);
+      applySessionUpdate(event.payload);
     }).then((unlisten) => {
       removeSessionListener = unlisten;
+    });
+
+    void requestExportWindowSession().catch((error) => {
+      if (disposed) {
+        return;
+      }
+
+      log.error('Failed to request the latest export session.', serializeError(error));
+      setStatus('error');
+      setErrorMessage(getErrorMessage(error, 'Failed to request the latest export session.'));
     });
 
     void listen<ExportProgressPayload>('editor/export-progress', (event) => {
@@ -257,7 +250,7 @@ export const ExportWindow: React.FC = () => {
       removeSessionListener?.();
       removeProgressListener?.();
     };
-  }, [applySnapshot, loadPendingSession]);
+  }, [applySessionUpdate]);
 
   const pickOutputPath = React.useCallback(async () => {
     const selectedPath = await save({
@@ -362,7 +355,7 @@ export const ExportWindow: React.FC = () => {
                 <AlertTriangle size={24} />
               </div>
               <p>{errorMessage ?? 'No pending timeline export.'}</p>
-              <button className={styles.outlineBtn} onClick={() => void refreshSession()}>
+              <button className={styles.outlineBtn} onClick={() => void requestExportWindowSession()}>
                 <RefreshCcw size={14} /> Refresh
               </button>
             </motion.div>

@@ -2,16 +2,27 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 import tempfile
 import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+RUNTIME_PACKAGE_ROOT = Path(__file__).resolve().parents[2].parent / 'traffic-lpr-runtime'
+if str(RUNTIME_PACKAGE_ROOT) not in sys.path:
+    sys.path.insert(0, str(RUNTIME_PACKAGE_ROOT))
+
+from traffic_lpr_runtime.protocol import (
+    LEGACY_RUNTIME_PROTOCOL_VERSION,
+    build_runtime_request_envelope as shared_build_runtime_request_envelope,
+    unwrap_runtime_response as shared_unwrap_runtime_response,
+)
+
 from .workspace import default_runtime_root, discover_python
 
 
-RUNTIME_BROKER_PROTOCOL_VERSION = 1
+RUNTIME_BROKER_PROTOCOL_VERSION = LEGACY_RUNTIME_PROTOCOL_VERSION
 
 
 class RuntimeInvokeError(RuntimeError):
@@ -24,36 +35,20 @@ def build_runtime_request_envelope(
     *,
     request_id: str | None = None,
 ) -> dict[str, Any]:
-    envelope: dict[str, Any] = {
-        'protocolVersion': RUNTIME_BROKER_PROTOCOL_VERSION,
-        'subcommand': subcommand,
-        'payload': payload,
-    }
-    if request_id:
-        envelope['requestId'] = request_id
-    return envelope
+    return shared_build_runtime_request_envelope(
+        subcommand,
+        payload,
+        request_id=request_id,
+        protocol_version=RUNTIME_BROKER_PROTOCOL_VERSION,
+    )
 
 
 def unwrap_runtime_response(payload: Any) -> dict[str, Any]:
-    if not isinstance(payload, dict):
-        raise RuntimeInvokeError('Runtime returned a non-object benchmark result.')
-
-    protocol_version = payload.get('protocolVersion')
-    if protocol_version is None:
-        return payload
-    if protocol_version != RUNTIME_BROKER_PROTOCOL_VERSION:
-        raise RuntimeInvokeError(
-            f'Runtime broker protocol mismatch: expected {RUNTIME_BROKER_PROTOCOL_VERSION}, received {protocol_version}.',
-        )
-
-    if payload.get('ok') is False:
-        detail = payload.get('error') or (payload.get('runtime') or {}).get('detail') or 'Unknown benchmark runtime failure.'
-        raise RuntimeInvokeError(str(detail))
-
-    result = payload.get('result')
-    if not isinstance(result, dict):
-        raise RuntimeInvokeError('Runtime returned success without a benchmark result payload.')
-    return result
+    return shared_unwrap_runtime_response(
+        payload,
+        accepted_versions=(RUNTIME_BROKER_PROTOCOL_VERSION,),
+        error_factory=RuntimeInvokeError,
+    )
 
 
 def run_benchmark_suite(
