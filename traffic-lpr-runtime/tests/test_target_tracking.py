@@ -146,6 +146,71 @@ class TargetTrackingTests(unittest.TestCase):
         self.assertEqual(tracked_frames[2].diagnostics.get('trajectoryRole'), 'anchor')
         self.assertIn('anchor', tracked_frames[2].diagnostics.get('evidenceReasons', []))
 
+    def test_interval_tracking_sparsifies_long_anchor_only_evidence_schedule(self) -> None:
+        tracker = RecordingTracker()
+        service = IntervalTrackingService(
+            frame_reader=FrameReaderStub(),
+            detect_targets=lambda frame, time_ms, vehicle_kind, marker_rect: [],
+            tracker=tracker,
+        )
+
+        tracked_frames, diagnostics = service.track_target_across_interval(
+            source_path='demo.mp4',
+            interval={'startMs': 0, 'endMs': 3000},
+            anchor_time_ms=1900,
+            vehicle_kind='car',
+            selected_target_box=NormalizedRect(x=0.25, y=0.17, width=0.12, height=0.18),
+            sample_every_ms=150,
+            max_samples=16,
+            options=AnalysisOptions(tracker_mode='botsort'),
+        )
+
+        del tracked_frames
+        self.assertEqual(diagnostics['rawRequestedEvidenceSampleCount'], 16)
+        self.assertEqual(diagnostics['requestedEvidenceSampleCount'], 8)
+        self.assertTrue(diagnostics['sparseEvidenceSamplingApplied'])
+        self.assertEqual(diagnostics['evidenceSampleTimes'], [1450, 1600, 1750, 1800, 1900, 2050, 2200, 2350])
+
+    def test_interval_tracking_preserves_dense_evidence_schedule_when_ground_truth_timeline_is_required(self) -> None:
+        tracker = RecordingTracker()
+        service = IntervalTrackingService(
+            frame_reader=FrameReaderStub(),
+            detect_targets=lambda frame, time_ms, vehicle_kind, marker_rect: [],
+            tracker=tracker,
+        )
+
+        tracked_frames, diagnostics = service.track_target_across_interval(
+            source_path='demo.mp4',
+            interval={'startMs': 0, 'endMs': 3000},
+            anchor_time_ms=1900,
+            vehicle_kind='car',
+            selected_target_box=NormalizedRect(x=0.25, y=0.17, width=0.12, height=0.18),
+            sample_every_ms=150,
+            max_samples=16,
+            options=AnalysisOptions(tracker_mode='botsort'),
+            preserve_dense_evidence_samples=True,
+        )
+
+        del tracked_frames
+        self.assertEqual(diagnostics['rawRequestedEvidenceSampleCount'], 16)
+        self.assertEqual(diagnostics['requestedEvidenceSampleCount'], 16)
+        self.assertFalse(diagnostics['sparseEvidenceSamplingApplied'])
+        self.assertEqual(diagnostics['trajectoryStepMs'], 150)
+        self.assertEqual(diagnostics['evidenceSampleTimes'][0], 0)
+        self.assertEqual(diagnostics['evidenceSampleTimes'][-1], 2250)
+
+    def test_resolve_tracking_step_ms_expands_for_long_intervals(self) -> None:
+        service = IntervalTrackingService(
+            frame_reader=FrameReaderStub(),
+            detect_targets=lambda frame, time_ms, vehicle_kind, marker_rect: [],
+            tracker=RecordingTracker(),
+        )
+
+        self.assertEqual(
+            service.resolve_tracking_step_ms({'startMs': 0, 'endMs': 22000}, 1000),
+            320,
+        )
+
 
     def test_anchor_uses_selected_detection_when_tracker_anchor_points_to_other_vehicle(self) -> None:
         selected_target_box = NormalizedRect(x=0.12, y=0.22, width=0.12, height=0.26)

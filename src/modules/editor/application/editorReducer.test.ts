@@ -179,4 +179,38 @@ describe('editorReducer LPR workflow', () => {
     expect(lprState.history).toHaveLength(1)
     expect(lprState.history[0]?.summary).toBe('Best candidate ABC1234')
   })
+
+  it('preserves review-required runtime results that still include an accepted candidate', () => {
+    const state = createWorkspaceState()
+    const candidate = {
+      id: 'candidate-1',
+      text: 'ABC1234',
+      confidence: 0.97,
+      source: 'fused' as const,
+      frameTimeMs: 1500,
+      countryCode: 'TW',
+      box: { x: 0.2, y: 0.3, width: 0.18, height: 0.09 },
+      quality: null,
+    }
+
+    let nextState = editorReducer(state, {
+      type: 'set-lpr-candidates',
+      candidates: [candidate],
+    })
+    nextState = editorReducer(nextState, {
+      type: 'set-lpr-review',
+      review: {
+        status: 'review-required',
+        acceptedCandidateId: candidate.id,
+        suggestedCandidateId: candidate.id,
+        reasons: ['tracking-ambiguity'],
+      },
+    })
+
+    const lprState = getLprSessionByFileId(nextState.analysis, nextState.activeFileId)
+
+    expect(lprState.acceptedCandidateId).toBe(candidate.id)
+    expect(lprState.review?.status).toBe('review-required')
+    expect(lprState.review?.acceptedCandidateId).toBe(candidate.id)
+  })
 })

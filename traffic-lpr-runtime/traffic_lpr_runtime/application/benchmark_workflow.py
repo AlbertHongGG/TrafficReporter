@@ -704,21 +704,55 @@ def _evaluate_localization(case_payload: dict[str, Any], response: dict[str, Any
         )
 
     sample_payload = response.get('sample') if isinstance(response.get('sample'), dict) else None
+    if sample_payload is None:
+        sample_payload = _resolve_interval_anchor_sample(case_payload, response)
     predicted_plate_box = _rect_from_payload(sample_payload.get('plateBox') if sample_payload else None)
     predicted_target_box = _rect_from_payload(sample_payload.get('targetBox') if sample_payload else None)
+    if predicted_target_box is None:
+        predicted_target_box = _resolve_track_box_at_time(
+            response.get('analysisTrack'),
+            int(case_payload.get('anchorTimeMs') or case_payload.get('timeMs') or 0),
+            int(case_payload.get('sampleEveryMs') or 120),
+        )
     ground_truth_plate_box = _rect_from_payload(case_payload.get('groundTruthPlateBox') or case_payload.get('markerRect'))
     ground_truth_target_box = _rect_from_payload(case_payload.get('groundTruthTargetBox') or case_payload.get('selectedTargetBox'))
 
     plate_iou = predicted_plate_box.intersection_over_union(ground_truth_plate_box) if predicted_plate_box and ground_truth_plate_box else None
     target_iou = predicted_target_box.intersection_over_union(ground_truth_target_box) if predicted_target_box and ground_truth_target_box else None
+    matched_prediction = sample_payload is not None or predicted_plate_box is not None or predicted_target_box is not None
     return {
         'groundTruthFrameCount': 1 if ground_truth_plate_box or ground_truth_target_box else 0,
-        'matchedFrameCount': 1 if sample_payload is not None else 0,
+        'matchedFrameCount': 1 if matched_prediction else 0,
         'plateMeanIoU': plate_iou,
         'plateRecall': 1.0 if plate_iou is not None and plate_iou >= 0.5 else 0.0 if ground_truth_plate_box else None,
         'targetMeanIoU': target_iou,
         'targetRecall': 1.0 if target_iou is not None and target_iou >= 0.5 else 0.0 if ground_truth_target_box else None,
     }
+
+
+def _resolve_interval_anchor_sample(case_payload: dict[str, Any], response: dict[str, Any]) -> dict[str, Any] | None:
+    anchor_time_ms = int(case_payload.get('anchorTimeMs') or case_payload.get('timeMs') or 0)
+    sample_payloads = [sample for sample in (response.get('samples') or []) if isinstance(sample, dict)]
+    if not sample_payloads:
+        return None
+    tolerance_ms = max(180, int(case_payload.get('sampleEveryMs') or 120) * 2)
+    closest = min(sample_payloads, key=lambda sample: abs(int(sample.get('timeMs') or 0) - anchor_time_ms))
+    if abs(int(closest.get('timeMs') or 0) - anchor_time_ms) > tolerance_ms:
+        return None
+    return closest
+
+
+def _resolve_track_box_at_time(track_payload: Any, time_ms: int, tolerance_step_ms: int) -> NormalizedRect | None:
+    if not isinstance(track_payload, dict):
+        return None
+    frames = [frame for frame in (track_payload.get('frames') or []) if isinstance(frame, dict)]
+    if not frames:
+        return None
+    closest = min(frames, key=lambda frame: abs(int(frame.get('timeMs') or 0) - time_ms))
+    tolerance_ms = max(180, int(tolerance_step_ms) * 2)
+    if abs(int(closest.get('timeMs') or 0) - time_ms) > tolerance_ms:
+        return None
+    return _rect_from_payload(closest.get('box'))
 
 
 def _evaluate_interval_localization(sample_payloads: list[Any], ground_truth_frames: list[Any], tolerance_ms: int) -> dict[str, Any]:

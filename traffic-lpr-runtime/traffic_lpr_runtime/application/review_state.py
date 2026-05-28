@@ -22,7 +22,7 @@ def build_review_state(
         if not reasons:
             reasons = ['no-candidate']
         status = 'no-candidate'
-    elif review_required and accepted_candidate_id is None:
+    elif review_required:
         status = 'review-required'
     else:
         status = 'accepted'

@@ -194,6 +194,7 @@ export function reduceLprSession(lprState: LprSessionState, action: LprSessionAc
       return {
         ...lprState,
         review: action.review ? buildDefaultLprState({ review: action.review }).review : null,
+        acceptedCandidateId: action.review?.acceptedCandidateId ?? null,
       };
 
     case 'set-lpr-provenance':

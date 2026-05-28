@@ -52,6 +52,29 @@ def _sequence_tier(
     return 'stable'
 
 
+def _candidate_weight(candidate: PlateCandidate, source_weights: dict[str, float]) -> float:
+    source_key = candidate.source.split(':', 1)[0]
+    quality_weight = candidate.quality.overall_score if candidate.quality else 0.55
+    taiwan_prior = float((candidate.diagnostics or {}).get('taiwanPrior') or 1.0)
+    return candidate.confidence * quality_weight * source_weights.get(source_key, 1.0) * taiwan_prior
+
+
+def _best_frame_candidate(samples: list[FrameSample], source_weights: dict[str, float]) -> tuple[PlateCandidate | None, float]:
+    best_candidate: PlateCandidate | None = None
+    best_weight = 0.0
+    for sample in samples:
+        for rank, candidate in enumerate(sample.candidates):
+            text = normalize_plate_text(candidate.text)
+            if not text:
+                continue
+            rank_penalty = max(0.7, 1.0 - (rank * 0.12))
+            weighted_score = _candidate_weight(candidate, source_weights) * rank_penalty
+            if weighted_score > best_weight:
+                best_candidate = candidate
+                best_weight = weighted_score
+    return best_candidate, best_weight
+
+
 class CandidateFusionService:
     def __init__(self, dependencies: DependencyRegistry, primary_recognizer: PlateRecognizer) -> None:
         self._dependencies = dependencies
@@ -131,10 +154,7 @@ class CandidateFusionService:
             text = normalize_plate_text(candidate.text)
             if not text:
                 continue
-            source_key = candidate.source.split(':', 1)[0]
-            quality_weight = candidate.quality.overall_score if candidate.quality else 0.55
-            taiwan_prior = float((candidate.diagnostics or {}).get('taiwanPrior') or 1.0)
-            weight = candidate.confidence * quality_weight * source_weights.get(source_key, 1.0) * taiwan_prior
+            weight = _candidate_weight(candidate, source_weights)
 
             current = aggregated.get(text)
             if current is None:
@@ -172,6 +192,51 @@ class CandidateFusionService:
                 current['candidate'].country_code = candidate.country_code
                 current['candidate'].box = candidate.box
                 current['candidate'].quality = candidate.quality
+
+        best_frame_candidate, best_frame_weight = _best_frame_candidate(samples, source_weights)
+        if best_frame_candidate is not None and best_frame_weight >= max(options.min_accepted_confidence, 0.68):
+            best_text = normalize_plate_text(best_frame_candidate.text)
+            current = aggregated.get(best_text)
+            support_frame_count = len(current['supportFrames']) if current is not None else 1
+            carry_weight = best_frame_weight * (1.35 if support_frame_count <= 1 else 0.85)
+
+            if current is None:
+                aggregated[best_text] = {
+                    'weight': carry_weight,
+                    'supportFrames': {best_frame_candidate.frame_time_ms} if best_frame_candidate.frame_time_ms is not None else set(),
+                    'best_raw_confidence': best_frame_candidate.confidence,
+                    'candidate': PlateCandidate(
+                        id=f'candidate-{len(aggregated)}',
+                        text=best_text,
+                        confidence=carry_weight,
+                        source='fused',
+                        frame_time_ms=best_frame_candidate.frame_time_ms,
+                        country_code=best_frame_candidate.country_code,
+                        box=best_frame_candidate.box,
+                        quality=best_frame_candidate.quality,
+                        diagnostics={
+                            'supportFrames': [best_frame_candidate.frame_time_ms] if best_frame_candidate.frame_time_ms is not None else [],
+                            'sources': [best_frame_candidate.source],
+                            'bestFrameCarryThrough': True,
+                            'bestFrameTimeMs': best_frame_candidate.frame_time_ms,
+                            'bestFrameWeight': best_frame_weight,
+                        },
+                    ),
+                }
+            else:
+                current['weight'] += carry_weight
+                diagnostics = current['candidate'].diagnostics or {'supportFrames': [], 'sources': []}
+                diagnostics['bestFrameCarryThrough'] = True
+                diagnostics['bestFrameTimeMs'] = best_frame_candidate.frame_time_ms
+                diagnostics['bestFrameWeight'] = best_frame_weight
+                diagnostics['sources'] = sorted({*diagnostics.get('sources', []), best_frame_candidate.source})
+                current['candidate'].diagnostics = diagnostics
+                if best_frame_candidate.confidence >= current['best_raw_confidence']:
+                    current['best_raw_confidence'] = best_frame_candidate.confidence
+                    current['candidate'].frame_time_ms = best_frame_candidate.frame_time_ms
+                    current['candidate'].country_code = best_frame_candidate.country_code
+                    current['candidate'].box = best_frame_candidate.box
+                    current['candidate'].quality = best_frame_candidate.quality
 
         ranked = sorted(aggregated.values(), key=lambda item: item['weight'], reverse=True)
         if not ranked:

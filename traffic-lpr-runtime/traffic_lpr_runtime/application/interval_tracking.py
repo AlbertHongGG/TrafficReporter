@@ -91,6 +91,49 @@ def _build_temporal_range_diagnostics(
     }
 
 
+def _resolve_evidence_sample_budget(
+    sample_times: list[int],
+    duration_ms: int,
+    preserve_dense_schedule: bool,
+) -> int:
+    if preserve_dense_schedule or len(sample_times) <= 8:
+        return len(sample_times)
+    if duration_ms <= 4000:
+        return min(len(sample_times), 8)
+    return min(len(sample_times), 10)
+
+
+def _sparsify_evidence_sample_times(
+    interval: dict[str, int],
+    anchor_time_ms: int,
+    sample_step_ms: int,
+    budget: int,
+) -> list[int]:
+    start_ms = int(interval['startMs'])
+    end_ms = int(interval['endMs'])
+    if budget <= 0:
+        return []
+
+    chosen: list[int] = []
+
+    def choose(time_ms: int | None) -> None:
+        if time_ms is None or time_ms in chosen or time_ms < start_ms or time_ms > end_ms:
+            return
+        chosen.append(time_ms)
+
+    choose(anchor_time_ms)
+    choose(anchor_time_ms - max(50, min(100, sample_step_ms)))
+    offset_ms = sample_step_ms
+    while len(chosen) < budget and (anchor_time_ms - offset_ms >= start_ms or anchor_time_ms + offset_ms <= end_ms):
+        choose(anchor_time_ms - offset_ms)
+        if len(chosen) >= budget:
+            break
+        choose(anchor_time_ms + offset_ms)
+        offset_ms += sample_step_ms
+
+    return sorted(chosen)
+
+
 class IntervalTrackingService:
     def __init__(
         self,
@@ -133,13 +176,28 @@ class IntervalTrackingService:
         sample_every_ms: int | None,
         max_samples: int | None,
         options: AnalysisOptions,
+        preserve_dense_evidence_samples: bool = False,
     ) -> tuple[list[TrackedRegion], dict[str, Any]]:
         start_ms = int(interval['startMs'])
         end_ms = int(interval['endMs'])
-        evidence_sample_times = sorted(set(self.sample_times(interval, sample_every_ms, max_samples)))
-        evidence_sample_time_set = set(evidence_sample_times)
+        duration_ms = max(0, end_ms - start_ms)
+        raw_evidence_sample_times = sorted(set(self.sample_times(interval, sample_every_ms, max_samples)))
         sample_step_ms = self.resolve_sample_step_ms(interval, sample_every_ms, max_samples)
-        trajectory_step_ms = self.resolve_tracking_step_ms(interval, sample_step_ms)
+        evidence_budget = _resolve_evidence_sample_budget(
+            raw_evidence_sample_times,
+            duration_ms,
+            preserve_dense_evidence_samples or options.temporal_evidence_mode == 'scheduled',
+        )
+        evidence_sample_times = raw_evidence_sample_times
+        if evidence_budget < len(raw_evidence_sample_times):
+            evidence_sample_times = _sparsify_evidence_sample_times(
+                interval,
+                anchor_time_ms,
+                sample_step_ms,
+                evidence_budget,
+            )
+        evidence_sample_time_set = set(evidence_sample_times)
+        trajectory_step_ms = sample_step_ms if preserve_dense_evidence_samples else self.resolve_tracking_step_ms(interval, sample_step_ms)
         tracking_times = sorted(set(self.trajectory_times(interval, trajectory_step_ms)) | evidence_sample_time_set)
         tracking_time_set = set(tracking_times)
 
@@ -165,6 +223,7 @@ class IntervalTrackingService:
                 evidence_sample_times,
                 trajectory_step_ms,
                 anchor_time_ms,
+                raw_evidence_sample_times,
             )
 
         anchor_frame = self._frame_reader.read_frame(source_path, anchor_time_ms)
@@ -227,6 +286,8 @@ class IntervalTrackingService:
             evidence_sample_times,
             trajectory_step_ms,
             anchor_time_ms,
+            raw_evidence_sample_times,
+            raw_evidence_sample_times,
         )
 
     def calibrate_interval_target_boxes(
@@ -330,7 +391,15 @@ class IntervalTrackingService:
 
         base_step_ms = max(1, int(round(evidence_step_ms / 2)))
         rounded_step_ms = int(round(base_step_ms / 10.0) * 10) if base_step_ms >= 10 else base_step_ms
-        return max(50, min(100, rounded_step_ms))
+        if duration_ms >= 20000:
+            min_step_ms, max_step_ms = 200, 320
+        elif duration_ms >= 12000:
+            min_step_ms, max_step_ms = 100, 180
+        elif duration_ms >= 6000:
+            min_step_ms, max_step_ms = 80, 140
+        else:
+            min_step_ms, max_step_ms = 50, 100
+        return max(min_step_ms, min(max_step_ms, rounded_step_ms))
 
     def trajectory_times(
         self,
@@ -375,6 +444,7 @@ class IntervalTrackingService:
         evidence_sample_times: list[int],
         trajectory_step_ms: int,
         anchor_time_ms: int,
+        raw_evidence_sample_times: list[int],
     ) -> tuple[list[TrackedRegion], dict[str, Any]]:
         evidence_sample_time_set = set(evidence_sample_times)
         temporal_range = _build_temporal_range_diagnostics(
@@ -442,9 +512,12 @@ class IntervalTrackingService:
             'matchedFrames': len(tracked_frames),
             'requestedTrackingFrameCount': len(tracking_times),
             'requestedEvidenceSampleCount': len(evidence_sample_times),
+            'rawRequestedEvidenceSampleCount': len(raw_evidence_sample_times),
             'trajectoryFrameCount': len(tracked_frames),
             'trajectoryStepMs': trajectory_step_ms,
             'evidenceSampleTimes': evidence_sample_times,
+            'rawEvidenceSampleTimes': raw_evidence_sample_times,
+            'sparseEvidenceSamplingApplied': len(evidence_sample_times) < len(raw_evidence_sample_times),
             'anchorTimeMs': anchor_time_ms,
             'temporalRange': temporal_range,
         }

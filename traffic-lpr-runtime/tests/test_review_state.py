@@ -60,6 +60,23 @@ class ReviewStateTests(unittest.TestCase):
         self.assertEqual(review['suggestedCandidateId'], 'candidate-2')
         self.assertEqual(review['reasons'], ['low-margin'])
 
+    def test_build_review_state_keeps_accepted_candidate_when_review_is_still_required(self) -> None:
+        review = build_review_state(
+            [_candidate('candidate-1'), _candidate('candidate-2', text='ABD1234')],
+            'candidate-1',
+            {
+                'acceptedCandidateId': 'candidate-1',
+                'suggestedCandidateId': 'candidate-1',
+                'reviewRequired': True,
+                'reasons': ['tracking-ambiguity'],
+            },
+        )
+
+        self.assertEqual(review['status'], 'review-required')
+        self.assertEqual(review['acceptedCandidateId'], 'candidate-1')
+        self.assertEqual(review['suggestedCandidateId'], 'candidate-1')
+        self.assertEqual(review['reasons'], ['tracking-ambiguity'])
+
     def test_build_review_state_marks_no_candidate_when_runtime_returns_none(self) -> None:
         review = build_review_state([], None, None)
 

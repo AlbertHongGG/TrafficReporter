@@ -361,8 +361,10 @@ function buildLprCompletionDetail(
   }
 
   if (review?.status === 'review-required') {
+    const acceptedCandidate = candidates.find((candidate) => candidate.id === review.acceptedCandidateId)
+      ?? suggestedCandidate;
     const reasonLabel = review.reasons.map(formatLprReviewReason).join(', ') || 'manual review required';
-    return `Best current read ${suggestedCandidate.text}. Auto-accept is paused because ${reasonLabel}.`;
+    return `Best current read ${acceptedCandidate.text}. Auto-accept is paused because ${reasonLabel}.`;
   }
 
   const acceptedCandidate = candidates.find((candidate) => candidate.id === review?.acceptedCandidateId)
@@ -1720,7 +1722,6 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       dispatch({ type: 'set-lpr-samples', samples: response.sample ? [response.sample] : [] });
       dispatch({ type: 'set-lpr-candidates', candidates: response.candidates });
       dispatch({ type: 'set-lpr-review', review: response.review ?? null });
-      dispatch({ type: 'accept-lpr-candidate', candidateId: response.acceptedCandidateId ?? null });
       dispatch({ type: 'set-lpr-provenance', provenance: response.provenance ?? null });
       if (response.candidates.length > 0) {
         const completionDetail = buildLprCompletionDetail(response.candidates, response.review);
@@ -1859,7 +1860,6 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       dispatch({ type: 'set-lpr-samples', samples: response.samples });
       dispatch({ type: 'set-lpr-candidates', candidates: response.candidates });
       dispatch({ type: 'set-lpr-review', review: response.review ?? null });
-      dispatch({ type: 'accept-lpr-candidate', candidateId: response.acceptedCandidateId ?? null });
       dispatch({ type: 'set-lpr-provenance', provenance: response.provenance ?? null });
       const intervalDetail = response.jobStatus === 'degraded'
         ? response.summary

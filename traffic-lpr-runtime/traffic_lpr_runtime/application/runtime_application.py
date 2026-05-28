@@ -369,6 +369,7 @@ class LprRuntimeApplication:
         sample_every_ms: int | None,
         max_samples: int | None,
         options: AnalysisOptions,
+        preserve_dense_evidence_samples: bool = False,
     ) -> tuple[list[TrackedRegion], dict[str, Any]]:
         return self._interval_tracking.track_target_across_interval(
             source_path,
@@ -379,6 +380,7 @@ class LprRuntimeApplication:
             sample_every_ms,
             max_samples,
             options,
+            preserve_dense_evidence_samples,
         )
 
     def _calibrate_interval_target_boxes(

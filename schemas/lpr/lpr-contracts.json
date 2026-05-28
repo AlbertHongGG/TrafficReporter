@@ -626,7 +626,11 @@
         { "name": "frame", "type": "AiEvidenceTimelineFrameRef" },
         { "name": "description", "type": "string" },
         { "name": "overlay", "type": "AiEvidenceOverlayBox", "nullable": true },
-        { "name": "selectedForTargetResolution", "type": "boolean", "optional": true }
+        { "name": "selectedForTargetResolution", "type": "boolean", "optional": true },
+        { "name": "keyframeSource", "type": "string", "optional": true },
+        { "name": "descriptionSource", "type": "string", "optional": true },
+        { "name": "boxSource", "type": "string", "optional": true },
+        { "name": "isValidForUserFacingOutput", "type": "boolean", "optional": true }
       ]
     },
     {

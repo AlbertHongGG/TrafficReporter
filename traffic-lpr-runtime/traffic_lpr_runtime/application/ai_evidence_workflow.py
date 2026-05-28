@@ -44,6 +44,10 @@ class RenderedFrame:
 class SelectedKeyframe:
     frame: RenderedFrame
     description: str
+    keyframe_source: str = 'llm-selected'
+    description_source: str = 'llm'
+    is_user_facing: bool = True
+    supplement_reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -828,9 +832,13 @@ class AiEvidenceWorkflow:
         output_dir.mkdir(parents=True, exist_ok=True)
         rendered_keyframes: list[dict[str, Any]] = []
         for keyframe in keyframe_refs:
+            if not keyframe.is_user_facing:
+                continue
             rendered_frame = keyframe.frame
             frame = self._frame_reader.read_frame(source_path, rendered_frame.time_ms)
-            box = _find_closest_track_box(analysis_track, rendered_frame.time_ms)
+            box, box_source, box_time_delta_ms = _find_closest_track_box(analysis_track, rendered_frame.time_ms)
+            if not isinstance(box, dict):
+                continue
             annotated, frame_width, frame_height = self._prepare_frame_image(
                 frame,
                 title=rendered_frame.frame_id,
@@ -844,6 +852,12 @@ class AiEvidenceWorkflow:
                 'frame': rendered_frame.to_payload(image_path=str(output_path)),
                 'description': keyframe.description,
                 'overlay': self._overlay_payload(NormalizedRect.from_payload(box) if isinstance(box, dict) else None, frame_width, frame_height),
+                'keyframeSource': keyframe.keyframe_source,
+                'descriptionSource': keyframe.description_source,
+                'isValidForUserFacingOutput': True,
+                'supplementReason': keyframe.supplement_reason,
+                'boxSource': box_source,
+                'boxTimeDeltaMs': box_time_delta_ms,
             })
         return rendered_keyframes
 
@@ -1132,9 +1146,18 @@ def _normalize_keyframes(value: Any, frames: list[RenderedFrame], *, desired_cou
             description = ''
             if isinstance(item, dict):
                 description = str(item.get('description') or '').strip()
+            if description:
+                selected.append(SelectedKeyframe(
+                    frame=frame,
+                    description=description,
+                ))
+                continue
             selected.append(SelectedKeyframe(
                 frame=frame,
-                description=description or _fallback_keyframe_description(frame=frame, frames=frames),
+                description=_fallback_keyframe_description(frame=frame, frames=frames),
+                description_source='fallback',
+                is_user_facing=False,
+                supplement_reason='missing-description',
             ))
     deduped: list[SelectedKeyframe] = []
     seen_frame_ids: set[str] = set()
@@ -1143,19 +1166,7 @@ def _normalize_keyframes(value: Any, frames: list[RenderedFrame], *, desired_cou
             continue
         seen_frame_ids.add(entry.frame.frame_id)
         deduped.append(entry)
-    selected = deduped
-    if len(selected) >= desired_count:
-        return selected[:desired_count]
-
-    remaining = [frame for frame in frames if frame.frame_id not in {item.frame.frame_id for item in selected}]
-    while len(selected) < desired_count and remaining:
-        pick_index = min(len(remaining) - 1, max(0, round((len(remaining) - 1) * (len(selected) / max(1, desired_count - 1)))))
-        fallback_frame = remaining.pop(pick_index)
-        selected.append(SelectedKeyframe(
-            frame=fallback_frame,
-            description=_fallback_keyframe_description(frame=fallback_frame, frames=frames),
-        ))
-    return sorted(selected, key=lambda entry: entry.frame.time_ms)
+    return sorted(deduped, key=lambda entry: entry.frame.time_ms)[:desired_count]
 
 
 def _fallback_keyframe_description(*, frame: RenderedFrame, frames: list[RenderedFrame]) -> str:
@@ -1174,14 +1185,38 @@ def _fallback_keyframe_description(*, frame: RenderedFrame, frames: list[Rendere
     return f'{stage_description} 畫面時間約為 T+{_format_time_label(frame.time_ms)}。'
 
 
-def _find_closest_track_box(track: dict[str, Any] | None, time_ms: int) -> dict[str, Any] | None:
+def _find_closest_track_box(track: dict[str, Any] | None, time_ms: int) -> tuple[dict[str, Any] | None, str | None, int | None]:
     if not isinstance(track, dict):
-        return None
+        return None, None, None
     frames = [frame for frame in (track.get('frames') or []) if isinstance(frame, dict) and isinstance(frame.get('box'), dict)]
     if not frames:
-        return None
+        return None, None, None
     closest = min(frames, key=lambda frame: abs(int(frame.get('timeMs') or 0) - time_ms))
-    return closest.get('box') if isinstance(closest.get('box'), dict) else None
+    closest_time_ms = int(closest.get('timeMs') or 0)
+    time_delta_ms = abs(closest_time_ms - time_ms)
+    if time_delta_ms > _keyframe_track_box_tolerance_ms(frames):
+        return None, None, time_delta_ms
+    return closest.get('box') if isinstance(closest.get('box'), dict) else None, 'analysis-track', time_delta_ms
+
+
+def _keyframe_track_box_tolerance_ms(track_frames: Sequence[dict[str, Any]]) -> int:
+    ordered_times = sorted(
+        int(frame.get('timeMs') or 0)
+        for frame in track_frames
+        if isinstance(frame, dict)
+    )
+    if len(ordered_times) < 2:
+        return 240
+    deltas = [
+        current - previous
+        for previous, current in zip(ordered_times, ordered_times[1:])
+        if current > previous
+    ]
+    if not deltas:
+        return 240
+    deltas.sort()
+    median_delta = deltas[len(deltas) // 2]
+    return max(180, min(600, median_delta * 2))
 
 
 def _resolve_plate_candidate(candidates: Sequence[dict[str, Any]], accepted_candidate_id: Any) -> dict[str, Any] | None:

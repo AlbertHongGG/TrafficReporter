@@ -918,6 +918,38 @@ class BenchmarkToolTests(unittest.TestCase):
         self.assertEqual(localization['matchedFrameCount'], 1)
         self.assertEqual(localization['targetRecall'], 1.0)
 
+    def test_interval_anchor_localization_falls_back_to_interval_samples_and_analysis_track(self) -> None:
+        localization = _evaluate_localization(
+            {
+                'mode': 'interval',
+                'anchorTimeMs': 1000,
+                'sampleEveryMs': 120,
+                'selectedTargetBox': {'x': 0.1, 'y': 0.2, 'width': 0.2, 'height': 0.2},
+            },
+            {
+                'samples': [
+                    {
+                        'timeMs': 980,
+                        'targetBox': {'x': 0.1, 'y': 0.2, 'width': 0.2, 'height': 0.2},
+                    },
+                ],
+                'analysisTrack': {
+                    'id': 'track-1',
+                    'frames': [
+                        {
+                            'id': 'track-frame-1',
+                            'timeMs': 1010,
+                            'box': {'x': 0.1, 'y': 0.2, 'width': 0.2, 'height': 0.2},
+                        }
+                    ],
+                },
+            },
+        )
+
+        self.assertEqual(localization['groundTruthFrameCount'], 1)
+        self.assertEqual(localization['matchedFrameCount'], 1)
+        self.assertEqual(localization['targetRecall'], 1.0)
+
     def test_evaluate_runtime_result_gate_reports_failed_thresholds(self) -> None:
         runtime_result = {
             'cases': [

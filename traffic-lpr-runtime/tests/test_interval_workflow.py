@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from traffic_lpr_runtime.application.pipeline_support import AnalysisOptions
 from traffic_lpr_runtime.application.workflows import IntervalAnalysisWorkflow
+from traffic_lpr_runtime.application.workflows import _resolve_analysis_target_box
 from traffic_lpr_runtime.application.workflows import _select_interval_evidence_frames
 from traffic_lpr_runtime.domain.errors import RuntimeFailure
 from traffic_lpr_runtime.domain.models import FrameSample, PlateCandidate, QualityMetrics, TargetTrack, TrackedRegion
@@ -29,7 +30,7 @@ def make_quality() -> QualityMetrics:
 
 
 class IntervalWorkflowTests(unittest.TestCase):
-    def test_select_interval_evidence_frames_prefers_anchor_edges_and_motion_hotspots(self) -> None:
+    def test_select_interval_evidence_frames_keeps_sparse_schedule_and_anchor_frame(self) -> None:
         tracked_frames = [
             TrackedRegion(
                 id=f'track-{time_ms}',
@@ -50,8 +51,24 @@ class IntervalWorkflowTests(unittest.TestCase):
 
         evidence_frames = _select_interval_evidence_frames(tracked_frames, AnalysisOptions(temporal_evidence_mode='motion-aware'))
 
-        self.assertEqual([frame.time_ms for frame in evidence_frames], [1000, 1300, 1500, 1600])
+        self.assertEqual([frame.time_ms for frame in evidence_frames], [1000, 1200, 1300, 1400, 1600])
         self.assertTrue(all(frame.diagnostics.get('selectedForEvidenceAnalysis') is True for frame in evidence_frames))
+
+    def test_resolve_analysis_target_box_uses_selected_anchor_box_for_pre_anchor_neighbor(self) -> None:
+        selected_box = NormalizedRect(x=0.24, y=0.18, width=0.12, height=0.18)
+        raw_box = NormalizedRect(x=0.25, y=0.181, width=0.118, height=0.176)
+        calibrated_box = NormalizedRect(x=0.251, y=0.181, width=0.118, height=0.176)
+
+        analysis_box, source = _resolve_analysis_target_box(
+            raw_box,
+            calibrated_box,
+            selected_box,
+            sample_time_ms=1750,
+            anchor_time_ms=1900,
+        )
+
+        self.assertEqual(source, 'selected-anchor-fallback')
+        self.assertEqual(analysis_box, selected_box)
 
     def test_interval_analysis_forces_review_when_sequence_is_fragmented(self) -> None:
         tracked_region = TrackedRegion(
@@ -143,6 +160,7 @@ class IntervalWorkflowTests(unittest.TestCase):
         })
 
         self.assertEqual(result['sequence']['sequenceTier'], 'fragmented')
+        self.assertEqual(result['acceptedCandidateId'], candidate.id)
         self.assertEqual(result['review']['status'], 'review-required')
         self.assertIn('plate text did not remain stable across interval samples', result['review']['reasons'])
 
@@ -172,7 +190,7 @@ class IntervalWorkflowTests(unittest.TestCase):
 
     def test_interval_analysis_uses_calibrated_target_box_for_sample_analysis(self) -> None:
         raw_box = NormalizedRect(x=0.4, y=0.3, width=0.2, height=0.24)
-        calibrated_box = NormalizedRect(x=0.47, y=0.53, width=0.08, height=0.07)
+        calibrated_box = NormalizedRect(x=0.42, y=0.31, width=0.18, height=0.22)
         tracked_region = TrackedRegion(
             id='track-1',
             time_ms=11000,
@@ -241,9 +259,83 @@ class IntervalWorkflowTests(unittest.TestCase):
         self.assertEqual(calls, [calibrated_box])
         self.assertEqual(result['samples'][0]['targetBox'], calibrated_box.to_payload())
         self.assertEqual(result['analysisTrack']['frames'][0]['box'], calibrated_box.to_payload())
+        self.assertEqual(result['analysisTrack']['frames'][0]['diagnostics']['analysisBoxSource'], 'calibrated')
         self.assertEqual(result['analysisTrack']['frames'][0]['diagnostics']['rawTrackingBox'], raw_box.to_payload())
         self.assertEqual(result['targetTracks'][0]['frames'][0]['box'], calibrated_box.to_payload())
         self.assertEqual(result['targetTracks'][0]['frames'][0]['diagnostics']['rawTrackingBox'], raw_box.to_payload())
+
+    def test_interval_analysis_rejects_drifted_calibrated_box_and_keeps_raw_tracking_box(self) -> None:
+        raw_box = NormalizedRect(x=0.18, y=0.24, width=0.2, height=0.22)
+        drifted_box = NormalizedRect(x=0.62, y=0.08, width=0.16, height=0.16)
+        tracked_region = TrackedRegion(
+            id='track-1',
+            time_ms=11000,
+            box=raw_box,
+            confidence=0.94,
+            class_name='motorcycle',
+        )
+        candidate = PlateCandidate(
+            id='candidate-1',
+            text='NCE9762',
+            confidence=0.93,
+            source='ocr:fastplate',
+            frame_time_ms=11000,
+            country_code='TW',
+            box=None,
+            quality=make_quality(),
+        )
+        calls: list[NormalizedRect] = []
+
+        def analyze_plate_candidates(frame, time_ms, plate_box, target_box, country_hints, options, artifact_root):
+            calls.append(target_box)
+            sample = FrameSample(
+                id='sample-11000',
+                time_ms=time_ms,
+                target_box=target_box,
+                plate_box=None,
+                quality=make_quality(),
+                candidates=[candidate],
+                image_path=None,
+                diagnostics={},
+            )
+            return [candidate], sample, None
+
+        workflow = IntervalAnalysisWorkflow(
+            ensure_ready=lambda: None,
+            status=lambda: {'available': True, 'detail': 'ok'},
+            runtime_root=lambda: Path('runtime-root'),
+            frame_reader=type('FrameReaderStub', (), {'read_frame': staticmethod(lambda source_path, time_ms: object())})(),
+            track_target_across_interval=lambda *args, **kwargs: ([tracked_region], {'trackerMode': 'botsort'}),
+            calibrate_interval_target_boxes=lambda *args, **kwargs: {11000: drifted_box},
+            analyze_plate_candidates=analyze_plate_candidates,
+            aggregate_candidates=lambda samples, observations, country_hints, options, artifact_root: ([candidate], {'mode': 'stub'}),
+            apply_reliability_selection=lambda candidates, samples, country_hints, options, interval_mode: (candidates, candidate.id, {'suggestedCandidateId': candidate.id, 'acceptedCandidateId': candidate.id, 'reviewRequired': False, 'reasons': []}),
+            build_track_payload=lambda tracked_frames, diagnostics: [
+                TargetTrack(
+                    id='track-1',
+                    class_name='motorcycle',
+                    label='motorcycle 11000ms',
+                    confidence=0.92,
+                    frames=tracked_frames,
+                    diagnostics=diagnostics,
+                ),
+            ],
+        )
+
+        result = workflow.run({
+            'sourcePath': 'demo.mp4',
+            'interval': {'startMs': 10000, 'endMs': 12000},
+            'anchorTimeMs': 11000,
+            'targetVehicleKind': 'motorcycle',
+            'selectedTargetBox': raw_box.to_payload(),
+            'countryHints': ['tw'],
+        })
+
+        self.assertEqual(calls, [raw_box])
+        self.assertEqual(result['samples'][0]['targetBox'], raw_box.to_payload())
+        self.assertEqual(result['analysisTrack']['frames'][0]['box'], raw_box.to_payload())
+        self.assertEqual(result['analysisTrack']['frames'][0]['diagnostics']['analysisBoxSource'], 'raw-tracking-fallback')
+        self.assertEqual(result['analysisTrack']['frames'][0]['diagnostics']['calibratedBox'], drifted_box.to_payload())
 
     def test_interval_analysis_returns_degraded_result_when_anchor_mismatch_still_has_samples(self) -> None:
         selected_target_box = NormalizedRect(x=0.12, y=0.22, width=0.12, height=0.26)
@@ -393,7 +485,7 @@ class IntervalWorkflowTests(unittest.TestCase):
             'maxSamples': 4,
         })
 
-        self.assertIsNone(result['acceptedCandidateId'])
+        self.assertEqual(result['acceptedCandidateId'], candidate.id)
         self.assertEqual(result['jobStatus'], 'degraded')
         self.assertEqual(result['tracking']['trackingTier'], 'detection-fallback')
         self.assertEqual(result['review']['status'], 'review-required')

@@ -9,6 +9,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from traffic_lpr_runtime.application.pipeline_support import AnalysisOptions
 from traffic_lpr_runtime.application.preprocessing import PlatePreprocessor
+from traffic_lpr_runtime.domain.models import QualityMetrics
+from traffic_lpr_runtime.domain.value_objects import NormalizedRect
 from traffic_lpr_runtime.infrastructure.image_processing import QualityScorer
 
 try:
@@ -21,6 +23,73 @@ except Exception:  # pragma: no cover - dependency-gated test environment
 
 @unittest.skipIf(cv2 is None or np is None, 'OpenCV and NumPy are required for preprocessing tests.')
 class PreprocessingTests(unittest.TestCase):
+    def test_prepare_prefers_best_stage_over_restored_output(self) -> None:
+        def quality(overall: float, *, angle_score: float = 0.8) -> QualityMetrics:
+            return QualityMetrics(
+                sharpness=overall,
+                contrast=overall,
+                plate_area=0.08,
+                angle_score=angle_score,
+                occlusion_score=0.9,
+                glare_score=0.9,
+                legibility_score=overall,
+                overall_score=overall,
+                legibility_level='good' if overall >= 0.62 else 'poor',
+            )
+
+        source_frame = np.full((90, 220, 3), 200, dtype=np.uint8)
+        original_image = np.full((40, 120, 3), 180, dtype=np.uint8)
+        rectified_image = np.full((40, 120, 3), 181, dtype=np.uint8)
+        enhanced_image = np.full((40, 120, 3), 182, dtype=np.uint8)
+        restored_image = np.full((40, 120, 3), 183, dtype=np.uint8)
+
+        quality_by_signature = {
+            (90, 220, 200): quality(0.58),
+            (14, 66, 200): quality(0.61),
+            (40, 120, 181): quality(0.63, angle_score=0.82),
+            (40, 120, 182): quality(0.86),
+            (40, 120, 183): quality(0.71),
+        }
+
+        class StubQualityScorer:
+            def score(self, image, plate_box):
+                signature = (int(image.shape[0]), int(image.shape[1]), int(image.mean()))
+                return quality_by_signature[signature]
+
+        dependencies = types.SimpleNamespace(
+            cv2=cv2,
+            numpy=np,
+            einops=None,
+            timm=None,
+            torch=None,
+        )
+        preprocessor = PlatePreprocessor(dependencies=dependencies, quality_scorer=StubQualityScorer())
+        preprocessor._expand_plate_crop_box = lambda frame, plate_box: plate_box
+        preprocessor._rectify_plate = lambda plate_image: (rectified_image, {'applied': True, 'method': 'stub'})
+        preprocessor._enhance_plate = lambda plate_image: enhanced_image
+        preprocessor._should_restore = lambda plate_image, quality_metrics, options, quality_route: True
+        preprocessor._restore_plate = lambda plate_image, options: (
+            restored_image,
+            {'applied': True, 'backend': 'stub', 'mode': options.restoration_mode},
+        )
+
+        observation = preprocessor.prepare(
+            source_frame,
+            1000,
+            None,
+            NormalizedRect(x=0.2, y=0.3, width=0.3, height=0.16),
+            AnalysisOptions(restoration_mode='classical'),
+            None,
+        )
+
+        assert observation is not None
+        self.assertIs(observation.working_image, enhanced_image)
+        self.assertEqual(observation.diagnostics['workingStage'], 'enhanced')
+        self.assertGreater(
+            observation.diagnostics['stageScores']['enhanced'],
+            observation.diagnostics['stageScores']['restored'],
+        )
+
     def test_interval_sample_keeps_restoration_in_classical_mode(self) -> None:
         options = AnalysisOptions(restoration_mode='mambairv2', enable_recognizer_comparison=True)
 

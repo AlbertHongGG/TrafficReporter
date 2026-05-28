@@ -27,12 +27,43 @@ def _resolve_interval_anchor_box(
     tracked_frames: list[TrackedRegion],
     calibrated_target_boxes: dict[int, NormalizedRect],
     anchor_time_ms: int,
+    selected_target_box: NormalizedRect | None,
 ) -> NormalizedRect | None:
-    if anchor_time_ms in calibrated_target_boxes:
-        return calibrated_target_boxes[anchor_time_ms]
-
     anchor_frame = next((frame for frame in tracked_frames if frame.time_ms == anchor_time_ms), None)
-    return anchor_frame.box if anchor_frame is not None else None
+    raw_anchor_box = anchor_frame.box if anchor_frame is not None else None
+    calibrated_anchor_box = calibrated_target_boxes.get(anchor_time_ms)
+    analysis_anchor_box, _ = _resolve_analysis_target_box(raw_anchor_box, calibrated_anchor_box, selected_target_box)
+    return analysis_anchor_box
+
+
+def _resolve_analysis_target_box(
+    raw_tracking_box: NormalizedRect | None,
+    calibrated_target_box: NormalizedRect | None,
+    selected_target_box: NormalizedRect | None,
+    sample_time_ms: int | None = None,
+    anchor_time_ms: int | None = None,
+) -> tuple[NormalizedRect | None, str]:
+    if (
+        selected_target_box is not None
+        and sample_time_ms is not None
+        and anchor_time_ms is not None
+        and sample_time_ms < anchor_time_ms
+        and anchor_time_ms - sample_time_ms <= 180
+    ):
+        return selected_target_box, 'selected-anchor-fallback'
+
+    if calibrated_target_box is None:
+        return raw_tracking_box, 'raw-tracking'
+
+    if raw_tracking_box is not None and _boxes_remain_anchored(raw_tracking_box, calibrated_target_box):
+        return calibrated_target_box, 'calibrated'
+
+    if raw_tracking_box is None and selected_target_box is not None and _boxes_remain_anchored(selected_target_box, calibrated_target_box):
+        return calibrated_target_box, 'calibrated'
+
+    if raw_tracking_box is not None:
+        return raw_tracking_box, 'raw-tracking-fallback'
+    return calibrated_target_box, 'calibrated'
 
 
 def _request_run_id(payload: dict[str, Any]) -> str | None:
@@ -88,6 +119,13 @@ def _select_interval_evidence_frames(tracked_frames: list[TrackedRegion], option
             tracked_frames,
             {frame.time_ms for frame in selected_frames},
         )
+
+    anchor_frame = next((frame for frame in tracked_frames if (frame.diagnostics or {}).get('isAnchorFrame') is True), None)
+    if scheduled_frames:
+        selected_times = {frame.time_ms for frame in scheduled_frames}
+        if anchor_frame is not None:
+            selected_times.add(anchor_frame.time_ms)
+        return _mark_selected_for_evidence_analysis(tracked_frames, selected_times)
 
     evidence_budget = len(scheduled_frames) if scheduled_frames else len(tracked_frames)
     evidence_budget = max(1, min(evidence_budget, len(tracked_frames)))
@@ -418,6 +456,7 @@ class IntervalAnalysisWorkflow:
             payload.get('sampleEveryMs'),
             payload.get('maxSamples'),
             options,
+            isinstance(payload.get('groundTruthFrames'), list) and len(payload.get('groundTruthFrames') or []) > 0,
         )
         requested_tracking_frame_count = max(
             requested_frame_count,
@@ -435,7 +474,12 @@ class IntervalAnalysisWorkflow:
             anchor_time_ms,
             selected_target_box,
         )
-        resolved_anchor_box = _resolve_interval_anchor_box(tracked_frames, calibrated_target_boxes, anchor_time_ms)
+        resolved_anchor_box = _resolve_interval_anchor_box(
+            tracked_frames,
+            calibrated_target_boxes,
+            anchor_time_ms,
+            selected_target_box,
+        )
         anchor_status = _anchor_status(selected_target_box, anchor_time_ms, start_ms, end_ms, resolved_anchor_box)
         anchor_ok = anchor_status == 'valid'
         tracking = _build_tracking_summary(
@@ -464,7 +508,13 @@ class IntervalAnalysisWorkflow:
         for index, tracked_frame in enumerate(evidence_frames, start=1):
             raw_tracking_box = tracked_frame.box
             calibrated_target_box = calibrated_target_boxes.get(tracked_frame.time_ms)
-            analysis_target_box = calibrated_target_box or raw_tracking_box
+            analysis_target_box, analysis_box_source = _resolve_analysis_target_box(
+                raw_tracking_box,
+                calibrated_target_box,
+                selected_target_box,
+                tracked_frame.time_ms,
+                anchor_time_ms,
+            )
             sample_progress = 0.35 if sample_count == 0 else 0.35 + (0.35 * (index - 1) / sample_count)
             _emit_progress(
                 sample_progress,
@@ -487,13 +537,16 @@ class IntervalAnalysisWorkflow:
                 tracked_frame.diagnostics = {
                     **(tracked_frame.diagnostics or {}),
                     'analysisBox': analysis_target_box.to_payload(),
+                    'analysisBoxSource': analysis_box_source,
                     'rawTrackingBox': raw_tracking_box.to_payload(),
                     'calibratedBox': calibrated_target_box.to_payload(),
                 }
-                tracked_frame.box = calibrated_target_box
+                if analysis_box_source == 'calibrated':
+                    tracked_frame.box = calibrated_target_box
             sample.diagnostics = {
                 **(sample.diagnostics or {}),
                 'analysisTargetBox': analysis_target_box.to_payload(),
+                'analysisBoxSource': analysis_box_source,
                 'rawTrackingBox': raw_tracking_box.to_payload(),
                 'tracking': tracked_frame.diagnostics,
             }
@@ -521,10 +574,9 @@ class IntervalAnalysisWorkflow:
         sequence_review_reasons = _sequence_review_reasons(sequence_summary, options)
         degraded_reasons = [] if tracking['degradedReason'] is None else [str(tracking['degradedReason'])]
         if identity_review_reasons or sequence_review_reasons or tracking['trackingTier'] != 'full':
-            accepted_candidate_id = None
             selection_diagnostics = {
                 **selection_diagnostics,
-                'acceptedCandidateId': None,
+                'acceptedCandidateId': accepted_candidate_id,
                 'reviewRequired': True,
                 'reasons': _merge_reasons(
                     [reason for reason in selection_diagnostics.get('reasons') or [] if isinstance(reason, str)],

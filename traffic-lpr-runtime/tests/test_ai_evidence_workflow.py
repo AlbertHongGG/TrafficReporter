@@ -54,7 +54,7 @@ class AiEvidenceWorkflowTests(unittest.TestCase):
             provider=provider or ProviderStub(),
         )
 
-    def test_normalize_keyframes_returns_selected_keyframe_objects(self) -> None:
+    def test_normalize_keyframes_keeps_real_llm_keyframes_without_padding(self) -> None:
         frames = [
             RenderedFrame('fine-000', 1000, 0, 'fine-000', 'fine-000.jpg', 1280, 720),
             RenderedFrame('fine-001', 1500, 1, 'fine-001', 'fine-001.jpg', 1280, 720),
@@ -67,16 +67,81 @@ class AiEvidenceWorkflowTests(unittest.TestCase):
                 {'frameId': 'fine-001', 'description': 'duplicate should collapse'},
             ],
             frames,
-            desired_count=2,
+            desired_count=8,
         )
 
-        self.assertEqual(len(result), 2)
+        self.assertEqual(len(result), 1)
         self.assertTrue(all(isinstance(item, SelectedKeyframe) for item in result))
         self.assertEqual(result[0].frame.frame_id, 'fine-001')
         self.assertEqual(result[0].description, '關鍵幀')
-        self.assertEqual(result[1].frame.frame_id, 'fine-002')
-        self.assertIn('事件尾段的關鍵畫面', result[1].description)
-        self.assertIn('T+00:02.000', result[1].description)
+        self.assertEqual(result[0].description_source, 'llm')
+        self.assertTrue(result[0].is_user_facing)
+
+    def test_normalize_keyframes_marks_missing_description_as_non_user_facing(self) -> None:
+        frames = [
+            RenderedFrame('fine-000', 1000, 0, 'fine-000', 'fine-000.jpg', 1280, 720),
+            RenderedFrame('fine-001', 1500, 1, 'fine-001', 'fine-001.jpg', 1280, 720),
+        ]
+
+        result = _normalize_keyframes(
+            [
+                {'frameId': 'fine-000', 'description': ''},
+                {'frameId': 'fine-001', 'description': '有效關鍵幀'},
+            ],
+            frames,
+            desired_count=8,
+        )
+
+        self.assertEqual(len(result), 2)
+        self.assertFalse(result[0].is_user_facing)
+        self.assertEqual(result[0].description_source, 'fallback')
+        self.assertEqual(result[0].supplement_reason, 'missing-description')
+        self.assertTrue(result[1].is_user_facing)
+
+    def test_render_keyframes_skips_stale_or_invalid_user_facing_frames(self) -> None:
+        class FrameReaderStub:
+            def read_frame(self, source_path: str, time_ms: int):
+                del source_path, time_ms
+                return np.zeros((120, 200, 3), dtype=np.uint8)
+
+        class DependenciesStub:
+            cv2 = None
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workflow = self._build_workflow(
+                runtime_root=Path(temp_dir),
+                frame_reader=FrameReaderStub(),
+                dependencies=DependenciesStub(),
+            )
+            workflow._prepare_frame_image = lambda image, title, subtitle, box=None, show_header=False: (image, 200, 120)
+            workflow._write_image = lambda image_path, image: None
+
+            rendered = workflow._render_keyframes(
+                source_path='demo.mp4',
+                keyframe_refs=[
+                    SelectedKeyframe(
+                        frame=RenderedFrame('fine-001', 1000, 1, 'fine-001', 'fine-001.jpg', 200, 120),
+                        description='有效描述',
+                    ),
+                    SelectedKeyframe(
+                        frame=RenderedFrame('fine-002', 2200, 2, 'fine-002', 'fine-002.jpg', 200, 120),
+                        description='缺描述不該顯示',
+                        is_user_facing=False,
+                        supplement_reason='missing-description',
+                    ),
+                ],
+                analysis_track={
+                    'id': 'track-1',
+                    'frames': [{
+                        'id': 'track-frame-1',
+                        'timeMs': 1500,
+                        'box': {'x': 0.2, 'y': 0.2, 'width': 0.2, 'height': 0.2},
+                    }],
+                },
+                output_dir=Path(temp_dir) / 'keyframes',
+            )
+
+            self.assertEqual(rendered, [])
 
     def test_run_accepts_typed_storyboard_selections(self) -> None:
         frame = RenderedFrame('fine-001', 1500, 1, 'fine-001', 'fine-001.jpg', 1280, 720)

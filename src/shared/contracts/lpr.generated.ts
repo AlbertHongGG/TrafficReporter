@@ -407,6 +407,10 @@ export interface AiEvidenceKeyframe {
   description: string;
   overlay: AiEvidenceOverlayBox | null;
   selectedForTargetResolution?: boolean;
+  keyframeSource?: string;
+  descriptionSource?: string;
+  boxSource?: string;
+  isValidForUserFacingOutput?: boolean;
 }
 
 export interface AiEvidenceSharedProjection {

@@ -381,6 +381,10 @@ pub struct AiEvidenceKeyframePayload {
     pub description: String,
     pub overlay: Option<AiEvidenceOverlayBoxPayload>,
     pub selected_for_target_resolution: Option<bool>,
+    pub keyframe_source: Option<String>,
+    pub description_source: Option<String>,
+    pub box_source: Option<String>,
+    pub is_valid_for_user_facing_output: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -59,14 +59,30 @@ class PlatePreprocessor:
 
         enhanced_image = self._enhance_plate(rectified_image) if options.enable_enhancement else rectified_image
         source_quality = self._quality_scorer.score(frame, plate_box)
-        crop_quality = self._quality_scorer.score(enhanced_image, None)
-        merged_quality = _merge_quality_metrics(source_quality, crop_quality)
+        original_quality = self._quality_scorer.score(original_image, None)
+        rectified_quality = self._quality_scorer.score(rectified_image, None)
+        enhanced_quality = self._quality_scorer.score(enhanced_image, None)
+        merged_quality = _merge_quality_metrics(source_quality, enhanced_quality)
+        quality_route = _resolve_quality_route(original_image, merged_quality)
 
         restored_image = None
         restoration = {'applied': False, 'backend': 'none', 'mode': options.restoration_mode}
-        if self._should_restore(enhanced_image, merged_quality, options):
+        restored_quality = None
+        if self._should_restore(enhanced_image, merged_quality, options, quality_route):
             restored_image, restoration = self._restore_plate(enhanced_image, options)
-        working_image = restored_image if restored_image is not None else enhanced_image
+            if restored_image is not None:
+                restored_quality = self._quality_scorer.score(restored_image, None)
+
+        working_stage, working_image, working_quality, stage_scores = _select_working_stage(
+            quality_route=quality_route,
+            stage_candidates=[
+                ('original', original_image, original_quality),
+                ('rectified', rectified_image, rectified_quality),
+                ('enhanced', enhanced_image, enhanced_quality),
+                ('restored', restored_image, restored_quality),
+            ],
+        )
+        merged_quality = _merge_quality_metrics(source_quality, working_quality or enhanced_quality)
 
         artifact_paths = self._persist_artifacts(
             artifact_root,
@@ -81,10 +97,13 @@ class PlatePreprocessor:
             'rectification': rectification,
             'restoreApplied': restored_image is not None,
             'restoration': restoration,
+            'qualityRoute': quality_route,
             'ocrCropBox': ocr_crop_box.to_payload(),
             'sourcePlateBox': plate_box.to_payload(),
             'originalShape': list(original_image.shape[:2]),
             'workingShape': list(working_image.shape[:2]),
+            'workingStage': working_stage,
+            'stageScores': stage_scores,
             'artifacts': artifact_paths,
         }
         return PlateObservation(
@@ -291,7 +310,7 @@ class PlatePreprocessor:
         sharpen_gain = 1.68 if contrast < 0.22 else 1.55
         return cv2.addWeighted(denoised, sharpen_gain, softened, -(sharpen_gain - 1.0), 0)
 
-    def _should_restore(self, plate_image: Any, quality: QualityMetrics | None, options: AnalysisOptions) -> bool:
+    def _should_restore(self, plate_image: Any, quality: QualityMetrics | None, options: AnalysisOptions, quality_route: str) -> bool:
         if options.restoration_mode == 'off' or plate_image is None:
             return False
         height, width = plate_image.shape[:2]
@@ -299,12 +318,16 @@ class PlatePreprocessor:
             return True
         if quality is None:
             return True
+        if quality_route == 'high-angle':
+            return False
+        if quality_route == 'tiny-plate':
+            return True
         return (
-            quality.overall_score < 0.7
-            or quality.sharpness < 0.34
-            or quality.glare_score < 0.52
-            or quality.contrast < 0.42
-            or quality.legibility_score < 0.72
+            quality.overall_score < 0.66
+            or quality.sharpness < 0.3
+            or quality.glare_score < 0.46
+            or quality.contrast < 0.36
+            or (quality_route in {'motion-soft', 'low-light'} and quality.legibility_score < 0.76)
         )
 
     def _restore_plate(self, plate_image: Any, options: AnalysisOptions) -> tuple[Any | None, dict[str, Any]]:
@@ -376,6 +399,75 @@ def _merge_quality_metrics(
         overall_score=overall_score,
         legibility_level=legibility_level,
     )
+
+
+def _resolve_quality_route(plate_image: Any, quality: QualityMetrics | None) -> str:
+    if plate_image is None or getattr(plate_image, 'shape', None) is None:
+        return 'baseline'
+
+    height, width = plate_image.shape[:2]
+    if min(height, width) < 52:
+        return 'tiny-plate'
+    if quality is None:
+        return 'unknown'
+    if quality.angle_score < 0.58:
+        return 'high-angle'
+    if quality.glare_score < 0.42 or quality.contrast < 0.36:
+        return 'low-light'
+    if quality.sharpness < 0.3 or quality.legibility_score < 0.62:
+        return 'motion-soft'
+    return 'baseline'
+
+
+def _select_working_stage(
+    *,
+    quality_route: str,
+    stage_candidates: list[tuple[str, Any | None, QualityMetrics | None]],
+) -> tuple[str, Any, QualityMetrics | None, dict[str, float]]:
+    scored_candidates: list[tuple[str, Any, QualityMetrics | None, float]] = []
+    stage_scores: dict[str, float] = {}
+
+    for stage_name, stage_image, stage_quality in stage_candidates:
+        if stage_image is None:
+            continue
+        stage_score = _working_stage_score(stage_name, stage_quality, quality_route)
+        stage_scores[stage_name] = stage_score
+        scored_candidates.append((stage_name, stage_image, stage_quality, stage_score))
+
+    if not scored_candidates:
+        raise ValueError('No candidate working stages were available for plate preprocessing.')
+
+    selected_stage_name, selected_stage_image, selected_stage_quality, _ = max(
+        scored_candidates,
+        key=lambda item: (item[3], 1 if item[0] == 'enhanced' else 0, 1 if item[0] == 'rectified' else 0),
+    )
+    return selected_stage_name, selected_stage_image, selected_stage_quality, stage_scores
+
+
+def _working_stage_score(stage_name: str, quality: QualityMetrics | None, quality_route: str) -> float:
+    if quality is None:
+        return -1.0
+
+    score = (
+        (quality.overall_score * 0.55)
+        + (quality.legibility_score * 0.25)
+        + (quality.sharpness * 0.12)
+        + (quality.contrast * 0.08)
+    )
+
+    if stage_name == 'enhanced':
+        score += 0.02 if quality_route in {'baseline', 'low-light', 'motion-soft'} else 0.0
+    elif stage_name == 'rectified':
+        score += 0.02 if quality_route == 'high-angle' else 0.0
+    elif stage_name == 'restored':
+        if quality_route == 'tiny-plate':
+            score += 0.03
+        elif quality_route in {'baseline', 'high-angle'}:
+            score -= 0.04
+        else:
+            score -= 0.02
+
+    return score
 
 
 def _order_quad_points(points: Any) -> Any:
