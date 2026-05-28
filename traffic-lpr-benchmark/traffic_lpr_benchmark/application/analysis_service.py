@@ -124,6 +124,15 @@ def build_run_analysis(bundle: dict[str, Any]) -> dict[str, Any]:
             'detectionFallbackReviewRequiredRate': result_metrics.get('detectionFallbackReviewRequiredRate'),
             'meanDetectionFallbackReacquireFrames': result_metrics.get('meanDetectionFallbackReacquireFrames'),
         }
+    if any(result_metrics.get(key) is not None for key in ['meanAcceptedMargin', 'meanPredictionSwitchCount', 'meanSampleExactMatchRate', 'meanSequencePersistence', 'meanCharacterConsistencyMean']):
+        analysis.setdefault('focusBreakdown', {})
+        analysis['focusBreakdown']['hardCaseStability'] = {
+            'meanAcceptedMargin': result_metrics.get('meanAcceptedMargin'),
+            'meanPredictionSwitchCount': result_metrics.get('meanPredictionSwitchCount'),
+            'meanSampleExactMatchRate': result_metrics.get('meanSampleExactMatchRate'),
+            'meanSequencePersistence': result_metrics.get('meanSequencePersistence'),
+            'meanCharacterConsistencyMean': result_metrics.get('meanCharacterConsistencyMean'),
+        }
 
     evaluation = build_run_evaluation(bundle)
     analysis['stageBreakdown'] = dict(evaluation.get('stageBreakdown') or {})
@@ -173,6 +182,18 @@ def build_analysis_markdown(bundle: dict[str, Any], analysis: dict[str, Any]) ->
             f"- Accepted under degraded tracking: {_format_rate(tracking_acceptance.get('acceptedUnderDegradedTrackingRate'))}",
             f"- Detection-fallback review required: {_format_rate(tracking_acceptance.get('detectionFallbackReviewRequiredRate'))}",
             f"- Detection-fallback mean reacquire frames: {tracking_acceptance.get('meanDetectionFallbackReacquireFrames') if isinstance(tracking_acceptance.get('meanDetectionFallbackReacquireFrames'), (int, float)) else '--'}",
+        ])
+    hard_case_stability = focus_breakdown.get('hardCaseStability') if isinstance(focus_breakdown.get('hardCaseStability'), dict) else None
+    if hard_case_stability is not None:
+        lines.extend([
+            '',
+            '## Hard-Case Stability Focus',
+            '',
+            f"- Mean accepted margin: {_format_number(hard_case_stability.get('meanAcceptedMargin'))}",
+            f"- Mean prediction switches: {_format_number(hard_case_stability.get('meanPredictionSwitchCount'))}",
+            f"- Mean sample exact match rate: {_format_rate(hard_case_stability.get('meanSampleExactMatchRate'))}",
+            f"- Mean sequence persistence: {_format_rate(hard_case_stability.get('meanSequencePersistence'))}",
+            f"- Mean character consistency: {_format_number(hard_case_stability.get('meanCharacterConsistencyMean'))}",
         ])
 
     lines.extend([
@@ -264,6 +285,12 @@ def _format_rate(value: Any) -> str:
     if not isinstance(value, (int, float)):
         return '--'
     return f'{value * 100:.1f}%'
+
+
+def _format_number(value: Any, digits: int = 3) -> str:
+    if not isinstance(value, (int, float)):
+        return '--'
+    return f'{float(value):.{digits}f}'
 
 
 def _review_status(case_payload: dict[str, Any]) -> str:

@@ -58,8 +58,18 @@ def _sequence_tier(
 def _candidate_weight(candidate: PlateCandidate, source_weights: dict[str, float]) -> float:
     source_key = candidate.source.split(':', 1)[0]
     quality_weight = candidate.quality.overall_score if candidate.quality else 0.55
-    taiwan_prior = float((candidate.diagnostics or {}).get('taiwanPrior') or 1.0)
-    return candidate.confidence * quality_weight * source_weights.get(source_key, 1.0) * taiwan_prior
+    diagnostics = candidate.diagnostics or {}
+    taiwan_prior = float(diagnostics.get('taiwanPrior') or 1.0)
+    weight = candidate.confidence * quality_weight * source_weights.get(source_key, 1.0) * taiwan_prior
+
+    if source_key == 'fused-char':
+        character_consistency_mean = float(diagnostics.get('characterConsistencyMean') or candidate.confidence or 0.0)
+        char_fusion_reliability = max(0.25, min(1.0, character_consistency_mean))
+        if diagnostics.get('matchesDominantSequence') is not True:
+            char_fusion_reliability *= 0.6
+        weight *= char_fusion_reliability
+
+    return weight
 
 
 def _best_frame_candidate(samples: list[FrameSample], source_weights: dict[str, float]) -> tuple[PlateCandidate | None, float]:
@@ -76,6 +86,42 @@ def _best_frame_candidate(samples: list[FrameSample], source_weights: dict[str, 
                 best_candidate = candidate
                 best_weight = weighted_score
     return best_candidate, best_weight
+
+
+def _source_family(source: str) -> str:
+    return source.split(':', 1)[0]
+
+
+def _consensus_signal_names(
+    text: str,
+    dominant_text: str,
+    char_fused_text: str,
+    best_frame_text: str,
+) -> list[str]:
+    signals: list[str] = []
+    if text and text == dominant_text:
+        signals.append('dominant-sequence')
+    if text and text == char_fused_text:
+        signals.append('char-fused')
+    if text and text == best_frame_text:
+        signals.append('best-frame')
+    return signals
+
+
+def _consensus_weight_multiplier(
+    consensus_signals: list[str],
+    support_frame_count: int,
+    source_count: int,
+) -> float:
+    if len(consensus_signals) < 2:
+        return 1.0
+
+    multiplier = 1.12 + (max(0, len(consensus_signals) - 2) * 0.06)
+    if support_frame_count >= 2:
+        multiplier += min(0.04, (support_frame_count - 1) * 0.01)
+    if source_count >= 2:
+        multiplier += min(0.04, (source_count - 1) * 0.01)
+    return multiplier
 
 
 class CandidateFusionService:
@@ -144,6 +190,15 @@ class CandidateFusionService:
             candidate_pool.append(legacy_candidate)
 
         sequence_summary = self._build_sequence_summary(samples, char_fused_candidate)
+        dominant_sequence_text = normalize_plate_text(sequence_summary.get('dominantText'))
+        char_fused_text = normalize_plate_text(char_fused_candidate.text) if char_fused_candidate is not None else ''
+        if char_fused_candidate is not None:
+            char_fused_candidate.diagnostics = {
+                **(char_fused_candidate.diagnostics or {}),
+                'characterConsistencyMean': float(sequence_summary.get('characterConsistencyMean') or 0.0),
+                'dominantSequenceText': sequence_summary.get('dominantText'),
+                'matchesDominantSequence': bool(char_fused_text) and char_fused_text == dominant_sequence_text,
+            }
 
         fused_image_candidates, fused_image_diagnostics = self._fuse_aligned_plate_images(
             observations,
@@ -177,6 +232,8 @@ class CandidateFusionService:
                         diagnostics={
                             'supportFrames': [candidate.frame_time_ms] if candidate.frame_time_ms is not None else [],
                             'sources': [candidate.source],
+                            'sourceFamilies': [_source_family(candidate.source)],
+                            'contributionCount': 1,
                         },
                     ),
                 }
@@ -188,6 +245,8 @@ class CandidateFusionService:
             diagnostics = current['candidate'].diagnostics or {'supportFrames': [], 'sources': []}
             diagnostics['supportFrames'] = sorted(time for time in current['supportFrames'] if time is not None)
             diagnostics['sources'] = sorted({*diagnostics.get('sources', []), candidate.source})
+            diagnostics['sourceFamilies'] = sorted({*diagnostics.get('sourceFamilies', []), _source_family(candidate.source)})
+            diagnostics['contributionCount'] = int(diagnostics.get('contributionCount') or 0) + 1
             current['candidate'].diagnostics = diagnostics
             if candidate.confidence >= current['best_raw_confidence']:
                 current['best_raw_confidence'] = candidate.confidence
@@ -197,11 +256,23 @@ class CandidateFusionService:
                 current['candidate'].quality = candidate.quality
 
         best_frame_candidate, best_frame_weight = _best_frame_candidate(samples, source_weights)
+        best_frame_text = normalize_plate_text(best_frame_candidate.text) if best_frame_candidate is not None else ''
         if best_frame_candidate is not None and best_frame_weight >= max(options.min_accepted_confidence, 0.68):
             best_text = normalize_plate_text(best_frame_candidate.text)
             current = aggregated.get(best_text)
             support_frame_count = len(current['supportFrames']) if current is not None else 1
-            carry_weight = best_frame_weight * (1.35 if support_frame_count <= 1 else 0.85)
+            consensus_signals = _consensus_signal_names(
+                best_text,
+                dominant_sequence_text,
+                char_fused_text,
+                best_frame_text,
+            )
+            carry_multiplier = 1.35 if support_frame_count <= 1 else 0.85
+            if len(consensus_signals) >= 2:
+                carry_multiplier += 0.25
+            if len(consensus_signals) >= 3:
+                carry_multiplier += 0.1
+            carry_weight = best_frame_weight * carry_multiplier
 
             if current is None:
                 aggregated[best_text] = {
@@ -220,9 +291,13 @@ class CandidateFusionService:
                         diagnostics={
                             'supportFrames': [best_frame_candidate.frame_time_ms] if best_frame_candidate.frame_time_ms is not None else [],
                             'sources': [best_frame_candidate.source],
+                            'sourceFamilies': [_source_family(best_frame_candidate.source)],
+                            'contributionCount': 1,
                             'bestFrameCarryThrough': True,
                             'bestFrameTimeMs': best_frame_candidate.frame_time_ms,
                             'bestFrameWeight': best_frame_weight,
+                            'bestFrameCarryMultiplier': carry_multiplier,
+                            'bestFrameConsensusSignals': consensus_signals,
                         },
                     ),
                 }
@@ -232,7 +307,11 @@ class CandidateFusionService:
                 diagnostics['bestFrameCarryThrough'] = True
                 diagnostics['bestFrameTimeMs'] = best_frame_candidate.frame_time_ms
                 diagnostics['bestFrameWeight'] = best_frame_weight
+                diagnostics['bestFrameCarryMultiplier'] = carry_multiplier
+                diagnostics['bestFrameConsensusSignals'] = consensus_signals
                 diagnostics['sources'] = sorted({*diagnostics.get('sources', []), best_frame_candidate.source})
+                diagnostics['sourceFamilies'] = sorted({*diagnostics.get('sourceFamilies', []), _source_family(best_frame_candidate.source)})
+                diagnostics['contributionCount'] = int(diagnostics.get('contributionCount') or 0) + 1
                 current['candidate'].diagnostics = diagnostics
                 if best_frame_candidate.confidence >= current['best_raw_confidence']:
                     current['best_raw_confidence'] = best_frame_candidate.confidence
@@ -240,6 +319,36 @@ class CandidateFusionService:
                     current['candidate'].country_code = best_frame_candidate.country_code
                     current['candidate'].box = best_frame_candidate.box
                     current['candidate'].quality = best_frame_candidate.quality
+
+        for text, item in aggregated.items():
+            diagnostics = item['candidate'].diagnostics or {}
+            support_frames = [
+                int(time_ms)
+                for time_ms in (diagnostics.get('supportFrames') or [])
+                if isinstance(time_ms, (int, float))
+            ]
+            source_families = [value for value in diagnostics.get('sourceFamilies') or [] if isinstance(value, str)]
+            consensus_signals = _consensus_signal_names(
+                text,
+                dominant_sequence_text,
+                char_fused_text,
+                best_frame_text,
+            )
+            consensus_multiplier = _consensus_weight_multiplier(
+                consensus_signals,
+                len(set(support_frames)),
+                len(set(source_families)),
+            )
+            item['weight'] *= consensus_multiplier
+            item['candidate'].diagnostics = {
+                **diagnostics,
+                'supportFrames': sorted(set(support_frames)),
+                'sourceFamilies': sorted(set(source_families)),
+                'supportFrameCount': len(set(support_frames)),
+                'sourceCount': len(set(source_families)),
+                'consensusSignals': consensus_signals,
+                'consensusMultiplier': consensus_multiplier,
+            }
 
         ranked = sorted(aggregated.values(), key=lambda item: item['weight'], reverse=True)
         if not ranked:
@@ -250,8 +359,10 @@ class CandidateFusionService:
             }
 
         best_weight = max(item['weight'] for item in ranked) or 1.0
+        runner_up_text = ranked[1]['candidate'].text if len(ranked) > 1 else None
+        runner_up_weight = ranked[1]['weight'] if len(ranked) > 1 else 0.0
         fused_candidates: list[PlateCandidate] = []
-        for item in ranked[:8]:
+        for index, item in enumerate(ranked[:8]):
             candidate = item['candidate']
             candidate.confidence = max(0.0, min(1.0, item['weight'] / best_weight))
             support_frames = [
@@ -279,7 +390,16 @@ class CandidateFusionService:
                 'sequencePersistenceRatio': sequence_summary['persistenceRatio'],
                 'sequenceCharacterConsistency': sequence_summary['characterConsistency'],
                 'dominantSequenceText': sequence_summary.get('dominantText'),
+                'aggregatedWeight': item['weight'],
+                'normalizedWeight': candidate.confidence,
             }
+            if index == 0:
+                candidate.diagnostics = {
+                    **candidate.diagnostics,
+                    'runnerUpText': runner_up_text,
+                    'runnerUpWeight': runner_up_weight,
+                    'marginToRunnerUp': max(0.0, item['weight'] - runner_up_weight),
+                }
             fused_candidates.append(candidate)
 
         return fused_candidates, {
@@ -289,6 +409,13 @@ class CandidateFusionService:
             'legacyVoteApplied': legacy_candidate is not None,
             'fusedImage': fused_image_diagnostics,
             'sequence': sequence_summary,
+            'candidateRanking': {
+                'leaderText': ranked[0]['candidate'].text,
+                'runnerUpText': runner_up_text,
+                'leaderWeight': ranked[0]['weight'],
+                'runnerUpWeight': runner_up_weight,
+                'weightMargin': max(0.0, ranked[0]['weight'] - runner_up_weight),
+            },
         }
 
     def _build_sequence_summary(
@@ -449,6 +576,7 @@ class CandidateFusionService:
                 'supportFrames': sorted(set(support_frames)),
                 'targetLength': target_length,
                 'characterConsistency': character_consistency,
+                'characterConsistencyMean': confidence,
             },
         )
 
@@ -584,8 +712,9 @@ def apply_reliability_selection(
 
     ordered_candidates = list(candidates)
     top_candidate = ordered_candidates[0]
+    runner_up_candidate = ordered_candidates[1] if len(ordered_candidates) > 1 else None
     fallback_candidate = _best_sample_candidate(samples, country_hints)
-    accepted_margin = max(0.0, top_candidate.confidence - (ordered_candidates[1].confidence if len(ordered_candidates) > 1 else 0.0))
+    accepted_margin = max(0.0, top_candidate.confidence - (runner_up_candidate.confidence if runner_up_candidate is not None else 0.0))
 
     review_reasons = [] if not options.enable_reliability_gates else _review_reasons(
         top_candidate,
@@ -623,11 +752,16 @@ def apply_reliability_selection(
         'suggestedCandidateId': suggested_candidate.id,
         'fallbackCandidateId': fallback_candidate.id if fallback_candidate is not None else None,
         'topCandidateId': top_candidate.id,
+        'topCandidateText': top_candidate.text,
+        'runnerUpCandidateId': runner_up_candidate.id if runner_up_candidate is not None else None,
+        'runnerUpText': runner_up_candidate.text if runner_up_candidate is not None else None,
+        'runnerUpConfidence': runner_up_candidate.confidence if runner_up_candidate is not None else None,
         'reviewRequired': review_required,
         'usedFallback': used_fallback,
         'reasons': review_reasons,
         'acceptedMargin': accepted_margin,
         'suggestedConfidence': suggested_candidate.confidence,
+        'suggestedText': suggested_candidate.text,
         'supportFrameCount': _candidate_support_frame_count(suggested_candidate),
         'formatScore': _plate_format_score(suggested_candidate.text, country_hints),
     }

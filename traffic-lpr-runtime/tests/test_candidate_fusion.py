@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from traffic_lpr_runtime.application.candidate_fusion import CandidateFusionService
 from traffic_lpr_runtime.application.candidate_fusion import MAX_INTERVAL_FUSION_OBSERVATIONS
+from traffic_lpr_runtime.application.candidate_fusion import _candidate_weight
 from traffic_lpr_runtime.application.pipeline_support import AnalysisOptions
 from traffic_lpr_runtime.application.preprocessing import PlateObservation
 from traffic_lpr_runtime.domain.models import FrameSample, PlateCandidate, QualityMetrics
@@ -50,6 +51,19 @@ def make_sample(sample_id: str, time_ms: int, candidate: PlateCandidate) -> Fram
         plate_box=None,
         quality=candidate.quality,
         candidates=[candidate],
+        image_path=None,
+        diagnostics=None,
+    )
+
+
+def make_sample_with_candidates(sample_id: str, time_ms: int, candidates: list[PlateCandidate]) -> FrameSample:
+    return FrameSample(
+        id=sample_id,
+        time_ms=time_ms,
+        target_box=None,
+        plate_box=None,
+        quality=candidates[0].quality if candidates else make_quality(0.6),
+        candidates=candidates,
         image_path=None,
         diagnostics=None,
     )
@@ -105,6 +119,104 @@ class CandidateFusionTests(unittest.TestCase):
         self.assertTrue(fused_candidates[0].diagnostics['bestFrameCarryThrough'])
         self.assertEqual(fused_candidates[0].diagnostics['bestFrameTimeMs'], 1000)
         self.assertEqual(diagnostics['sequence']['sequenceTier'], 'drifting')
+
+    def test_consensus_signals_are_exposed_on_interval_winner(self) -> None:
+        service = CandidateFusionService(
+            dependencies=SimpleNamespace(cv2=None, numpy=None),
+            primary_recognizer=_RecognizerStub(),
+        )
+
+        samples = [
+            make_sample_with_candidates(
+                'sample-1',
+                1000,
+                [
+                    make_candidate('ra-1', 'RA5557', 0.95, 0.95, 1000),
+                    make_candidate('pj-1', 'PJ5557', 0.88, 0.88, 1000),
+                ],
+            ),
+            make_sample_with_candidates(
+                'sample-2',
+                1120,
+                [
+                    make_candidate('ra-2', 'RA5557', 0.86, 0.84, 1120),
+                    make_candidate('pj-2', 'PJ5557', 0.9, 0.9, 1120),
+                ],
+            ),
+            make_sample_with_candidates(
+                'sample-3',
+                1240,
+                [
+                    make_candidate('ra-3', 'RA5557', 0.84, 0.83, 1240),
+                    make_candidate('pj-3', 'PJ5557', 0.89, 0.88, 1240),
+                ],
+            ),
+            make_sample_with_candidates(
+                'sample-4',
+                1360,
+                [
+                    make_candidate('ra-4', 'RA5557', 0.83, 0.82, 1360),
+                    make_candidate('pj-4', 'PJ5557', 0.87, 0.87, 1360),
+                ],
+            ),
+        ]
+
+        fused_candidates, diagnostics = service.aggregate_candidates(
+            samples,
+            observations=[],
+            country_hints=['tw'],
+            options=AnalysisOptions(),
+            artifact_root=None,
+        )
+
+        self.assertGreaterEqual(len(fused_candidates), 2)
+        self.assertEqual(fused_candidates[0].text, 'RA5557')
+        self.assertEqual(
+            fused_candidates[0].diagnostics['consensusSignals'],
+            ['dominant-sequence', 'char-fused', 'best-frame'],
+        )
+        self.assertGreater(fused_candidates[0].diagnostics['consensusMultiplier'], 1.0)
+        self.assertEqual(fused_candidates[0].diagnostics['runnerUpText'], 'PJ5557')
+        self.assertGreater(fused_candidates[0].diagnostics['marginToRunnerUp'], 0.0)
+        self.assertEqual(diagnostics['candidateRanking']['leaderText'], 'RA5557')
+        self.assertEqual(diagnostics['candidateRanking']['runnerUpText'], 'PJ5557')
+
+    def test_low_consistency_char_fusion_is_penalized_when_it_disagrees_with_dominant_sequence(self) -> None:
+        mismatched_char_fusion = PlateCandidate(
+            id='char-fused-mismatch',
+            text='PJ5557',
+            confidence=0.56,
+            source='fused-char',
+            frame_time_ms=1900,
+            country_code='TW',
+            box=None,
+            quality=make_quality(0.9),
+            diagnostics={
+                'characterConsistencyMean': 0.56,
+                'matchesDominantSequence': False,
+            },
+        )
+        aligned_char_fusion = PlateCandidate(
+            id='char-fused-match',
+            text='RA5557',
+            confidence=0.82,
+            source='fused-char',
+            frame_time_ms=1800,
+            country_code='TW',
+            box=None,
+            quality=make_quality(0.9),
+            diagnostics={
+                'characterConsistencyMean': 0.82,
+                'matchesDominantSequence': True,
+            },
+        )
+
+        source_weights = {'fused-char': 1.12}
+
+        self.assertLess(
+            _candidate_weight(mismatched_char_fusion, source_weights),
+            _candidate_weight(aligned_char_fusion, source_weights),
+        )
 
     def test_aligned_fusion_caps_observations(self) -> None:
         class _Cv2Stub:

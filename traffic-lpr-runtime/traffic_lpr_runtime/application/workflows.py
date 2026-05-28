@@ -180,14 +180,11 @@ def _sequence_hard_review_reasons(sequence_summary: dict[str, Any], options: Ana
     if not sequence_summary or options.sequence_review_mode == 'off':
         return []
 
-    sequence_tier = str(sequence_summary.get('sequenceTier') or 'fragmented')
     support_frame_count = _safe_int(sequence_summary.get('supportFrameCount'))
     reasons: list[str] = []
 
     if support_frame_count < options.min_interval_support_frames:
         reasons.append('too few interval samples produced readable plate support')
-    if sequence_tier == 'fragmented':
-        reasons.append('sequence evidence stayed fragmented across the interval')
 
     return _merge_reasons([], reasons)
 
@@ -201,6 +198,8 @@ def _sequence_advisory_reasons(sequence_summary: dict[str, Any], options: Analys
     gap_count = _safe_int(sequence_summary.get('supportFrameGapCount'))
     reasons: list[str] = []
 
+    if sequence_tier == 'fragmented':
+        reasons.append('sequence evidence stayed fragmented across the interval')
     if persistence_ratio < options.min_sequence_persistence:
         reasons.append('plate text did not remain stable across interval samples')
     if gap_count > options.max_sequence_gap_count:

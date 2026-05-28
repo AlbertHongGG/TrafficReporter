@@ -70,7 +70,7 @@ class IntervalWorkflowTests(unittest.TestCase):
         self.assertEqual(source, 'selected-anchor-fallback')
         self.assertEqual(analysis_box, selected_box)
 
-    def test_interval_analysis_forces_review_when_sequence_is_fragmented(self) -> None:
+    def test_interval_analysis_keeps_fragmented_sequence_as_advisory_when_support_is_sufficient(self) -> None:
         tracked_region = TrackedRegion(
             id='track-1',
             time_ms=11000,
@@ -119,8 +119,8 @@ class IntervalWorkflowTests(unittest.TestCase):
                         'sequenceTier': 'fragmented',
                         'dominantText': 'NCE9762',
                         'persistenceRatio': 0.25,
-                        'supportFrameCount': 1,
-                        'sampleCount': 3,
+                        'supportFrameCount': 4,
+                        'sampleCount': 4,
                         'supportFrameGapCount': 2,
                         'predictionSwitchCount': 1,
                         'characterConsistency': [0.55, 0.52, 0.58],
@@ -154,6 +154,7 @@ class IntervalWorkflowTests(unittest.TestCase):
             'countryHints': ['tw'],
             'analysisOptions': {
                 'sequenceReviewMode': 'strict',
+                'minIntervalSupportFrames': 3,
                 'minSequencePersistence': 0.7,
                 'maxSequenceGapCount': 0,
             },
@@ -161,8 +162,11 @@ class IntervalWorkflowTests(unittest.TestCase):
 
         self.assertEqual(result['sequence']['sequenceTier'], 'fragmented')
         self.assertEqual(result['acceptedCandidateId'], candidate.id)
-        self.assertEqual(result['review']['status'], 'review-required')
+        self.assertEqual(result['review']['status'], 'accepted')
+        self.assertEqual(result['diagnostics']['selection']['hardReviewReasons'], [])
+        self.assertIn('sequence evidence stayed fragmented across the interval', result['diagnostics']['selection']['advisoryReasons'])
         self.assertIn('plate text did not remain stable across interval samples', result['review']['reasons'])
+        self.assertIn('readable OCR evidence had large gaps across the interval', result['review']['reasons'])
 
     def test_interval_analysis_rejects_anchor_outside_interval(self) -> None:
         workflow = IntervalAnalysisWorkflow(

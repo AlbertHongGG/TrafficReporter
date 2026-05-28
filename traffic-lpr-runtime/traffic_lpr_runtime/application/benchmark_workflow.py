@@ -235,6 +235,9 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
                 'sequenceTierBreakdown': {},
                 'meanSequencePersistence': None,
                 'meanSequenceGapCount': None,
+                'meanPredictionSwitchCount': None,
+                'meanSampleExactMatchRate': None,
+                'meanCharacterConsistencyMean': None,
                 'tagBreakdown': {},
                 'datasetBreakdown': {},
                 'splitBreakdown': {},
@@ -272,6 +275,9 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
     sequence_tier_counts: dict[str, int] = {}
     sequence_persistence_values: list[float] = []
     sequence_gap_values: list[float] = []
+    prediction_switch_values: list[float] = []
+    sample_exact_match_rate_values: list[float] = []
+    character_consistency_mean_values: list[float] = []
     interval_sequence_cases = 0
     difficulty_category_metrics: dict[str, dict[str, float]] = {}
     difficulty_tracking_tier_metrics: dict[str, dict[str, float]] = {}
@@ -337,6 +343,15 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
             support_gap_count = _coerce_optional_int(sequence_payload.get('supportFrameGapCount'))
             if support_gap_count is not None:
                 sequence_gap_values.append(float(support_gap_count))
+            character_consistency_mean = _coerce_optional_float(sequence_payload.get('characterConsistencyMean'))
+            if character_consistency_mean is not None:
+                character_consistency_mean_values.append(character_consistency_mean)
+        prediction_switch_count = _coerce_optional_float((track_metrics_case or {}).get('predictionSwitchCount'))
+        if prediction_switch_count is not None:
+            prediction_switch_values.append(prediction_switch_count)
+        sample_exact_match_rate = _coerce_optional_float((track_metrics_case or {}).get('sampleExactMatchRate'))
+        if sample_exact_match_rate is not None:
+            sample_exact_match_rate_values.append(sample_exact_match_rate)
 
         case_metrics = {
             'exactMatch': exact_match,
@@ -361,6 +376,7 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
             'reacquireFrames': (tracking_payload or {}).get('reacquireFrames'),
             'sequencePersistence': (sequence_payload or {}).get('persistenceRatio'),
             'sequenceGapCount': (sequence_payload or {}).get('supportFrameGapCount'),
+            'characterConsistencyMean': (sequence_payload or {}).get('characterConsistencyMean'),
         }
 
         for tag in list(result.get('tags') or []):
@@ -413,6 +429,9 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
         'sequenceTierBreakdown': dict(sorted(sequence_tier_counts.items())),
         'meanSequencePersistence': _mean_values(sequence_persistence_values),
         'meanSequenceGapCount': _mean_values(sequence_gap_values),
+        'meanPredictionSwitchCount': _mean_values(prediction_switch_values),
+        'meanSampleExactMatchRate': _mean_values(sample_exact_match_rate_values),
+        'meanCharacterConsistencyMean': _mean_values(character_consistency_mean_values),
         'tagBreakdown': {
             tag: _finalize_metric_bucket(values)
             for tag, values in sorted(tag_metrics.items())
@@ -658,6 +677,8 @@ def _new_metric_bucket() -> dict[str, float]:
         'sequencePersistenceCount': 0.0,
         'sequenceGapCount': 0.0,
         'sequenceGapCountCount': 0.0,
+        'characterConsistencyMean': 0.0,
+        'characterConsistencyMeanCount': 0.0,
     }
 
 
@@ -717,6 +738,9 @@ def _update_metric_bucket(bucket: dict[str, float], case_metrics: dict[str, Any]
     if isinstance(case_metrics.get('sequenceGapCount'), (int, float)):
         bucket['sequenceGapCount'] += float(case_metrics['sequenceGapCount'])
         bucket['sequenceGapCountCount'] += 1.0
+    if isinstance(case_metrics.get('characterConsistencyMean'), (int, float)):
+        bucket['characterConsistencyMean'] += float(case_metrics['characterConsistencyMean'])
+        bucket['characterConsistencyMeanCount'] += 1.0
 
 
 def _finalize_metric_bucket(bucket: dict[str, float]) -> dict[str, float | None]:
@@ -745,6 +769,7 @@ def _finalize_metric_bucket(bucket: dict[str, float]) -> dict[str, float | None]
         'meanTimeToFirstCorrectMs': bucket['timeToFirstCorrectMs'] / bucket['timeToFirstCorrectCount'] if bucket['timeToFirstCorrectCount'] else None,
         'meanSequencePersistence': bucket['sequencePersistence'] / bucket['sequencePersistenceCount'] if bucket['sequencePersistenceCount'] else None,
         'meanSequenceGapCount': bucket['sequenceGapCount'] / bucket['sequenceGapCountCount'] if bucket['sequenceGapCountCount'] else None,
+        'meanCharacterConsistencyMean': bucket['characterConsistencyMean'] / bucket['characterConsistencyMeanCount'] if bucket['characterConsistencyMeanCount'] else None,
     }
 
 

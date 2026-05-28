@@ -119,6 +119,9 @@ def build_summary_markdown(bundle: dict[str, Any]) -> str:
         f"- Accepted under degraded tracking: {_format_rate(metrics.get('acceptedUnderDegradedTrackingRate'))}",
         f"- Detection-fallback review required: {_format_rate(metrics.get('detectionFallbackReviewRequiredRate'))}",
         f"- Mean sequence persistence: {_format_rate(metrics.get('meanSequencePersistence'))}",
+        f"- Mean sample exact match rate: {_format_rate(metrics.get('meanSampleExactMatchRate'))}",
+        f"- Mean prediction switches: {_format_number(metrics.get('meanPredictionSwitchCount'))}",
+        f"- Mean character consistency: {_format_number(metrics.get('meanCharacterConsistencyMean'))}",
     ]) + '\n'
 
 
@@ -140,6 +143,9 @@ def build_report_html(bundle: dict[str, Any]) -> str:
         ('Degraded Accepted', _format_rate(metrics.get('acceptedUnderDegradedTrackingRate'))),
         ('Fallback Review', _format_rate(metrics.get('detectionFallbackReviewRequiredRate'))),
         ('Sequence Persistence', _format_rate(metrics.get('meanSequencePersistence'))),
+        ('Sample Exact', _format_rate(metrics.get('meanSampleExactMatchRate'))),
+        ('Prediction Switches', _format_number(metrics.get('meanPredictionSwitchCount'))),
+        ('Char Consistency', _format_number(metrics.get('meanCharacterConsistencyMean'))),
         ('P95 Latency', _format_number((metrics.get('latencyMs') or {}).get('p95'), 1) + ' ms'),
     ]
 

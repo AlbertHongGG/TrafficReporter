@@ -289,6 +289,11 @@ class BenchmarkToolTests(unittest.TestCase):
                     'acceptedUnderDegradedTrackingRate': 0.5,
                     'detectionFallbackReviewRequiredRate': 0.25,
                     'meanDetectionFallbackReacquireFrames': 1.5,
+                    'meanAcceptedMargin': 0.2,
+                    'meanPredictionSwitchCount': 1.25,
+                    'meanSampleExactMatchRate': 0.6,
+                    'meanSequencePersistence': 0.55,
+                    'meanCharacterConsistencyMean': 0.71,
                 },
                 'cases': [],
             },
@@ -298,6 +303,12 @@ class BenchmarkToolTests(unittest.TestCase):
         self.assertEqual(analysis['focusBreakdown']['trackingAcceptance']['acceptedUnderDegradedTrackingRate'], 0.5)
         self.assertEqual(analysis['focusBreakdown']['trackingAcceptance']['detectionFallbackReviewRequiredRate'], 0.25)
         self.assertEqual(analysis['focusBreakdown']['trackingAcceptance']['meanDetectionFallbackReacquireFrames'], 1.5)
+        self.assertIn('hardCaseStability', analysis['focusBreakdown'])
+        self.assertEqual(analysis['focusBreakdown']['hardCaseStability']['meanAcceptedMargin'], 0.2)
+        self.assertEqual(analysis['focusBreakdown']['hardCaseStability']['meanPredictionSwitchCount'], 1.25)
+        self.assertEqual(analysis['focusBreakdown']['hardCaseStability']['meanSampleExactMatchRate'], 0.6)
+        self.assertEqual(analysis['focusBreakdown']['hardCaseStability']['meanSequencePersistence'], 0.55)
+        self.assertEqual(analysis['focusBreakdown']['hardCaseStability']['meanCharacterConsistencyMean'], 0.71)
 
     def test_validate_profile_catalog_file_accepts_shared_catalog(self) -> None:
         catalog_path = TOOL_ROOT.parent / 'src' / 'shared' / 'config' / 'lpr-analysis-profiles.json'
@@ -951,6 +962,9 @@ class BenchmarkToolTests(unittest.TestCase):
         self.assertEqual(runtime_result['metrics']['sequenceTierBreakdown'], {'fragmented': 1, 'stable': 1})
         self.assertAlmostEqual(runtime_result['metrics']['meanSequencePersistence'], 0.6)
         self.assertAlmostEqual(runtime_result['metrics']['meanSequenceGapCount'], 1.0)
+        self.assertAlmostEqual(runtime_result['metrics']['meanPredictionSwitchCount'], 1.0)
+        self.assertAlmostEqual(runtime_result['metrics']['meanSampleExactMatchRate'], 0.625)
+        self.assertAlmostEqual(runtime_result['metrics']['meanCharacterConsistencyMean'], 0.745)
         self.assertEqual(runtime_result['metrics']['difficultyBreakdown']['trackingTier']['detection-fallback']['totalCases'], 1)
         self.assertEqual(runtime_result['metrics']['difficultyBreakdown']['sequenceTier']['fragmented']['totalCases'], 1)
         self.assertAlmostEqual(runtime_result['metrics']['difficultyBreakdown']['sequenceTier']['fragmented']['reviewRequiredRate'], 1.0)
