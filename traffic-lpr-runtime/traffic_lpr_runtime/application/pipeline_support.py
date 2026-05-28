@@ -408,6 +408,7 @@ class TargetCentricTracker:
 
         missed_frames = backward_diagnostics['missedFrames'] + forward_diagnostics['missedFrames']
         reassociated_frames = backward_diagnostics['reassociatedFrames'] + forward_diagnostics['reassociatedFrames']
+        reacquire_frames = backward_diagnostics['reacquireFrames'] + forward_diagnostics['reacquireFrames']
         detection_fallback_frames = (
             backward_diagnostics['detectionFallbackFrames']
             + forward_diagnostics['detectionFallbackFrames']
@@ -434,6 +435,7 @@ class TargetCentricTracker:
             'anchorDetectionId': anchor_detection.id if anchor_detection is not None else anchor_region.id if anchor_region is not None else None,
             'frameRate': frame_rate,
             'reassociatedFrames': reassociated_frames,
+            'reacquireFrames': reacquire_frames,
             'detectionFallbackFrames': detection_fallback_frames,
             'uncertainFrames': uncertain_frames,
             'sceneMotionFrames': scene_motion_frames,
@@ -468,6 +470,7 @@ class TargetCentricTracker:
             'direction': traversal_direction,
             'missedFrames': 0,
             'reassociatedFrames': 0,
+            'reacquireFrames': 0,
             'detectionFallbackFrames': 0,
             'uncertainFrames': 0,
             'sceneMotionFrames': 0,
@@ -519,6 +522,11 @@ class TargetCentricTracker:
             detection_overlap = _to_float(detection_diagnostics.get('predictedIou'))
             tracker_center_distance = _to_float(tracker_diagnostics.get('centerDistance'), default=1.0)
             detection_center_distance = _to_float(detection_diagnostics.get('centerDistance'), default=1.0)
+            fallback_score_margin = _detection_fallback_score_margin(
+                tracker_motion_ok=tracker_motion_ok,
+                has_active_track=current_track_id is not None,
+                pending_confirmation=pending_confirmation,
+            )
             tracker_bonus_only = (
                 tracker_match is not None
                 and tracker_motion_ok
@@ -533,9 +541,12 @@ class TargetCentricTracker:
                 detection_motion_ok and (
                     tracker_match is None
                     or not tracker_motion_ok
-                    or detection_score > (tracker_score + (0.12 if tracker_motion_ok else 0.04))
+                    or detection_score > (tracker_score + fallback_score_margin)
                     or tracker_bonus_only
-                    or detection_has_geometric_edge
+                    or (
+                        detection_has_geometric_edge
+                        and detection_score >= (tracker_score + max(0.02, fallback_score_margin - 0.08))
+                    )
                 )
             )
 
@@ -610,7 +621,7 @@ class TargetCentricTracker:
                 uncertain_streak += 1
                 pending_confirmation = True
                 direction_diagnostics['uncertainFrames'] += 1
-                if uncertain_streak > _uncertain_grace_limit(transition, diagnostics['selectionScore']) and not is_last_step:
+                if uncertain_streak > _uncertain_grace_limit(transition, diagnostics['selectionScore'], traversal_direction) and not is_last_step:
                     direction_diagnostics['identityBreaks'] += 1
                     direction_diagnostics['uncertainOverflowFrames'] += 1
                     direction_diagnostics['softGapFrames'] += 1
@@ -624,6 +635,8 @@ class TargetCentricTracker:
 
             if selected_source == 'detection-fallback':
                 direction_diagnostics['detectionFallbackFrames'] += 1
+                if current_track_id_before is not None:
+                    direction_diagnostics['reacquireFrames'] += 1
             if (
                 current_track_id_before is not None
                 and selected.id.startswith('track-')
@@ -1097,10 +1110,32 @@ def _identity_transition_is_allowed(
     return _TransitionDecision(False, 'untrusted-target-transition', 'rejected', continuity_score, continuity_credit, tracker_competitive, scene_motion_active, pending_confirmation)
 
 
-def _uncertain_grace_limit(transition: _TransitionDecision, selection_score: float) -> int:
+def _uncertain_grace_limit(
+    transition: _TransitionDecision,
+    selection_score: float,
+    traversal_direction: str,
+) -> int:
+    if traversal_direction == 'backward':
+        if transition.continuity_score >= 0.2 and selection_score >= 0.18:
+            return 6
+        return 4
     if transition.continuity_score >= 0.3 and selection_score >= 0.45:
         return 4
     return 2
+
+
+def _detection_fallback_score_margin(
+    *,
+    tracker_motion_ok: bool,
+    has_active_track: bool,
+    pending_confirmation: bool,
+) -> float:
+    margin = 0.12 if tracker_motion_ok else 0.04
+    if has_active_track:
+        margin += 0.06 if tracker_motion_ok else 0.04
+    if pending_confirmation and tracker_motion_ok:
+        margin = max(0.1, margin - 0.02)
+    return margin
 
 
 def _should_soft_skip_identity_rejection(transition: _TransitionDecision, selection_score: float) -> bool:

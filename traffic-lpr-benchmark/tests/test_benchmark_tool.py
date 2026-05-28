@@ -197,6 +197,7 @@ class BenchmarkToolTests(unittest.TestCase):
                         'trackingTier': 'full',
                         'coverageRatio': 1.0,
                         'trackedFrameCount': 8,
+                        'reacquireFrames': 0,
                     },
                     'review': {'status': 'accepted', 'reasons': []},
                     'metadata': {'dataset': 'UFPR', 'split': 'smoke'},
@@ -218,6 +219,7 @@ class BenchmarkToolTests(unittest.TestCase):
                         'trackingTier': 'detection-fallback',
                         'coverageRatio': 0.5,
                         'trackedFrameCount': 4,
+                        'reacquireFrames': 2,
                     },
                     'review': {'status': 'review-required', 'reasons': ['coverage-gap']},
                     'metadata': {'dataset': 'UFPR', 'split': 'smoke'},
@@ -231,7 +233,30 @@ class BenchmarkToolTests(unittest.TestCase):
         self.assertEqual(summary['metrics']['trackingTierBreakdown'], {'detection-fallback': 1, 'full': 1})
         self.assertAlmostEqual(summary['metrics']['meanTrackingCoverageRatio'], 0.75)
         self.assertAlmostEqual(summary['metrics']['degradedTrackingRate'], 0.5)
+        self.assertAlmostEqual(summary['metrics']['acceptedUnderDegradedTrackingRate'], 0.0)
+        self.assertAlmostEqual(summary['metrics']['detectionFallbackReviewRequiredRate'], 1.0)
+        self.assertAlmostEqual(summary['metrics']['meanDetectionFallbackReacquireFrames'], 2.0)
         self.assertAlmostEqual(summary['metrics']['meanTrackedFrameCount'], 6.0)
+
+    def test_build_run_analysis_includes_tracking_acceptance_focus_breakdown(self) -> None:
+        analysis = build_run_analysis({
+            'runId': 'run-001',
+            'suite': {'suiteId': 'suite-001', 'title': 'Suite'},
+            'result': {
+                'summary': 'demo',
+                'metrics': {
+                    'acceptedUnderDegradedTrackingRate': 0.5,
+                    'detectionFallbackReviewRequiredRate': 0.25,
+                    'meanDetectionFallbackReacquireFrames': 1.5,
+                },
+                'cases': [],
+            },
+        })
+
+        self.assertIn('trackingAcceptance', analysis['focusBreakdown'])
+        self.assertEqual(analysis['focusBreakdown']['trackingAcceptance']['acceptedUnderDegradedTrackingRate'], 0.5)
+        self.assertEqual(analysis['focusBreakdown']['trackingAcceptance']['detectionFallbackReviewRequiredRate'], 0.25)
+        self.assertEqual(analysis['focusBreakdown']['trackingAcceptance']['meanDetectionFallbackReacquireFrames'], 1.5)
 
     def test_validate_profile_catalog_file_accepts_shared_catalog(self) -> None:
         catalog_path = TOOL_ROOT.parent / 'src' / 'shared' / 'config' / 'lpr-analysis-profiles.json'

@@ -7,7 +7,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from traffic_lpr_runtime.application.interval_tracking import IntervalTrackingService
-from traffic_lpr_runtime.application.pipeline_support import AnalysisOptions, TargetCentricTracker
+from traffic_lpr_runtime.application.pipeline_support import AnalysisOptions, TargetCentricTracker, _detection_fallback_score_margin
 from traffic_lpr_runtime.domain.models import TrackedRegion
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect
 
@@ -113,6 +113,32 @@ class RecordingTracker:
 
 
 class TargetTrackingTests(unittest.TestCase):
+    def test_detection_fallback_margin_requires_more_score_when_track_is_alive(self) -> None:
+        self.assertEqual(
+            _detection_fallback_score_margin(
+                tracker_motion_ok=True,
+                has_active_track=True,
+                pending_confirmation=False,
+            ),
+            0.18,
+        )
+        self.assertEqual(
+            _detection_fallback_score_margin(
+                tracker_motion_ok=True,
+                has_active_track=True,
+                pending_confirmation=True,
+            ),
+            0.16,
+        )
+        self.assertEqual(
+            _detection_fallback_score_margin(
+                tracker_motion_ok=False,
+                has_active_track=True,
+                pending_confirmation=False,
+            ),
+            0.08,
+        )
+
     def test_interval_tracking_requests_dense_trajectory_and_marks_evidence_samples(self) -> None:
         tracker = RecordingTracker()
         service = IntervalTrackingService(
@@ -298,6 +324,7 @@ class TargetTrackingTests(unittest.TestCase):
         self.assertLess(tracked_frames[2].box.x, 0.2)
         self.assertEqual(diagnostics['anchorTrackId'], 'track-1')
         self.assertEqual(diagnostics['detectionFallbackFrames'], 1)
+        self.assertEqual(diagnostics['reacquireFrames'], 1)
         self.assertEqual(diagnostics['reassociatedFrames'], 1)
 
     def test_ultralytics_tracking_rejects_same_class_lateral_takeover(self) -> None:
@@ -385,6 +412,7 @@ class TargetTrackingTests(unittest.TestCase):
         self.assertEqual([frame.id for frame in tracked_frames], ['track-1', 'target-3000-0', 'track-8'])
         self.assertFalse(diagnostics['terminatedEarly'])
         self.assertEqual(diagnostics['detectionFallbackFrames'], 1)
+        self.assertEqual(diagnostics['reacquireFrames'], 1)
         self.assertGreaterEqual(diagnostics.get('uncertainFrames', 0), 1)
         self.assertEqual(tracked_frames[1].diagnostics['trackingSource'], 'detection-fallback')
         self.assertEqual(tracked_frames[1].diagnostics.get('trackingState'), 'uncertain')
@@ -434,6 +462,47 @@ class TargetTrackingTests(unittest.TestCase):
         self.assertEqual(diagnostics['uncertainFrames'], 3)
         self.assertEqual(diagnostics['detectionFallbackFrames'], 3)
         self.assertEqual(diagnostics['reassociatedFrames'], 0)
+
+    def test_ultralytics_tracking_extends_uncertain_grace_for_backward_fallbacks(self) -> None:
+        selected_target_box = NormalizedRect(x=0.30, y=0.31, width=0.14, height=0.26)
+        sample_times = [1000, 2000, 3000, 4000, 5000, 6000, 7000]
+        detections_by_time = {
+            time_ms: [
+                make_region(
+                    f'target-{time_ms}-0',
+                    time_ms,
+                    0.06 + ((time_ms / 1000) * 0.034),
+                    0.30 + ((time_ms / 1000) * 0.0015),
+                    0.14,
+                    0.26,
+                    confidence=0.82,
+                    class_name='car',
+                ),
+            ]
+            for time_ms in sample_times
+        }
+        tracked_by_time = {
+            7000: [
+                make_region('track-1', 7000, 0.30, 0.31, 0.14, 0.26, confidence=0.84, class_name='car'),
+            ],
+        }
+        tracker = ScriptedTargetCentricTracker(detections_by_time, tracked_by_time)
+
+        tracked_frames, diagnostics = tracker.track(
+            source_path='dashcam.mp4',
+            interval={'startMs': 1000, 'endMs': 7000},
+            anchor_time_ms=7000,
+            vehicle_kind='car',
+            selected_target_box=selected_target_box,
+            sample_times=sample_times,
+            options=AnalysisOptions(tracker_mode='botsort'),
+        )
+
+        self.assertEqual([frame.time_ms for frame in tracked_frames], sample_times)
+        self.assertFalse(diagnostics['terminatedEarly'])
+        self.assertEqual(diagnostics['identityBreaks'], 0)
+        self.assertEqual(diagnostics['directionSummaries']['backward']['identityBreaks'], 0)
+        self.assertEqual(diagnostics['directionSummaries']['backward']['detectionFallbackFrames'], 6)
 
     def test_ultralytics_tracking_soft_skips_weak_tracker_switch(self) -> None:
         selected_target_box = NormalizedRect(x=0.18, y=0.29, width=0.14, height=0.26)

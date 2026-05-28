@@ -13,6 +13,7 @@ def classify_failure_source(failure_reason: Any) -> str:
 def build_run_analysis(bundle: dict[str, Any]) -> dict[str, Any]:
     suite = bundle.get('suite') if isinstance(bundle.get('suite'), dict) else {}
     result = bundle.get('result') if isinstance(bundle.get('result'), dict) else {}
+    result_metrics = result.get('metrics') if isinstance(result.get('metrics'), dict) else {}
     cases = result.get('cases') if isinstance(result.get('cases'), list) else []
 
     dataset_case_counts: Counter[str] = Counter()
@@ -116,6 +117,13 @@ def build_run_analysis(bundle: dict[str, Any]) -> dict[str, Any]:
             analysis['focusBreakdown']['fragmentedSequence'] = fragmented_sequence
         if degraded_tracking is not None:
             analysis['focusBreakdown']['degradedTracking'] = degraded_tracking
+    if any(result_metrics.get(key) is not None for key in ['acceptedUnderDegradedTrackingRate', 'detectionFallbackReviewRequiredRate', 'meanDetectionFallbackReacquireFrames']):
+        analysis.setdefault('focusBreakdown', {})
+        analysis['focusBreakdown']['trackingAcceptance'] = {
+            'acceptedUnderDegradedTrackingRate': result_metrics.get('acceptedUnderDegradedTrackingRate'),
+            'detectionFallbackReviewRequiredRate': result_metrics.get('detectionFallbackReviewRequiredRate'),
+            'meanDetectionFallbackReacquireFrames': result_metrics.get('meanDetectionFallbackReacquireFrames'),
+        }
 
     evaluation = build_run_evaluation(bundle)
     analysis['stageBreakdown'] = dict(evaluation.get('stageBreakdown') or {})
@@ -154,6 +162,18 @@ def build_analysis_markdown(bundle: dict[str, Any], analysis: dict[str, Any]) ->
     ])
     for name, count in analysis.get('failureSourceBreakdown', {}).items():
         lines.append(f'- {name}: {count}')
+
+    focus_breakdown = analysis.get('focusBreakdown') if isinstance(analysis.get('focusBreakdown'), dict) else {}
+    tracking_acceptance = focus_breakdown.get('trackingAcceptance') if isinstance(focus_breakdown.get('trackingAcceptance'), dict) else None
+    if tracking_acceptance is not None:
+        lines.extend([
+            '',
+            '## Tracking Acceptance Focus',
+            '',
+            f"- Accepted under degraded tracking: {_format_rate(tracking_acceptance.get('acceptedUnderDegradedTrackingRate'))}",
+            f"- Detection-fallback review required: {_format_rate(tracking_acceptance.get('detectionFallbackReviewRequiredRate'))}",
+            f"- Detection-fallback mean reacquire frames: {tracking_acceptance.get('meanDetectionFallbackReacquireFrames') if isinstance(tracking_acceptance.get('meanDetectionFallbackReacquireFrames'), (int, float)) else '--'}",
+        ])
 
     lines.extend([
         '',

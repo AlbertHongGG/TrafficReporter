@@ -493,6 +493,89 @@ class IntervalWorkflowTests(unittest.TestCase):
         self.assertEqual(result['analysisTrack']['id'], 'target-11000-0')
         self.assertEqual(result['targetTracks'][0]['id'], 'target-11000-0')
 
+    def test_interval_analysis_keeps_accepted_result_when_tracking_only_degraded(self) -> None:
+        selected_target_box = NormalizedRect(x=0.32, y=0.2, width=0.18, height=0.24)
+        tracked_region = TrackedRegion(
+            id='track-1',
+            time_ms=11000,
+            box=selected_target_box,
+            confidence=0.92,
+            class_name='motorcycle',
+            diagnostics={
+                'trackingSource': 'detection-fallback',
+                'selectionScore': 0.53,
+            },
+        )
+        candidate = PlateCandidate(
+            id='candidate-1',
+            text='NCE9762',
+            confidence=0.93,
+            source='ocr:fastplate',
+            frame_time_ms=11000,
+            country_code='TW',
+            box=None,
+            quality=make_quality(),
+        )
+
+        workflow = IntervalAnalysisWorkflow(
+            ensure_ready=lambda: None,
+            status=lambda: {'available': True, 'detail': 'ok'},
+            runtime_root=lambda: Path('runtime-root'),
+            frame_reader=type('FrameReaderStub', (), {'read_frame': staticmethod(lambda source_path, time_ms: object())})(),
+            track_target_across_interval=lambda *args, **kwargs: ([tracked_region], {
+                'trackerMode': 'botsort',
+                'canonicalTargetId': 'target-11000-0',
+                'identityBreaks': 0,
+                'reassociatedFrames': 2,
+                'detectionFallbackFrames': 2,
+                'terminatedEarly': True,
+            }),
+            calibrate_interval_target_boxes=lambda *args, **kwargs: {},
+            analyze_plate_candidates=lambda frame, time_ms, marker_rect, target_box, country_hints, options, artifact_root: (
+                [candidate],
+                FrameSample(
+                    id=f'sample-{time_ms}',
+                    time_ms=time_ms,
+                    target_box=target_box,
+                    plate_box=None,
+                    quality=make_quality(),
+                    candidates=[candidate],
+                    image_path=None,
+                    diagnostics={},
+                ),
+                None,
+            ),
+            aggregate_candidates=lambda samples, observations, country_hints, options, artifact_root: ([candidate], {'mode': 'stub', 'sequence': {'sequenceTier': 'stable', 'persistenceRatio': 1.0, 'supportFrameCount': 3, 'supportFrameGapCount': 0}}),
+            apply_reliability_selection=lambda candidates, samples, country_hints, options, interval_mode: (candidates, candidate.id, {'suggestedCandidateId': candidate.id, 'acceptedCandidateId': candidate.id, 'reviewRequired': False, 'reasons': []}),
+            build_track_payload=lambda tracked_frames, diagnostics: [
+                TargetTrack(
+                    id=diagnostics['canonicalTargetId'],
+                    class_name='motorcycle',
+                    label='motorcycle 11000ms',
+                    confidence=0.92,
+                    frames=tracked_frames,
+                    diagnostics=diagnostics,
+                ),
+            ],
+        )
+
+        result = workflow.run({
+            'sourcePath': 'demo.mp4',
+            'interval': {'startMs': 10000, 'endMs': 12000},
+            'anchorTimeMs': 11000,
+            'targetVehicleKind': 'motorcycle',
+            'selectedTargetBox': selected_target_box.to_payload(),
+            'selectedTargetTrackId': 'target-11000-0',
+            'countryHints': ['tw'],
+            'maxSamples': 4,
+        })
+
+        self.assertEqual(result['acceptedCandidateId'], candidate.id)
+        self.assertEqual(result['tracking']['trackingTier'], 'detection-fallback')
+        self.assertEqual(result['review']['status'], 'accepted')
+        self.assertIn('tracker had to reacquire the target from fresh detections', result['review']['reasons'])
+        self.assertIn('tracking required fresh detection fallback to keep the target alive', result['review']['reasons'])
+
 
 if __name__ == '__main__':
     unittest.main()

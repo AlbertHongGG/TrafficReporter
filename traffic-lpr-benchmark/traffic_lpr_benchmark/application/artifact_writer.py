@@ -116,6 +116,8 @@ def build_summary_markdown(bundle: dict[str, Any]) -> str:
         f"- Mean CER: {_format_number(metrics.get('meanCharacterErrorRate'))}",
         f"- Mean accepted margin: {_format_number(metrics.get('meanAcceptedMargin'))}",
         f"- Mean tracking coverage: {_format_rate(metrics.get('meanTrackingCoverageRatio'))}",
+        f"- Accepted under degraded tracking: {_format_rate(metrics.get('acceptedUnderDegradedTrackingRate'))}",
+        f"- Detection-fallback review required: {_format_rate(metrics.get('detectionFallbackReviewRequiredRate'))}",
         f"- Mean sequence persistence: {_format_rate(metrics.get('meanSequencePersistence'))}",
     ]) + '\n'
 
@@ -135,6 +137,8 @@ def build_report_html(bundle: dict[str, Any]) -> str:
         ('Mean CER', _format_number(metrics.get('meanCharacterErrorRate'))),
         ('Mean Margin', _format_number(metrics.get('meanAcceptedMargin'))),
         ('Tracking Coverage', _format_rate(metrics.get('meanTrackingCoverageRatio'))),
+        ('Degraded Accepted', _format_rate(metrics.get('acceptedUnderDegradedTrackingRate'))),
+        ('Fallback Review', _format_rate(metrics.get('detectionFallbackReviewRequiredRate'))),
         ('Sequence Persistence', _format_rate(metrics.get('meanSequencePersistence'))),
         ('P95 Latency', _format_number((metrics.get('latencyMs') or {}).get('p95'), 1) + ' ms'),
     ]

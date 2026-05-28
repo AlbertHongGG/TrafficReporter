@@ -205,16 +205,26 @@ def _sequence_review_reasons(sequence_summary: dict[str, Any], options: Analysis
 def _tracking_identity_review_reasons(track_diagnostics: dict[str, Any]) -> list[str]:
     reasons: list[str] = []
     identity_breaks = int(track_diagnostics.get('identityBreaks') or 0)
-    reassociated_frames = int(track_diagnostics.get('reassociatedFrames') or 0)
-    detection_fallback_frames = int(track_diagnostics.get('detectionFallbackFrames') or 0)
 
     if identity_breaks > 0:
         reasons.append('tracking identity became ambiguous across the interval')
+    return reasons
+
+
+def _tracking_advisory_reasons(track_diagnostics: dict[str, Any], tracking_summary: dict[str, Any]) -> list[str]:
+    reasons: list[str] = []
+    reassociated_frames = int(track_diagnostics.get('reassociatedFrames') or 0)
+    detection_fallback_frames = int(track_diagnostics.get('detectionFallbackFrames') or 0)
+
     if track_diagnostics.get('terminatedEarly') is True:
         reasons.append('tracking stopped early after the target drifted')
     if detection_fallback_frames > 0 and reassociated_frames > 0:
         reasons.append('tracker had to reacquire the target from fresh detections')
-    return reasons
+
+    degraded_reason = tracking_summary.get('degradedReason')
+    if isinstance(degraded_reason, str) and degraded_reason.strip():
+        reasons.append(degraded_reason.strip())
+    return _merge_reasons([], reasons)
 
 
 def _merge_reasons(existing: list[str], additions: list[str]) -> list[str]:
@@ -572,19 +582,23 @@ class IntervalAnalysisWorkflow:
         )
         identity_review_reasons = _tracking_identity_review_reasons(track_diagnostics)
         sequence_review_reasons = _sequence_review_reasons(sequence_summary, options)
-        degraded_reasons = [] if tracking['degradedReason'] is None else [str(tracking['degradedReason'])]
-        if identity_review_reasons or sequence_review_reasons or tracking['trackingTier'] != 'full':
-            selection_diagnostics = {
-                **selection_diagnostics,
-                'acceptedCandidateId': accepted_candidate_id,
-                'reviewRequired': True,
-                'reasons': _merge_reasons(
-                    [reason for reason in selection_diagnostics.get('reasons') or [] if isinstance(reason, str)],
-                    [*identity_review_reasons, *sequence_review_reasons, *degraded_reasons],
-                ),
-                'tracking': track_diagnostics,
-                'sequence': sequence_summary,
-            }
+        tracking_advisory_reasons = _tracking_advisory_reasons(track_diagnostics, tracking)
+        selection_diagnostics = {
+            **selection_diagnostics,
+            'acceptedCandidateId': accepted_candidate_id,
+            'reviewRequired': bool(
+                selection_diagnostics.get('reviewRequired')
+                or identity_review_reasons
+                or sequence_review_reasons
+                or tracking['trackingTier'] == 'anchor-invalid'
+            ),
+            'reasons': _merge_reasons(
+                [reason for reason in selection_diagnostics.get('reasons') or [] if isinstance(reason, str)],
+                [*identity_review_reasons, *sequence_review_reasons, *tracking_advisory_reasons],
+            ),
+            'tracking': track_diagnostics,
+            'sequence': sequence_summary,
+        }
         if candidates:
             suggested_candidate = next(
                 (candidate for candidate in candidates if candidate.id == selection_diagnostics.get('suggestedCandidateId')),

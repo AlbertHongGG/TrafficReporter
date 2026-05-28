@@ -123,6 +123,24 @@ class BenchmarkRunWorkflow:
             provenance_payload = response.get('provenance')
             if not isinstance(provenance_payload, dict):
                 raise ValueError(f'Benchmark case {case_id} is missing provenance payload from runtime response.')
+            tracker_diagnostics_payload = {}
+            diagnostics_payload = response.get('diagnostics')
+            if isinstance(diagnostics_payload, dict) and isinstance(diagnostics_payload.get('tracker'), dict):
+                tracker_diagnostics_payload = dict(diagnostics_payload['tracker'])
+            tracking_payload = dict(response.get('tracking') or {}) if isinstance(response.get('tracking'), dict) else None
+            if tracking_payload is not None:
+                for key in [
+                    'identityBreaks',
+                    'reassociatedFrames',
+                    'reacquireFrames',
+                    'detectionFallbackFrames',
+                    'uncertainFrames',
+                    'backwardTrackedFrameCount',
+                    'forwardTrackedFrameCount',
+                ]:
+                    value = tracker_diagnostics_payload.get(key)
+                    if isinstance(value, (int, float)):
+                        tracking_payload[key] = value
 
             benchmark_results.append(
                 {
@@ -143,7 +161,7 @@ class BenchmarkRunWorkflow:
                     'latencyMs': latency_ms,
                     'localization': localization,
                     'trackMetrics': track_metrics_case,
-                    'tracking': dict(response.get('tracking') or {}) if isinstance(response.get('tracking'), dict) else None,
+                    'tracking': tracking_payload,
                     'sequence': sequence_payload,
                     'failureReason': failure_reason,
                     'review': dict(review_payload),
@@ -208,6 +226,10 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
                 'trackingTierBreakdown': {},
                 'meanTrackingCoverageRatio': None,
                 'degradedTrackingRate': None,
+                'acceptedUnderDegradedTrackingRate': None,
+                'detectionFallbackCaseCount': 0,
+                'detectionFallbackReviewRequiredRate': None,
+                'meanDetectionFallbackReacquireFrames': None,
                 'meanTrackedFrameCount': None,
                 'intervalSequenceCaseCount': 0,
                 'sequenceTierBreakdown': {},
@@ -242,7 +264,11 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
     tracking_coverage_values: list[float] = []
     tracked_frame_counts: list[int] = []
     degraded_tracking_cases = 0
+    accepted_under_degraded_tracking_cases = 0
     interval_tracking_cases = 0
+    detection_fallback_cases = 0
+    detection_fallback_review_required_cases = 0
+    detection_fallback_reacquire_values: list[float] = []
     sequence_tier_counts: dict[str, int] = {}
     sequence_persistence_values: list[float] = []
     sequence_gap_values: list[float] = []
@@ -286,6 +312,15 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
             tracking_tier_counts[tracking_tier] = tracking_tier_counts.get(tracking_tier, 0) + 1
             if tracking_tier != 'full':
                 degraded_tracking_cases += 1
+                if review_status == 'accepted':
+                    accepted_under_degraded_tracking_cases += 1
+            if tracking_tier == 'detection-fallback':
+                detection_fallback_cases += 1
+                if review_status == 'review-required':
+                    detection_fallback_review_required_cases += 1
+                reacquire_frames = _coerce_optional_float(tracking_payload.get('reacquireFrames'))
+                if reacquire_frames is not None:
+                    detection_fallback_reacquire_values.append(reacquire_frames)
             coverage_ratio = _coerce_optional_float(tracking_payload.get('coverageRatio'))
             if coverage_ratio is not None:
                 tracking_coverage_values.append(coverage_ratio)
@@ -310,6 +345,7 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
             'acceptedCase': review_status == 'accepted',
             'reviewRequiredCase': review_status == 'review-required',
             'noCandidateCase': review_status == 'no-candidate',
+            'acceptedUnderDegradedTrackingCase': bool(tracking_payload) and str((tracking_payload or {}).get('trackingTier') or 'unknown') != 'full' and review_status == 'accepted',
             'latencyMs': latency_ms,
             'acceptedMargin': accepted_margin,
             'plateIoU': localization.get('plateMeanIoU'),
@@ -322,6 +358,7 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
             'timeToFirstCorrectMs': (track_metrics_case or {}).get('timeToFirstCorrectMs'),
             'trackingCoverageRatio': (tracking_payload or {}).get('coverageRatio'),
             'trackedFrameCount': (tracking_payload or {}).get('trackedFrameCount'),
+            'reacquireFrames': (tracking_payload or {}).get('reacquireFrames'),
             'sequencePersistence': (sequence_payload or {}).get('persistenceRatio'),
             'sequenceGapCount': (sequence_payload or {}).get('supportFrameGapCount'),
         }
@@ -367,6 +404,10 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
         'trackingTierBreakdown': dict(sorted(tracking_tier_counts.items())),
         'meanTrackingCoverageRatio': _mean_values(tracking_coverage_values),
         'degradedTrackingRate': (degraded_tracking_cases / interval_tracking_cases) if interval_tracking_cases else None,
+        'acceptedUnderDegradedTrackingRate': (accepted_under_degraded_tracking_cases / degraded_tracking_cases) if degraded_tracking_cases else None,
+        'detectionFallbackCaseCount': detection_fallback_cases,
+        'detectionFallbackReviewRequiredRate': (detection_fallback_review_required_cases / detection_fallback_cases) if detection_fallback_cases else None,
+        'meanDetectionFallbackReacquireFrames': _mean_values(detection_fallback_reacquire_values),
         'meanTrackedFrameCount': (sum(tracked_frame_counts) / len(tracked_frame_counts)) if tracked_frame_counts else None,
         'intervalSequenceCaseCount': interval_sequence_cases,
         'sequenceTierBreakdown': dict(sorted(sequence_tier_counts.items())),
@@ -412,6 +453,10 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
         f"plateIoU={_safe_metric_average(benchmark_results, 'localization', 'plateMeanIoU'):.3f}, "
         f"p95={metrics['latencyMs']['p95']:.1f}ms"
     )
+    if metrics['acceptedUnderDegradedTrackingRate'] is not None:
+        summary = f"{summary}, degradedAccepted={metrics['acceptedUnderDegradedTrackingRate']:.1%}"
+    if metrics['detectionFallbackReviewRequiredRate'] is not None:
+        summary = f"{summary}, fallbackReview={metrics['detectionFallbackReviewRequiredRate']:.1%}"
     return {
         'summary': summary,
         'cases': benchmark_results,
@@ -585,6 +630,7 @@ def _new_metric_bucket() -> dict[str, float]:
         'accepted': 0.0,
         'reviewRequired': 0.0,
         'noCandidate': 0.0,
+        'acceptedUnderDegradedTracking': 0.0,
         'latencyMs': 0.0,
         'acceptedMargin': 0.0,
         'plateIoUSum': 0.0,
@@ -600,6 +646,8 @@ def _new_metric_bucket() -> dict[str, float]:
         'trackingCoverageRatioCount': 0.0,
         'trackedFrameCount': 0.0,
         'trackedFrameCountCount': 0.0,
+        'reacquireFrames': 0.0,
+        'reacquireFramesCount': 0.0,
         'majorityExact': 0.0,
         'predictionSwitchCount': 0.0,
         'sampleExactMatchRate': 0.0,
@@ -621,6 +669,7 @@ def _update_metric_bucket(bucket: dict[str, float], case_metrics: dict[str, Any]
     bucket['accepted'] += 1.0 if case_metrics.get('acceptedCase') else 0.0
     bucket['reviewRequired'] += 1.0 if case_metrics.get('reviewRequiredCase') else 0.0
     bucket['noCandidate'] += 1.0 if case_metrics.get('noCandidateCase') else 0.0
+    bucket['acceptedUnderDegradedTracking'] += 1.0 if case_metrics.get('acceptedUnderDegradedTrackingCase') else 0.0
     bucket['latencyMs'] += float(case_metrics.get('latencyMs') or 0.0)
     bucket['acceptedMargin'] += float(case_metrics.get('acceptedMargin') or 0.0)
 
@@ -651,6 +700,9 @@ def _update_metric_bucket(bucket: dict[str, float], case_metrics: dict[str, Any]
     if isinstance(case_metrics.get('trackedFrameCount'), (int, float)):
         bucket['trackedFrameCount'] += float(case_metrics['trackedFrameCount'])
         bucket['trackedFrameCountCount'] += 1.0
+    if isinstance(case_metrics.get('reacquireFrames'), (int, float)):
+        bucket['reacquireFrames'] += float(case_metrics['reacquireFrames'])
+        bucket['reacquireFramesCount'] += 1.0
     if isinstance(case_metrics.get('predictionSwitchCount'), (int, float)):
         bucket['predictionSwitchCount'] += float(case_metrics['predictionSwitchCount'])
     if isinstance(case_metrics.get('sampleExactMatchRate'), (int, float)):
@@ -677,6 +729,7 @@ def _finalize_metric_bucket(bucket: dict[str, float]) -> dict[str, float | None]
         'acceptedRate': bucket['accepted'] / total_cases,
         'reviewRequiredRate': bucket['reviewRequired'] / total_cases,
         'noCandidateRate': bucket['noCandidate'] / total_cases,
+        'acceptedUnderDegradedTrackingRate': bucket['acceptedUnderDegradedTracking'] / total_cases,
         'meanLatencyMs': bucket['latencyMs'] / total_cases,
         'meanAcceptedMargin': bucket['acceptedMargin'] / total_cases,
         'meanPlateIoU': bucket['plateIoUSum'] / bucket['plateIoUCount'] if bucket['plateIoUCount'] else None,
@@ -685,6 +738,7 @@ def _finalize_metric_bucket(bucket: dict[str, float]) -> dict[str, float | None]
         'targetLocalizationRecall': bucket['targetRecallSum'] / bucket['targetRecallCount'] if bucket['targetRecallCount'] else None,
         'meanTrackingCoverageRatio': bucket['trackingCoverageRatio'] / bucket['trackingCoverageRatioCount'] if bucket['trackingCoverageRatioCount'] else None,
         'meanTrackedFrameCount': bucket['trackedFrameCount'] / bucket['trackedFrameCountCount'] if bucket['trackedFrameCountCount'] else None,
+        'meanReacquireFrames': bucket['reacquireFrames'] / bucket['reacquireFramesCount'] if bucket['reacquireFramesCount'] else None,
         'trackMajorityExactMatchRate': bucket['majorityExact'] / bucket['trackCases'] if bucket['trackCases'] else None,
         'meanPredictionSwitchCount': bucket['predictionSwitchCount'] / bucket['trackCases'] if bucket['trackCases'] else None,
         'meanSampleExactMatchRate': bucket['sampleExactMatchRate'] / bucket['sampleExactMatchRateCount'] if bucket['sampleExactMatchRateCount'] else None,
