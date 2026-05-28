@@ -51,18 +51,20 @@ class AnalysisOptions:
     @classmethod
     def from_payload(cls, payload: dict[str, Any] | None) -> 'AnalysisOptions':
         request_payload = payload or {}
+        developer_diagnostics_enabled = request_payload.get('enableDeveloperDiagnostics') is True
         analysis_profile_id, profile_options = resolve_analysis_profile_options(
             _to_optional_str(request_payload.get('analysisProfileId')),
-            request_payload.get('enableDeveloperDiagnostics') is True,
+            developer_diagnostics_enabled,
         )
         raw = {
             **profile_options,
             **dict(request_payload.get('analysisOptions') or {}),
         }
+        persist_artifacts = bool(raw.get('persistArtifacts') or False) and developer_diagnostics_enabled
         return cls(
             analysis_profile_id=analysis_profile_id,
-            enable_developer_diagnostics=request_payload.get('enableDeveloperDiagnostics') is True,
-            persist_artifacts=bool(raw.get('persistArtifacts') or False),
+            enable_developer_diagnostics=developer_diagnostics_enabled,
+            persist_artifacts=persist_artifacts,
             artifact_dir=_to_optional_str(raw.get('artifactDir')),
             tracker_mode=_to_optional_str(raw.get('trackerMode')) or 'botsort',
             fusion_mode=_to_optional_str(raw.get('fusionMode')) or 'aligned-char',
@@ -129,17 +131,17 @@ class AnalysisOptions:
         )
 
     def for_interval_sample(self, sample_count_hint: int | None = None) -> 'AnalysisOptions':
+        del sample_count_hint
         restoration_mode = self.restoration_mode
-        if (
-            sample_count_hint is not None
-            and sample_count_hint >= 8
-            and restoration_mode not in {'off', 'classical'}
-        ):
+        if restoration_mode not in {'off', 'classical'}:
             restoration_mode = 'classical'
         return replace(
             self,
             enable_recognizer_comparison=False,
             restoration_mode=restoration_mode,
+            persist_artifacts=False,
+            artifact_dir=None,
+            debug_tag=None,
         )
 
     def to_payload(self) -> dict[str, Any]:

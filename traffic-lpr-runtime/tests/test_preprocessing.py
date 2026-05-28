@@ -97,6 +97,30 @@ class PreprocessingTests(unittest.TestCase):
 
         self.assertFalse(sample_options.enable_recognizer_comparison)
         self.assertEqual(sample_options.restoration_mode, 'classical')
+        self.assertFalse(sample_options.persist_artifacts)
+        self.assertIsNone(sample_options.debug_tag)
+
+    def test_persist_artifacts_requires_developer_diagnostics(self) -> None:
+        options = AnalysisOptions.from_payload({
+            'analysisOptions': {
+                'persistArtifacts': True,
+                'debugTag': 'smoke-case',
+            },
+        })
+
+        self.assertFalse(options.enable_developer_diagnostics)
+        self.assertFalse(options.persist_artifacts)
+
+        developer_options = AnalysisOptions.from_payload({
+            'enableDeveloperDiagnostics': True,
+            'analysisOptions': {
+                'persistArtifacts': True,
+                'debugTag': 'smoke-case',
+            },
+        })
+
+        self.assertTrue(developer_options.enable_developer_diagnostics)
+        self.assertTrue(developer_options.persist_artifacts)
 
     def test_rectification_falls_back_to_deskew_when_no_plate_quad_is_found(self) -> None:
         dependencies = types.SimpleNamespace(

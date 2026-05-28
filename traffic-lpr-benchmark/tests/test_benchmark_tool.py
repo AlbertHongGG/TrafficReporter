@@ -178,6 +178,47 @@ class BenchmarkToolTests(unittest.TestCase):
             {'meanTrackingCoverageRatio', 'degradedTrackingRate'},
         )
 
+    def test_evaluate_runtime_result_gate_checks_detection_fallback_acceptance(self) -> None:
+        gate = evaluate_runtime_result_gate(
+            {
+                'metrics': {
+                    'totalCases': 2,
+                    'acceptedUnderDegradedTrackingRate': 0.0,
+                    'detectionFallbackReviewRequiredRate': 1.0,
+                    'latencyMs': {'p95': 1200.0},
+                },
+                'cases': [
+                    {
+                        'tracking': {'trackingTier': 'detection-fallback'},
+                        'review': {'status': 'review-required'},
+                    },
+                    {
+                        'tracking': {'trackingTier': 'full'},
+                        'review': {'status': 'accepted'},
+                    },
+                ],
+            },
+            {
+                'minExactRate': None,
+                'minTop3Rate': None,
+                'maxMeanCer': None,
+                'maxReviewRequiredRate': None,
+                'maxNoCandidateRate': None,
+                'minPlateIou': None,
+                'minMeanTrackingCoverageRatio': None,
+                'maxDegradedTrackingRate': None,
+                'minAcceptedUnderDegradedTrackingRate': 1.0,
+                'maxDetectionFallbackReviewRequiredRate': 0.0,
+                'maxP95LatencyMs': None,
+            },
+        )
+
+        self.assertFalse(gate['passed'])
+        self.assertEqual(
+            {check['metric'] for check in gate['checks']},
+            {'acceptedUnderDegradedTrackingRate', 'detectionFallbackReviewRequiredRate'},
+        )
+
     def test_summarize_benchmark_results_includes_tracking_survival_metrics(self) -> None:
         summary = summarize_benchmark_results(
             [

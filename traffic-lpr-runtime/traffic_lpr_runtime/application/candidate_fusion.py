@@ -11,6 +11,9 @@ from traffic_lpr_runtime.domain.text import normalize_plate_text
 from traffic_lpr_runtime.infrastructure.dependencies import DependencyRegistry
 
 
+MAX_INTERVAL_FUSION_OBSERVATIONS = 6
+
+
 def _ordered_top_sample_candidates(samples: list[FrameSample]) -> list[tuple[int, PlateCandidate | None, str]]:
     ordered: list[tuple[int, PlateCandidate | None, str]] = []
     for sample in sorted(samples, key=lambda item: item.time_ms):
@@ -459,8 +462,18 @@ class CandidateFusionService:
         if len(observations) < 2 or self._dependencies.cv2 is None or self._dependencies.numpy is None:
             return [], {'applied': False, 'reason': 'insufficient-observations'}
 
+        observations_to_fuse = sorted(
+            observations,
+            key=lambda observation: (
+                observation.quality.overall_score if observation.quality else 0.0,
+                float((observation.diagnostics or {}).get('selectionScore') or 0.0),
+                -abs(observation.time_ms),
+            ),
+            reverse=True,
+        )[:MAX_INTERVAL_FUSION_OBSERVATIONS]
+
         cv2 = self._dependencies.cv2
-        reference = max(observations, key=lambda observation: observation.quality.overall_score if observation.quality else 0.0)
+        reference = max(observations_to_fuse, key=lambda observation: observation.quality.overall_score if observation.quality else 0.0)
         reference_image = reference.working_image
         if reference_image is None or getattr(reference_image, 'size', 0) == 0:
             return [], {'applied': False, 'reason': 'empty-reference'}
@@ -472,7 +485,7 @@ class CandidateFusionService:
         alignment_scores: list[float] = [1.0]
         support_times: list[int] = [reference.time_ms]
 
-        for observation in observations:
+        for observation in observations_to_fuse:
             if observation is reference:
                 continue
             candidate_image = observation.working_image
@@ -518,6 +531,8 @@ class CandidateFusionService:
             'applied': True,
             'supportFrames': support,
             'meanAlignmentScore': sum(alignment_scores) / len(alignment_scores),
+            'requestedObservationCount': len(observations),
+            'fusedObservationCount': len(observations_to_fuse),
         }
 
     def _align_plate_to_reference(self, reference_image: Any, candidate_image: Any) -> tuple[Any | None, float]:

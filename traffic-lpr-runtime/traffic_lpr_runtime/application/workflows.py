@@ -176,25 +176,36 @@ def _select_interval_evidence_frames(tracked_frames: list[TrackedRegion], option
     return _mark_selected_for_evidence_analysis(tracked_frames, set(chosen_by_time))
 
 
-def _sequence_review_reasons(sequence_summary: dict[str, Any], options: AnalysisOptions) -> list[str]:
+def _sequence_hard_review_reasons(sequence_summary: dict[str, Any], options: AnalysisOptions) -> list[str]:
+    if not sequence_summary or options.sequence_review_mode == 'off':
+        return []
+
+    sequence_tier = str(sequence_summary.get('sequenceTier') or 'fragmented')
+    support_frame_count = _safe_int(sequence_summary.get('supportFrameCount'))
+    reasons: list[str] = []
+
+    if support_frame_count < options.min_interval_support_frames:
+        reasons.append('too few interval samples produced readable plate support')
+    if sequence_tier == 'fragmented':
+        reasons.append('sequence evidence stayed fragmented across the interval')
+
+    return _merge_reasons([], reasons)
+
+
+def _sequence_advisory_reasons(sequence_summary: dict[str, Any], options: AnalysisOptions) -> list[str]:
     if not sequence_summary or options.sequence_review_mode == 'off':
         return []
 
     sequence_tier = str(sequence_summary.get('sequenceTier') or 'fragmented')
     persistence_ratio = float(sequence_summary.get('persistenceRatio') or 0.0)
     gap_count = _safe_int(sequence_summary.get('supportFrameGapCount'))
-    support_frame_count = _safe_int(sequence_summary.get('supportFrameCount'))
     reasons: list[str] = []
 
-    if support_frame_count < options.min_interval_support_frames:
-        reasons.append('too few interval samples produced readable plate support')
     if persistence_ratio < options.min_sequence_persistence:
         reasons.append('plate text did not remain stable across interval samples')
     if gap_count > options.max_sequence_gap_count:
         reasons.append('readable OCR evidence had large gaps across the interval')
-    if sequence_tier == 'fragmented':
-        reasons.append('sequence evidence stayed fragmented across the interval')
-    elif options.sequence_review_mode == 'strict' and sequence_tier in {'drifting', 'gapped'}:
+    if options.sequence_review_mode == 'strict' and sequence_tier in {'drifting', 'gapped'}:
         reasons.append('sequence evidence drifted during the interval review path')
     elif options.sequence_review_mode == 'balanced' and sequence_tier == 'gapped':
         reasons.append('sequence evidence lost continuity across the interval')
@@ -581,21 +592,30 @@ class IntervalAnalysisWorkflow:
             True,
         )
         identity_review_reasons = _tracking_identity_review_reasons(track_diagnostics)
-        sequence_review_reasons = _sequence_review_reasons(sequence_summary, options)
+        sequence_hard_review_reasons = _sequence_hard_review_reasons(sequence_summary, options)
+        sequence_advisory_reasons = _sequence_advisory_reasons(sequence_summary, options)
         tracking_advisory_reasons = _tracking_advisory_reasons(track_diagnostics, tracking)
+        selection_review_reasons = [reason for reason in selection_diagnostics.get('reasons') or [] if isinstance(reason, str)]
+        hard_review_reasons = _merge_reasons(
+            selection_review_reasons,
+            [*identity_review_reasons, *sequence_hard_review_reasons],
+        )
+        if tracking['trackingTier'] == 'anchor-invalid':
+            hard_review_reasons = _merge_reasons(
+                hard_review_reasons,
+                [str(tracking.get('degradedReason') or 'anchor validation drifted away from the selected target')],
+            )
+        advisory_reasons = _merge_reasons(
+            sequence_advisory_reasons,
+            tracking_advisory_reasons,
+        )
         selection_diagnostics = {
             **selection_diagnostics,
             'acceptedCandidateId': accepted_candidate_id,
-            'reviewRequired': bool(
-                selection_diagnostics.get('reviewRequired')
-                or identity_review_reasons
-                or sequence_review_reasons
-                or tracking['trackingTier'] == 'anchor-invalid'
-            ),
-            'reasons': _merge_reasons(
-                [reason for reason in selection_diagnostics.get('reasons') or [] if isinstance(reason, str)],
-                [*identity_review_reasons, *sequence_review_reasons, *tracking_advisory_reasons],
-            ),
+            'reviewRequired': bool(hard_review_reasons),
+            'hardReviewReasons': hard_review_reasons,
+            'advisoryReasons': advisory_reasons,
+            'reasons': _merge_reasons(hard_review_reasons, advisory_reasons),
             'tracking': track_diagnostics,
             'sequence': sequence_summary,
         }

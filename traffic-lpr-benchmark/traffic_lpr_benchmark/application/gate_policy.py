@@ -15,6 +15,8 @@ def build_gate_thresholds(args: Any) -> dict[str, float | None]:
         'minPlateIou': _coerce_optional_float(getattr(args, 'min_plate_iou', None)),
         'minMeanTrackingCoverageRatio': _coerce_optional_float(getattr(args, 'min_mean_tracking_coverage_ratio', None)),
         'maxDegradedTrackingRate': _coerce_optional_float(getattr(args, 'max_degraded_tracking_rate', None)),
+        'minAcceptedUnderDegradedTrackingRate': _coerce_optional_float(getattr(args, 'min_accepted_under_degraded_tracking_rate', None)),
+        'maxDetectionFallbackReviewRequiredRate': _coerce_optional_float(getattr(args, 'max_detection_fallback_review_required_rate', None)),
         'maxP95LatencyMs': _coerce_optional_float(getattr(args, 'max_p95_latency_ms', None)),
     }
 
@@ -64,6 +66,22 @@ def evaluate_runtime_result_gate(
         metrics.get('degradedTrackingRate'),
         thresholds.get('maxDegradedTrackingRate'),
         sample_size=tracking_case_count,
+    )
+    degraded_tracking_case_count = _degraded_tracking_case_count(cases)
+    detection_fallback_case_count = _tracking_tier_case_count(cases, 'detection-fallback')
+    _append_min_check(
+        checks,
+        'acceptedUnderDegradedTrackingRate',
+        metrics.get('acceptedUnderDegradedTrackingRate'),
+        thresholds.get('minAcceptedUnderDegradedTrackingRate'),
+        sample_size=degraded_tracking_case_count,
+    )
+    _append_max_check(
+        checks,
+        'detectionFallbackReviewRequiredRate',
+        metrics.get('detectionFallbackReviewRequiredRate'),
+        thresholds.get('maxDetectionFallbackReviewRequiredRate'),
+        sample_size=detection_fallback_case_count,
     )
     latency_payload = metrics.get('latencyMs') if isinstance(metrics.get('latencyMs'), dict) else {}
     _append_max_check(checks, 'p95LatencyMs', latency_payload.get('p95'), thresholds.get('maxP95LatencyMs'), sample_size=total_cases)
@@ -191,6 +209,37 @@ def _case_review_status(case: Any) -> str | None:
     if status not in {'accepted', 'review-required', 'no-candidate'}:
         raise ValueError(f'Unsupported review status: {status!r}')
     return status
+
+
+def _degraded_tracking_case_count(cases: list[Any]) -> int | None:
+    if not cases:
+        return None
+    count = 0
+    for case in cases:
+        if not isinstance(case, dict):
+            continue
+        tracking_payload = case.get('tracking')
+        if not isinstance(tracking_payload, dict):
+            continue
+        tracking_tier = str(tracking_payload.get('trackingTier') or 'unknown')
+        if tracking_tier != 'full':
+            count += 1
+    return count
+
+
+def _tracking_tier_case_count(cases: list[Any], tracking_tier: str) -> int | None:
+    if not cases:
+        return None
+    count = 0
+    for case in cases:
+        if not isinstance(case, dict):
+            continue
+        tracking_payload = case.get('tracking')
+        if not isinstance(tracking_payload, dict):
+            continue
+        if str(tracking_payload.get('trackingTier') or 'unknown') == tracking_tier:
+            count += 1
+    return count
 
 
 def _coerce_optional_float(value: Any) -> float | None:
