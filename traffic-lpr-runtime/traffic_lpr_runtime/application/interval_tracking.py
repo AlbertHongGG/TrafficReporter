@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Any, Callable
 
 from traffic_lpr_runtime.application.pipeline_support import AnalysisOptions
@@ -12,6 +13,82 @@ def _optional_string(value: Any) -> str | None:
         return None
     text = value.strip()
     return text or None
+
+
+def _build_temporal_range_diagnostics(
+    tracked_frames: list[TrackedRegion],
+    tracking_times: list[int],
+    trajectory_step_ms: int,
+    anchor_time_ms: int,
+) -> dict[str, Any]:
+    if not tracking_times:
+        return {
+            'requestedStartMs': anchor_time_ms,
+            'requestedEndMs': anchor_time_ms,
+            'trackedStartMs': None,
+            'trackedEndMs': None,
+            'trackedSpanMs': 0,
+            'coverageRatio': 0.0,
+            'reachedRequestedStart': False,
+            'reachedRequestedEnd': False,
+            'gapCount': 0,
+            'maxGapMs': 0,
+            'averageGapMs': 0.0,
+            'averageMotion': 0.0,
+            'motionVariance': 0.0,
+            'motionStdDev': 0.0,
+            'maxMotion': 0.0,
+            'motionHotspotThreshold': 0.0,
+        }
+
+    requested_start_ms = tracking_times[0]
+    requested_end_ms = tracking_times[-1]
+    tracked_start_ms = tracked_frames[0].time_ms if tracked_frames else None
+    tracked_end_ms = tracked_frames[-1].time_ms if tracked_frames else None
+    tracked_span_ms = max(0, (tracked_end_ms or requested_start_ms) - (tracked_start_ms or requested_start_ms))
+    coverage_ratio = 0.0 if not tracking_times else max(0.0, min(1.0, len(tracked_frames) / max(len(tracking_times), 1)))
+
+    gaps_ms: list[int] = []
+    motion_samples: list[float] = []
+    for previous, current in zip(tracked_frames, tracked_frames[1:]):
+        gaps_ms.append(max(0, current.time_ms - previous.time_ms))
+        motion_samples.append(current.box.center_distance(previous.box))
+
+    average_gap_ms = sum(gaps_ms) / len(gaps_ms) if gaps_ms else 0.0
+    gap_threshold_ms = max(int(round(trajectory_step_ms * 1.5)), trajectory_step_ms + 1)
+    gap_count = sum(1 for gap_ms in gaps_ms if gap_ms > gap_threshold_ms)
+    max_gap_ms = max(gaps_ms, default=0)
+
+    average_motion = sum(motion_samples) / len(motion_samples) if motion_samples else 0.0
+    motion_variance = (
+        sum((motion - average_motion) ** 2 for motion in motion_samples) / len(motion_samples)
+        if motion_samples
+        else 0.0
+    )
+    motion_std_dev = math.sqrt(motion_variance)
+    max_motion = max(motion_samples, default=0.0)
+    motion_hotspot_threshold = max(average_motion + motion_std_dev, max_motion * 0.85)
+    if motion_hotspot_threshold <= 0.0:
+        motion_hotspot_threshold = 0.0
+
+    return {
+        'requestedStartMs': requested_start_ms,
+        'requestedEndMs': requested_end_ms,
+        'trackedStartMs': tracked_start_ms,
+        'trackedEndMs': tracked_end_ms,
+        'trackedSpanMs': tracked_span_ms,
+        'coverageRatio': coverage_ratio,
+        'reachedRequestedStart': tracked_start_ms == requested_start_ms,
+        'reachedRequestedEnd': tracked_end_ms == requested_end_ms,
+        'gapCount': gap_count,
+        'maxGapMs': max_gap_ms,
+        'averageGapMs': average_gap_ms,
+        'averageMotion': average_motion,
+        'motionVariance': motion_variance,
+        'motionStdDev': motion_std_dev,
+        'maxMotion': max_motion,
+        'motionHotspotThreshold': motion_hotspot_threshold,
+    }
 
 
 class IntervalTrackingService:
@@ -300,7 +377,44 @@ class IntervalTrackingService:
         anchor_time_ms: int,
     ) -> tuple[list[TrackedRegion], dict[str, Any]]:
         evidence_sample_time_set = set(evidence_sample_times)
+        temporal_range = _build_temporal_range_diagnostics(
+            tracked_frames,
+            tracking_times,
+            trajectory_step_ms,
+            anchor_time_ms,
+        )
+        hotspot_threshold = float(temporal_range.get('motionHotspotThreshold') or 0.0)
         for index, tracked_frame in enumerate(tracked_frames):
+            previous_frame = tracked_frames[index - 1] if index > 0 else None
+            next_frame = tracked_frames[index + 1] if index + 1 < len(tracked_frames) else None
+            incoming_gap_ms = max(0, tracked_frame.time_ms - previous_frame.time_ms) if previous_frame is not None else 0
+            outgoing_gap_ms = max(0, next_frame.time_ms - tracked_frame.time_ms) if next_frame is not None else 0
+            incoming_motion = tracked_frame.box.center_distance(previous_frame.box) if previous_frame is not None else 0.0
+            outgoing_motion = next_frame.box.center_distance(tracked_frame.box) if next_frame is not None else 0.0
+            local_motion = max(incoming_motion, outgoing_motion)
+            is_motion_hotspot = hotspot_threshold > 0.0 and local_motion >= hotspot_threshold
+            requested_position = 0.0
+            if tracking_times and tracking_times[-1] != tracking_times[0]:
+                requested_position = (tracked_frame.time_ms - tracking_times[0]) / max(tracking_times[-1] - tracking_times[0], 1)
+            evidence_reasons: list[str] = []
+            if index == 0:
+                evidence_reasons.append('interval-start')
+            if tracked_frame.time_ms == anchor_time_ms:
+                evidence_reasons.append('anchor')
+            if tracked_frame.time_ms in evidence_sample_time_set:
+                evidence_reasons.append('scheduled-sample')
+            if index == len(tracked_frames) - 1:
+                evidence_reasons.append('interval-end')
+            if is_motion_hotspot:
+                evidence_reasons.append('motion-hotspot')
+            if tracked_frame.confidence >= 0.85:
+                evidence_reasons.append('high-confidence')
+            evidence_priority = tracked_frame.confidence
+            evidence_priority += local_motion * 2.0
+            evidence_priority += 0.75 if tracked_frame.time_ms in evidence_sample_time_set else 0.0
+            evidence_priority += 1.5 if tracked_frame.time_ms == anchor_time_ms else 0.0
+            evidence_priority += 0.35 if index in {0, len(tracked_frames) - 1} else 0.0
+            evidence_priority += 0.5 if is_motion_hotspot else 0.0
             tracked_frame.diagnostics = {
                 **(tracked_frame.diagnostics or {}),
                 'trajectoryIndex': index,
@@ -312,6 +426,15 @@ class IntervalTrackingService:
                 'isAnchorFrame': tracked_frame.time_ms == anchor_time_ms,
                 'isEvidenceSample': tracked_frame.time_ms in evidence_sample_time_set,
                 'visibilityState': 'visible',
+                'incomingGapMs': incoming_gap_ms,
+                'outgoingGapMs': outgoing_gap_ms,
+                'incomingMotion': incoming_motion,
+                'outgoingMotion': outgoing_motion,
+                'localMotion': local_motion,
+                'isMotionHotspot': is_motion_hotspot,
+                'requestedIntervalPosition': requested_position,
+                'evidencePriority': evidence_priority,
+                'evidenceReasons': evidence_reasons,
             }
 
         return tracked_frames, {
@@ -323,6 +446,7 @@ class IntervalTrackingService:
             'trajectoryStepMs': trajectory_step_ms,
             'evidenceSampleTimes': evidence_sample_times,
             'anchorTimeMs': anchor_time_ms,
+            'temporalRange': temporal_range,
         }
 
     def _match_tracked_target(

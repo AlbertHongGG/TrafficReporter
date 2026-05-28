@@ -28,6 +28,9 @@ export interface LprAnalysisOptions {
   trackerMode?: string;
   fusionMode?: string;
   restorationMode?: string;
+  recognizerBackend?: string;
+  temporalEvidenceMode?: string;
+  sequenceReviewMode?: string;
   enableRectification?: boolean;
   enableEnhancement?: boolean;
   enableRecognizerComparison?: boolean;
@@ -42,6 +45,8 @@ export interface LprAnalysisOptions {
   minAcceptedConfidence?: number;
   minCandidateMargin?: number;
   minIntervalSupportFrames?: number;
+  minSequencePersistence?: number;
+  maxSequenceGapCount?: number;
 }
 
 export interface LprAnalysisProfileDefinition {
@@ -73,6 +78,10 @@ export interface LprAnalysisProvenance {
   analysisProfileId: LprAnalysisProfileId | null;
   developerDiagnosticsEnabled: boolean;
   runtimeVersion: string | null;
+  restorationMode?: string | null;
+  recognizerBackend?: string | null;
+  temporalEvidenceMode?: string | null;
+  sequenceReviewMode?: string | null;
   emittedAtMs: number;
 }
 
@@ -175,6 +184,20 @@ export interface LprTrackingSummary {
   requestedFrameCount: number;
   degradedReason: string | null;
   terminatedEarly: boolean;
+}
+
+export type LprSequenceTier = 'stable' | 'drifting' | 'gapped' | 'fragmented';
+
+export interface LprSequenceSummary {
+  sequenceTier: LprSequenceTier;
+  dominantText: string | null;
+  persistenceRatio: number;
+  supportFrameCount: number;
+  sampleCount: number;
+  supportFrameGapCount: number;
+  predictionSwitchCount: number;
+  characterConsistency: number[];
+  characterConsistencyMean: number;
 }
 
 export interface LprResultHistoryEntry {
@@ -286,6 +309,7 @@ export interface LprIntervalAnalysisResponse {
   runtime: LprRuntimeStatus;
   jobStatus?: LprJobStatus;
   tracking?: LprTrackingSummary | null;
+  sequence?: LprSequenceSummary | null;
   diagnostics?: LprDiagnostics | null;
 }
 

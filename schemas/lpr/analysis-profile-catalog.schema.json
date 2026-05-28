@@ -17,6 +17,9 @@
         "trackerMode": { "type": "string" },
         "fusionMode": { "type": "string" },
         "restorationMode": { "type": "string" },
+        "recognizerBackend": { "type": "string" },
+        "temporalEvidenceMode": { "type": "string" },
+        "sequenceReviewMode": { "type": "string" },
         "enableRectification": { "type": "boolean" },
         "enableEnhancement": { "type": "boolean" },
         "enableRecognizerComparison": { "type": "boolean" },
@@ -30,7 +33,9 @@
         "enableReliabilityGates": { "type": "boolean" },
         "minAcceptedConfidence": { "type": "number" },
         "minCandidateMargin": { "type": "number" },
-        "minIntervalSupportFrames": { "type": "integer", "minimum": 1 }
+        "minIntervalSupportFrames": { "type": "integer", "minimum": 1 },
+        "minSequencePersistence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "maxSequenceGapCount": { "type": "integer", "minimum": 0 }
       }
     },
     "profiles": {
@@ -53,6 +58,9 @@
               "trackerMode": { "type": "string" },
               "fusionMode": { "type": "string" },
               "restorationMode": { "type": "string" },
+              "recognizerBackend": { "type": "string" },
+              "temporalEvidenceMode": { "type": "string" },
+              "sequenceReviewMode": { "type": "string" },
               "enableRectification": { "type": "boolean" },
               "enableEnhancement": { "type": "boolean" },
               "enableRecognizerComparison": { "type": "boolean" },
@@ -66,7 +74,9 @@
               "enableReliabilityGates": { "type": "boolean" },
               "minAcceptedConfidence": { "type": "number" },
               "minCandidateMargin": { "type": "number" },
-              "minIntervalSupportFrames": { "type": "integer", "minimum": 1 }
+              "minIntervalSupportFrames": { "type": "integer", "minimum": 1 },
+              "minSequencePersistence": { "type": "number", "minimum": 0, "maximum": 1 },
+              "maxSequenceGapCount": { "type": "integer", "minimum": 0 }
             }
           }
         }

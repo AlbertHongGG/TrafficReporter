@@ -115,6 +115,8 @@ def build_summary_markdown(bundle: dict[str, Any]) -> str:
         f"- No candidate: {_format_rate(metrics.get('noCandidateRate'))}",
         f"- Mean CER: {_format_number(metrics.get('meanCharacterErrorRate'))}",
         f"- Mean accepted margin: {_format_number(metrics.get('meanAcceptedMargin'))}",
+        f"- Mean tracking coverage: {_format_rate(metrics.get('meanTrackingCoverageRatio'))}",
+        f"- Mean sequence persistence: {_format_rate(metrics.get('meanSequencePersistence'))}",
     ]) + '\n'
 
 
@@ -132,6 +134,8 @@ def build_report_html(bundle: dict[str, Any]) -> str:
         ('No Candidate', _format_rate(metrics.get('noCandidateRate'))),
         ('Mean CER', _format_number(metrics.get('meanCharacterErrorRate'))),
         ('Mean Margin', _format_number(metrics.get('meanAcceptedMargin'))),
+        ('Tracking Coverage', _format_rate(metrics.get('meanTrackingCoverageRatio'))),
+        ('Sequence Persistence', _format_rate(metrics.get('meanSequencePersistence'))),
         ('P95 Latency', _format_number((metrics.get('latencyMs') or {}).get('p95'), 1) + ' ms'),
     ]
 
@@ -145,6 +149,8 @@ def build_report_html(bundle: dict[str, Any]) -> str:
         localization = case.get('localization') or {}
         review = case['review']
         provenance = case['provenance']
+        tracking = case.get('tracking') if isinstance(case.get('tracking'), dict) else {}
+        sequence = case.get('sequence') if isinstance(case.get('sequence'), dict) else {}
         expected_display = format_case_expectation(str(case.get('expectationKind') or 'readable'), case.get('expectedText'))
         rows.append(
             '<tr>'
@@ -159,10 +165,12 @@ def build_report_html(bundle: dict[str, Any]) -> str:
             f'<td>{_format_number(case.get("latencyMs"), 1)}</td>'
             f'<td>{_format_number(localization.get("plateMeanIoU"), 3)}</td>'
             f'<td>{_format_number(localization.get("targetMeanIoU"), 3)}</td>'
+            f'<td>{_safe_text(tracking.get("trackingTier"))}</td>'
+            f'<td>{_safe_text(sequence.get("sequenceTier"))}</td>'
             '</tr>'
         )
 
-    rows_markup = ''.join(rows) or '<tr><td colspan="11">No cases.</td></tr>'
+    rows_markup = ''.join(rows) or '<tr><td colspan="13">No cases.</td></tr>'
     failure_breakdown = ''.join(
         f'<li><strong>{_safe_text(name)}</strong>: {_safe_text(count)}</li>'
         for name, count in sorted((metrics.get('failureBreakdown') or {}).items())
@@ -171,6 +179,14 @@ def build_report_html(bundle: dict[str, Any]) -> str:
         f'<li><strong>{_safe_text(name)}</strong>: {_safe_text(count)}</li>'
         for name, count in sorted((metrics.get('reviewBreakdown') or {}).items())
     ) or '<li>No review states recorded.</li>'
+    tracking_breakdown = ''.join(
+        f'<li><strong>{_safe_text(name)}</strong>: {_safe_text(count)}</li>'
+        for name, count in sorted((metrics.get('trackingTierBreakdown') or {}).items())
+    ) or '<li>No tracking tiers recorded.</li>'
+    sequence_breakdown = ''.join(
+        f'<li><strong>{_safe_text(name)}</strong>: {_safe_text(count)}</li>'
+        for name, count in sorted((metrics.get('sequenceTierBreakdown') or {}).items())
+    ) or '<li>No sequence tiers recorded.</li>'
 
     return f'''<!DOCTYPE html>
 <html lang="en">
@@ -221,6 +237,10 @@ def build_report_html(bundle: dict[str, Any]) -> str:
           <ul>{failure_breakdown}</ul>
           <h2>Review Breakdown</h2>
           <ul>{review_breakdown}</ul>
+          <h2>Tracking Tiers</h2>
+          <ul>{tracking_breakdown}</ul>
+          <h2>Sequence Tiers</h2>
+          <ul>{sequence_breakdown}</ul>
         </aside>
         <section class="panel">
           <h2>Cases</h2>
@@ -238,6 +258,8 @@ def build_report_html(bundle: dict[str, Any]) -> str:
                 <th>Latency ms</th>
                 <th>Plate IoU</th>
                 <th>Target IoU</th>
+                <th>Tracking</th>
+                <th>Sequence</th>
               </tr>
             </thead>
             <tbody>{rows_markup}</tbody>

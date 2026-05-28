@@ -107,6 +107,7 @@ class BenchmarkRunWorkflow:
             case_character_error_rate = _expectation_character_error_rate(expectation_kind, expected_text, best_text)
             localization = _evaluate_localization(case_payload, response)
             track_metrics_case = _evaluate_track_consistency(response, expectation_kind, expected_text) if mode != 'frame' else None
+            sequence_payload = _normalized_sequence_payload(response)
             failure_reason = _classify_failure_reason(
                 expectation_kind,
                 exact_match,
@@ -143,6 +144,7 @@ class BenchmarkRunWorkflow:
                     'localization': localization,
                     'trackMetrics': track_metrics_case,
                     'tracking': dict(response.get('tracking') or {}) if isinstance(response.get('tracking'), dict) else None,
+                    'sequence': sequence_payload,
                     'failureReason': failure_reason,
                     'review': dict(review_payload),
                     'provenance': dict(provenance_payload),
@@ -202,9 +204,24 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
                 },
                 'confidenceCalibration': {'expectedCalibrationError': 0.0, 'bins': []},
                 'failureBreakdown': {},
+                'intervalTrackingCaseCount': 0,
+                'trackingTierBreakdown': {},
+                'meanTrackingCoverageRatio': None,
+                'degradedTrackingRate': None,
+                'meanTrackedFrameCount': None,
+                'intervalSequenceCaseCount': 0,
+                'sequenceTierBreakdown': {},
+                'meanSequencePersistence': None,
+                'meanSequenceGapCount': None,
                 'tagBreakdown': {},
                 'datasetBreakdown': {},
                 'splitBreakdown': {},
+                'difficultyBreakdown': {
+                    'category': {},
+                    'trackingTier': {},
+                    'sequenceTier': {},
+                    'reviewStatus': {},
+                },
             },
             'runtime': runtime_status,
         }
@@ -226,6 +243,14 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
     tracked_frame_counts: list[int] = []
     degraded_tracking_cases = 0
     interval_tracking_cases = 0
+    sequence_tier_counts: dict[str, int] = {}
+    sequence_persistence_values: list[float] = []
+    sequence_gap_values: list[float] = []
+    interval_sequence_cases = 0
+    difficulty_category_metrics: dict[str, dict[str, float]] = {}
+    difficulty_tracking_tier_metrics: dict[str, dict[str, float]] = {}
+    difficulty_sequence_tier_metrics: dict[str, dict[str, float]] = {}
+    difficulty_review_status_metrics: dict[str, dict[str, float]] = {}
 
     for result in benchmark_results:
         exact_match = bool(result.get('exactMatch'))
@@ -239,6 +264,7 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
         localization = dict(result.get('localization') or {})
         track_metrics_case = dict(result.get('trackMetrics') or {}) if isinstance(result.get('trackMetrics'), dict) else None
         tracking_payload = dict(result.get('tracking') or {}) if isinstance(result.get('tracking'), dict) else None
+        sequence_payload = dict(result.get('sequence') or {}) if isinstance(result.get('sequence'), dict) else None
         metadata = dict(result.get('metadata') or {})
         review_payload = _normalized_review_payload(result)
         review_status = review_payload['status']
@@ -266,6 +292,16 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
             tracked_frame_count = _coerce_optional_int(tracking_payload.get('trackedFrameCount'))
             if tracked_frame_count is not None:
                 tracked_frame_counts.append(tracked_frame_count)
+        if sequence_payload:
+            interval_sequence_cases += 1
+            sequence_tier = str(sequence_payload.get('sequenceTier') or 'unknown')
+            sequence_tier_counts[sequence_tier] = sequence_tier_counts.get(sequence_tier, 0) + 1
+            persistence_ratio = _coerce_optional_float(sequence_payload.get('persistenceRatio'))
+            if persistence_ratio is not None:
+                sequence_persistence_values.append(persistence_ratio)
+            support_gap_count = _coerce_optional_int(sequence_payload.get('supportFrameGapCount'))
+            if support_gap_count is not None:
+                sequence_gap_values.append(float(support_gap_count))
 
         case_metrics = {
             'exactMatch': exact_match,
@@ -286,6 +322,8 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
             'timeToFirstCorrectMs': (track_metrics_case or {}).get('timeToFirstCorrectMs'),
             'trackingCoverageRatio': (tracking_payload or {}).get('coverageRatio'),
             'trackedFrameCount': (tracking_payload or {}).get('trackedFrameCount'),
+            'sequencePersistence': (sequence_payload or {}).get('persistenceRatio'),
+            'sequenceGapCount': (sequence_payload or {}).get('supportFrameGapCount'),
         }
 
         for tag in list(result.get('tags') or []):
@@ -293,8 +331,17 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
 
         dataset_name = str(metadata.get('dataset') or 'unknown')
         split_name = str(metadata.get('split') or 'unknown')
+        category_name = str(metadata.get('category') or metadata.get('dominantCategory') or 'uncategorized')
         _update_metric_bucket(dataset_metrics.setdefault(dataset_name, _new_metric_bucket()), case_metrics)
         _update_metric_bucket(split_metrics.setdefault(split_name, _new_metric_bucket()), case_metrics)
+        _update_metric_bucket(difficulty_category_metrics.setdefault(category_name, _new_metric_bucket()), case_metrics)
+        _update_metric_bucket(difficulty_review_status_metrics.setdefault(review_status, _new_metric_bucket()), case_metrics)
+        if tracking_payload:
+            tracking_tier = str(tracking_payload.get('trackingTier') or 'unknown')
+            _update_metric_bucket(difficulty_tracking_tier_metrics.setdefault(tracking_tier, _new_metric_bucket()), case_metrics)
+        if sequence_payload:
+            sequence_tier = str(sequence_payload.get('sequenceTier') or 'unknown')
+            _update_metric_bucket(difficulty_sequence_tier_metrics.setdefault(sequence_tier, _new_metric_bucket()), case_metrics)
 
     total_cases = len(benchmark_results)
     metrics = {
@@ -321,6 +368,10 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
         'meanTrackingCoverageRatio': _mean_values(tracking_coverage_values),
         'degradedTrackingRate': (degraded_tracking_cases / interval_tracking_cases) if interval_tracking_cases else None,
         'meanTrackedFrameCount': (sum(tracked_frame_counts) / len(tracked_frame_counts)) if tracked_frame_counts else None,
+        'intervalSequenceCaseCount': interval_sequence_cases,
+        'sequenceTierBreakdown': dict(sorted(sequence_tier_counts.items())),
+        'meanSequencePersistence': _mean_values(sequence_persistence_values),
+        'meanSequenceGapCount': _mean_values(sequence_gap_values),
         'tagBreakdown': {
             tag: _finalize_metric_bucket(values)
             for tag, values in sorted(tag_metrics.items())
@@ -333,12 +384,31 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
             split: _finalize_metric_bucket(values)
             for split, values in sorted(split_metrics.items())
         },
+        'difficultyBreakdown': {
+            'category': {
+                label: _finalize_metric_bucket(values)
+                for label, values in sorted(difficulty_category_metrics.items())
+            },
+            'trackingTier': {
+                label: _finalize_metric_bucket(values)
+                for label, values in sorted(difficulty_tracking_tier_metrics.items())
+            },
+            'sequenceTier': {
+                label: _finalize_metric_bucket(values)
+                for label, values in sorted(difficulty_sequence_tier_metrics.items())
+            },
+            'reviewStatus': {
+                label: _finalize_metric_bucket(values)
+                for label, values in sorted(difficulty_review_status_metrics.items())
+            },
+        },
     }
     summary = (
         f"{total_cases} cases, exact={metrics['exactMatchRate']:.1%}, "
         f"top3={metrics['top3MatchRate']:.1%}, cer={metrics['meanCharacterErrorRate']:.3f}, "
         f"review={metrics['reviewRequiredRate']:.1%}, noCandidate={metrics['noCandidateRate']:.1%}, "
         f"coverage={_format_optional_ratio(metrics['meanTrackingCoverageRatio'])}, "
+        f"sequence={_format_optional_ratio(metrics['meanSequencePersistence'])}, "
         f"plateIoU={_safe_metric_average(benchmark_results, 'localization', 'plateMeanIoU'):.3f}, "
         f"p95={metrics['latencyMs']['p95']:.1f}ms"
     )
@@ -526,12 +596,20 @@ def _new_metric_bucket() -> dict[str, float]:
         'targetRecallSum': 0.0,
         'targetRecallCount': 0.0,
         'trackCases': 0.0,
+        'trackingCoverageRatio': 0.0,
+        'trackingCoverageRatioCount': 0.0,
+        'trackedFrameCount': 0.0,
+        'trackedFrameCountCount': 0.0,
         'majorityExact': 0.0,
         'predictionSwitchCount': 0.0,
         'sampleExactMatchRate': 0.0,
         'sampleExactMatchRateCount': 0.0,
         'timeToFirstCorrectMs': 0.0,
         'timeToFirstCorrectCount': 0.0,
+        'sequencePersistence': 0.0,
+        'sequencePersistenceCount': 0.0,
+        'sequenceGapCount': 0.0,
+        'sequenceGapCountCount': 0.0,
     }
 
 
@@ -567,6 +645,12 @@ def _update_metric_bucket(bucket: dict[str, float], case_metrics: dict[str, Any]
     if case_metrics.get('trackMajorityExactMatch') is not None:
         bucket['trackCases'] += 1.0
         bucket['majorityExact'] += 1.0 if case_metrics.get('trackMajorityExactMatch') else 0.0
+    if isinstance(case_metrics.get('trackingCoverageRatio'), (int, float)):
+        bucket['trackingCoverageRatio'] += float(case_metrics['trackingCoverageRatio'])
+        bucket['trackingCoverageRatioCount'] += 1.0
+    if isinstance(case_metrics.get('trackedFrameCount'), (int, float)):
+        bucket['trackedFrameCount'] += float(case_metrics['trackedFrameCount'])
+        bucket['trackedFrameCountCount'] += 1.0
     if isinstance(case_metrics.get('predictionSwitchCount'), (int, float)):
         bucket['predictionSwitchCount'] += float(case_metrics['predictionSwitchCount'])
     if isinstance(case_metrics.get('sampleExactMatchRate'), (int, float)):
@@ -575,6 +659,12 @@ def _update_metric_bucket(bucket: dict[str, float], case_metrics: dict[str, Any]
     if isinstance(case_metrics.get('timeToFirstCorrectMs'), (int, float)):
         bucket['timeToFirstCorrectMs'] += float(case_metrics['timeToFirstCorrectMs'])
         bucket['timeToFirstCorrectCount'] += 1.0
+    if isinstance(case_metrics.get('sequencePersistence'), (int, float)):
+        bucket['sequencePersistence'] += float(case_metrics['sequencePersistence'])
+        bucket['sequencePersistenceCount'] += 1.0
+    if isinstance(case_metrics.get('sequenceGapCount'), (int, float)):
+        bucket['sequenceGapCount'] += float(case_metrics['sequenceGapCount'])
+        bucket['sequenceGapCountCount'] += 1.0
 
 
 def _finalize_metric_bucket(bucket: dict[str, float]) -> dict[str, float | None]:
@@ -593,10 +683,14 @@ def _finalize_metric_bucket(bucket: dict[str, float]) -> dict[str, float | None]
         'plateLocalizationRecall': bucket['plateRecallSum'] / bucket['plateRecallCount'] if bucket['plateRecallCount'] else None,
         'meanTargetIoU': bucket['targetIoUSum'] / bucket['targetIoUCount'] if bucket['targetIoUCount'] else None,
         'targetLocalizationRecall': bucket['targetRecallSum'] / bucket['targetRecallCount'] if bucket['targetRecallCount'] else None,
+        'meanTrackingCoverageRatio': bucket['trackingCoverageRatio'] / bucket['trackingCoverageRatioCount'] if bucket['trackingCoverageRatioCount'] else None,
+        'meanTrackedFrameCount': bucket['trackedFrameCount'] / bucket['trackedFrameCountCount'] if bucket['trackedFrameCountCount'] else None,
         'trackMajorityExactMatchRate': bucket['majorityExact'] / bucket['trackCases'] if bucket['trackCases'] else None,
         'meanPredictionSwitchCount': bucket['predictionSwitchCount'] / bucket['trackCases'] if bucket['trackCases'] else None,
         'meanSampleExactMatchRate': bucket['sampleExactMatchRate'] / bucket['sampleExactMatchRateCount'] if bucket['sampleExactMatchRateCount'] else None,
         'meanTimeToFirstCorrectMs': bucket['timeToFirstCorrectMs'] / bucket['timeToFirstCorrectCount'] if bucket['timeToFirstCorrectCount'] else None,
+        'meanSequencePersistence': bucket['sequencePersistence'] / bucket['sequencePersistenceCount'] if bucket['sequencePersistenceCount'] else None,
+        'meanSequenceGapCount': bucket['sequenceGapCount'] / bucket['sequenceGapCountCount'] if bucket['sequenceGapCountCount'] else None,
     }
 
 
@@ -764,9 +858,28 @@ def _classify_failure_reason(
         return 'plate-quality-poor'
     if track_metrics_case and int(track_metrics_case.get('predictionSwitchCount') or 0) >= 2:
         return 'fusion-unstable'
+    if _sequence_indicates_instability(response):
+        return 'fusion-unstable'
     if _has_candidate_disagreement(response, accepted_margin):
         return 'ocr-disagreement'
     return 'wrong-text'
+
+
+def _sequence_indicates_instability(response: dict[str, Any]) -> bool:
+    sequence_payload = response.get('sequence')
+    if not isinstance(sequence_payload, dict):
+        return False
+
+    sequence_tier = str(sequence_payload.get('sequenceTier') or '').strip().lower()
+    if sequence_tier in {'fragmented', 'gapped', 'drifting'}:
+        return True
+
+    persistence_ratio = _coerce_optional_float(sequence_payload.get('persistenceRatio'))
+    if persistence_ratio is not None and persistence_ratio < 0.55:
+        return True
+
+    support_gap_count = _coerce_optional_int(sequence_payload.get('supportFrameGapCount'))
+    return support_gap_count is not None and support_gap_count > 1
 
 
 def _sample_quality_scores(response: dict[str, Any]) -> list[float]:
@@ -946,3 +1059,36 @@ def _normalized_review_payload(result: dict[str, Any]) -> dict[str, Any]:
         reasons = ['no-candidate']
 
     return {'status': status, 'reasons': reasons}
+
+
+def _normalized_sequence_payload(response: dict[str, Any]) -> dict[str, Any] | None:
+    sequence_payload = response.get('sequence')
+    if not isinstance(sequence_payload, dict):
+        return None
+
+    character_consistency = [
+        float(value)
+        for value in sequence_payload.get('characterConsistency') or []
+        if isinstance(value, (int, float))
+    ]
+    dominant_text = normalize_plate_text(sequence_payload.get('dominantText')) or None
+    persistence_ratio = _coerce_optional_float(sequence_payload.get('persistenceRatio')) or 0.0
+    support_frame_count = _coerce_optional_int(sequence_payload.get('supportFrameCount')) or 0
+    sample_count = _coerce_optional_int(sequence_payload.get('sampleCount')) or 0
+    support_gap_count = _coerce_optional_int(sequence_payload.get('supportFrameGapCount')) or 0
+    prediction_switch_count = _coerce_optional_int(sequence_payload.get('predictionSwitchCount')) or 0
+    character_consistency_mean = _coerce_optional_float(sequence_payload.get('characterConsistencyMean'))
+    if character_consistency_mean is None:
+        character_consistency_mean = (sum(character_consistency) / len(character_consistency)) if character_consistency else 0.0
+
+    return {
+        'sequenceTier': str(sequence_payload.get('sequenceTier') or 'fragmented'),
+        'dominantText': dominant_text,
+        'persistenceRatio': persistence_ratio,
+        'supportFrameCount': support_frame_count,
+        'sampleCount': sample_count,
+        'supportFrameGapCount': support_gap_count,
+        'predictionSwitchCount': prediction_switch_count,
+        'characterConsistency': character_consistency,
+        'characterConsistencyMean': character_consistency_mean,
+    }

@@ -6,7 +6,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from traffic_lpr_runtime.application.pipeline_support import AnalysisOptions
 from traffic_lpr_runtime.application.workflows import IntervalAnalysisWorkflow
+from traffic_lpr_runtime.application.workflows import _select_interval_evidence_frames
 from traffic_lpr_runtime.domain.errors import RuntimeFailure
 from traffic_lpr_runtime.domain.models import FrameSample, PlateCandidate, QualityMetrics, TargetTrack, TrackedRegion
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect
@@ -27,6 +29,123 @@ def make_quality() -> QualityMetrics:
 
 
 class IntervalWorkflowTests(unittest.TestCase):
+    def test_select_interval_evidence_frames_prefers_anchor_edges_and_motion_hotspots(self) -> None:
+        tracked_frames = [
+            TrackedRegion(
+                id=f'track-{time_ms}',
+                time_ms=time_ms,
+                box=NormalizedRect(x=0.1 + (index * 0.02), y=0.2, width=0.12, height=0.24),
+                confidence=0.72 + (index * 0.03),
+                class_name='motorcycle',
+                diagnostics={
+                    'isEvidenceSample': time_ms in {1000, 1200, 1400, 1600},
+                    'isAnchorFrame': time_ms == 1300,
+                    'isMotionHotspot': time_ms == 1500,
+                    'localMotion': 0.14 if time_ms == 1500 else 0.02,
+                    'evidencePriority': 3.0 if time_ms == 1500 else 1.0 + index,
+                },
+            )
+            for index, time_ms in enumerate([1000, 1100, 1200, 1300, 1400, 1500, 1600])
+        ]
+
+        evidence_frames = _select_interval_evidence_frames(tracked_frames, AnalysisOptions(temporal_evidence_mode='motion-aware'))
+
+        self.assertEqual([frame.time_ms for frame in evidence_frames], [1000, 1300, 1500, 1600])
+        self.assertTrue(all(frame.diagnostics.get('selectedForEvidenceAnalysis') is True for frame in evidence_frames))
+
+    def test_interval_analysis_forces_review_when_sequence_is_fragmented(self) -> None:
+        tracked_region = TrackedRegion(
+            id='track-1',
+            time_ms=11000,
+            box=NormalizedRect(x=0.32, y=0.2, width=0.18, height=0.24),
+            confidence=0.92,
+            class_name='motorcycle',
+            diagnostics={'isEvidenceSample': True, 'isAnchorFrame': True},
+        )
+        candidate = PlateCandidate(
+            id='candidate-1',
+            text='NCE9762',
+            confidence=0.93,
+            source='ocr:fastplate',
+            frame_time_ms=11000,
+            country_code='TW',
+            box=None,
+            quality=make_quality(),
+        )
+
+        workflow = IntervalAnalysisWorkflow(
+            ensure_ready=lambda: None,
+            status=lambda: {'available': True, 'detail': 'ok'},
+            runtime_root=lambda: Path('runtime-root'),
+            frame_reader=type('FrameReaderStub', (), {'read_frame': staticmethod(lambda source_path, time_ms: object())})(),
+            track_target_across_interval=lambda *args, **kwargs: ([tracked_region], {'trackerMode': 'botsort'}),
+            calibrate_interval_target_boxes=lambda *args, **kwargs: {},
+            analyze_plate_candidates=lambda frame, time_ms, marker_rect, target_box, country_hints, options, artifact_root: (
+                [candidate],
+                FrameSample(
+                    id=f'sample-{time_ms}',
+                    time_ms=time_ms,
+                    target_box=target_box,
+                    plate_box=None,
+                    quality=make_quality(),
+                    candidates=[candidate],
+                    image_path=None,
+                    diagnostics={},
+                ),
+                None,
+            ),
+            aggregate_candidates=lambda samples, observations, country_hints, options, artifact_root: (
+                [candidate],
+                {
+                    'mode': 'stub',
+                    'sequence': {
+                        'sequenceTier': 'fragmented',
+                        'dominantText': 'NCE9762',
+                        'persistenceRatio': 0.25,
+                        'supportFrameCount': 1,
+                        'sampleCount': 3,
+                        'supportFrameGapCount': 2,
+                        'predictionSwitchCount': 1,
+                        'characterConsistency': [0.55, 0.52, 0.58],
+                        'characterConsistencyMean': 0.55,
+                    },
+                },
+            ),
+            apply_reliability_selection=lambda candidates, samples, country_hints, options, interval_mode: (
+                candidates,
+                candidate.id,
+                {'suggestedCandidateId': candidate.id, 'acceptedCandidateId': candidate.id, 'reviewRequired': False, 'reasons': []},
+            ),
+            build_track_payload=lambda tracked_frames, diagnostics: [
+                TargetTrack(
+                    id='track-1',
+                    class_name='motorcycle',
+                    label='motorcycle 11000ms',
+                    confidence=0.92,
+                    frames=tracked_frames,
+                    diagnostics=diagnostics,
+                ),
+            ],
+        )
+
+        result = workflow.run({
+            'sourcePath': 'demo.mp4',
+            'interval': {'startMs': 10000, 'endMs': 12000},
+            'anchorTimeMs': 11000,
+            'targetVehicleKind': 'motorcycle',
+            'selectedTargetBox': tracked_region.box.to_payload(),
+            'countryHints': ['tw'],
+            'analysisOptions': {
+                'sequenceReviewMode': 'strict',
+                'minSequencePersistence': 0.7,
+                'maxSequenceGapCount': 0,
+            },
+        })
+
+        self.assertEqual(result['sequence']['sequenceTier'], 'fragmented')
+        self.assertEqual(result['review']['status'], 'review-required')
+        self.assertIn('plate text did not remain stable across interval samples', result['review']['reasons'])
+
     def test_interval_analysis_rejects_anchor_outside_interval(self) -> None:
         workflow = IntervalAnalysisWorkflow(
             ensure_ready=lambda: None,

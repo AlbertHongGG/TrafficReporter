@@ -103,6 +103,9 @@
         { "name": "trackerMode", "type": "string", "optional": true },
         { "name": "fusionMode", "type": "string", "optional": true },
         { "name": "restorationMode", "type": "string", "optional": true },
+        { "name": "recognizerBackend", "type": "string", "optional": true },
+        { "name": "temporalEvidenceMode", "type": "string", "optional": true },
+        { "name": "sequenceReviewMode", "type": "string", "optional": true },
         { "name": "enableRectification", "type": "boolean", "optional": true },
         { "name": "enableEnhancement", "type": "boolean", "optional": true },
         { "name": "enableRecognizerComparison", "type": "boolean", "optional": true },
@@ -116,7 +119,9 @@
         { "name": "enableReliabilityGates", "type": "boolean", "optional": true },
         { "name": "minAcceptedConfidence", "type": "number", "optional": true },
         { "name": "minCandidateMargin", "type": "number", "optional": true },
-        { "name": "minIntervalSupportFrames", "type": "number", "rustType": "u32", "optional": true }
+        { "name": "minIntervalSupportFrames", "type": "number", "rustType": "u32", "optional": true },
+        { "name": "minSequencePersistence", "type": "number", "optional": true },
+        { "name": "maxSequenceGapCount", "type": "number", "rustType": "u32", "optional": true }
       ]
     },
     {
@@ -167,6 +172,10 @@
         { "name": "analysisProfileId", "type": "LprAnalysisProfileId", "nullable": true },
         { "name": "developerDiagnosticsEnabled", "type": "boolean" },
         { "name": "runtimeVersion", "type": "string", "nullable": true },
+        { "name": "restorationMode", "type": "string", "nullable": true, "optional": true },
+        { "name": "recognizerBackend", "type": "string", "nullable": true, "optional": true },
+        { "name": "temporalEvidenceMode", "type": "string", "nullable": true, "optional": true },
+        { "name": "sequenceReviewMode", "type": "string", "nullable": true, "optional": true },
         { "name": "emittedAtMs", "type": "number", "rustType": "u64" }
       ]
     },
@@ -309,6 +318,26 @@
         { "name": "requestedFrameCount", "type": "number", "rustType": "u32" },
         { "name": "degradedReason", "type": "string", "nullable": true },
         { "name": "terminatedEarly", "type": "boolean" }
+      ]
+    },
+    {
+      "name": "LprSequenceTier",
+      "kind": "stringUnion",
+      "values": ["stable", "drifting", "gapped", "fragmented"]
+    },
+    {
+      "name": "LprSequenceSummary",
+      "kind": "object",
+      "fields": [
+        { "name": "sequenceTier", "type": "LprSequenceTier" },
+        { "name": "dominantText", "type": "string", "nullable": true },
+        { "name": "persistenceRatio", "type": "number" },
+        { "name": "supportFrameCount", "type": "number", "rustType": "u32" },
+        { "name": "sampleCount", "type": "number", "rustType": "u32" },
+        { "name": "supportFrameGapCount", "type": "number", "rustType": "u32" },
+        { "name": "predictionSwitchCount", "type": "number", "rustType": "u32" },
+        { "name": "characterConsistency", "type": "array", "items": "number" },
+        { "name": "characterConsistencyMean", "type": "number" }
       ]
     },
     {
@@ -456,6 +485,7 @@
         { "name": "runtime", "type": "LprRuntimeStatus" },
         { "name": "jobStatus", "type": "LprJobStatus", "optional": true },
         { "name": "tracking", "type": "LprTrackingSummary", "optional": true, "nullable": true },
+        { "name": "sequence", "type": "LprSequenceSummary", "optional": true, "nullable": true },
         { "name": "diagnostics", "type": "LprDiagnostics", "optional": true, "nullable": true }
       ]
     },

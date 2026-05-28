@@ -28,6 +28,9 @@ pub struct LprAnalysisOptionsPayload {
     pub tracker_mode: Option<String>,
     pub fusion_mode: Option<String>,
     pub restoration_mode: Option<String>,
+    pub recognizer_backend: Option<String>,
+    pub temporal_evidence_mode: Option<String>,
+    pub sequence_review_mode: Option<String>,
     pub enable_rectification: Option<bool>,
     pub enable_enhancement: Option<bool>,
     pub enable_recognizer_comparison: Option<bool>,
@@ -42,6 +45,8 @@ pub struct LprAnalysisOptionsPayload {
     pub min_accepted_confidence: Option<f64>,
     pub min_candidate_margin: Option<f64>,
     pub min_interval_support_frames: Option<u32>,
+    pub min_sequence_persistence: Option<f64>,
+    pub max_sequence_gap_count: Option<u32>,
 }
 
 pub type LprReviewStatus = String;
@@ -63,6 +68,10 @@ pub struct LprAnalysisProvenancePayload {
     pub analysis_profile_id: Option<LprAnalysisProfileId>,
     pub developer_diagnostics_enabled: bool,
     pub runtime_version: Option<String>,
+    pub restoration_mode: Option<String>,
+    pub recognizer_backend: Option<String>,
+    pub temporal_evidence_mode: Option<String>,
+    pub sequence_review_mode: Option<String>,
     pub emitted_at_ms: u64,
 }
 
@@ -162,6 +171,22 @@ pub struct LprTrackingSummary {
     pub terminated_early: bool,
 }
 
+pub type LprSequenceTier = String;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LprSequenceSummary {
+    pub sequence_tier: LprSequenceTier,
+    pub dominant_text: Option<String>,
+    pub persistence_ratio: f64,
+    pub support_frame_count: u32,
+    pub sample_count: u32,
+    pub support_frame_gap_count: u32,
+    pub prediction_switch_count: u32,
+    pub character_consistency: Vec<f64>,
+    pub character_consistency_mean: f64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LprRuntimeStatusPayload {
@@ -252,6 +277,7 @@ pub struct LprIntervalAnalysisResponsePayload {
     pub runtime: LprRuntimeStatusPayload,
     pub job_status: Option<LprJobStatus>,
     pub tracking: Option<LprTrackingSummary>,
+    pub sequence: Option<LprSequenceSummary>,
     pub diagnostics: Option<LprDiagnostics>,
 }
 

@@ -11,6 +11,47 @@ from traffic_lpr_runtime.domain.text import normalize_plate_text
 from traffic_lpr_runtime.infrastructure.dependencies import DependencyRegistry
 
 
+def _ordered_top_sample_candidates(samples: list[FrameSample]) -> list[tuple[int, PlateCandidate | None, str]]:
+    ordered: list[tuple[int, PlateCandidate | None, str]] = []
+    for sample in sorted(samples, key=lambda item: item.time_ms):
+        candidate = sample.candidates[0] if sample.candidates else None
+        text = normalize_plate_text(candidate.text) if candidate is not None else ''
+        ordered.append((sample.time_ms, candidate, text))
+    return ordered
+
+
+def _support_gap_count(support_frames: list[int], ordered_sample_times: list[int]) -> int:
+    if not support_frames or not ordered_sample_times:
+        return 0
+    sample_index_by_time = {time_ms: index for index, time_ms in enumerate(ordered_sample_times)}
+    sorted_indexes = sorted(
+        sample_index_by_time[time_ms]
+        for time_ms in support_frames
+        if time_ms in sample_index_by_time
+    )
+    gap_count = 0
+    for previous, current in zip(sorted_indexes, sorted_indexes[1:]):
+        if current - previous > 1:
+            gap_count += 1
+    return gap_count
+
+
+def _sequence_tier(
+    persistence_ratio: float,
+    gap_count: int,
+    prediction_switch_count: int,
+    support_frame_count: int,
+    character_consistency_mean: float,
+) -> str:
+    if support_frame_count <= 1 or persistence_ratio < 0.4:
+        return 'fragmented'
+    if gap_count > 1:
+        return 'gapped'
+    if prediction_switch_count > 0 or persistence_ratio < 0.72 or character_consistency_mean < 0.68:
+        return 'drifting'
+    return 'stable'
+
+
 class CandidateFusionService:
     def __init__(self, dependencies: DependencyRegistry, primary_recognizer: PlateRecognizer) -> None:
         self._dependencies = dependencies
@@ -62,6 +103,7 @@ class CandidateFusionService:
         }
         aggregated: dict[str, dict[str, Any]] = {}
         candidate_pool: list[PlateCandidate] = []
+        ordered_sample_times = [sample.time_ms for sample in sorted(samples, key=lambda item: item.time_ms)]
 
         for sample in samples:
             for candidate in sample.candidates:
@@ -74,6 +116,8 @@ class CandidateFusionService:
         legacy_candidate = self._legacy_vote_candidate(samples)
         if legacy_candidate is not None:
             candidate_pool.append(legacy_candidate)
+
+        sequence_summary = self._build_sequence_summary(samples, char_fused_candidate)
 
         fused_image_candidates, fused_image_diagnostics = self._fuse_aligned_plate_images(
             observations,
@@ -142,6 +186,32 @@ class CandidateFusionService:
         for item in ranked[:8]:
             candidate = item['candidate']
             candidate.confidence = max(0.0, min(1.0, item['weight'] / best_weight))
+            support_frames = [
+                int(time_ms)
+                for time_ms in ((candidate.diagnostics or {}).get('supportFrames') or [])
+                if time_ms is not None
+            ]
+            support_ratio = len(support_frames) / max(len(ordered_sample_times), 1)
+            gap_count = _support_gap_count(support_frames, ordered_sample_times)
+            candidate.diagnostics = {
+                **(candidate.diagnostics or {}),
+                'sequenceSupportRatio': support_ratio,
+                'sequenceGapCount': gap_count,
+                'sequenceTier': (
+                    sequence_summary['sequenceTier']
+                    if candidate.text == sequence_summary.get('dominantText')
+                    else _sequence_tier(
+                        support_ratio,
+                        gap_count,
+                        int(sequence_summary.get('predictionSwitchCount') or 0),
+                        len(support_frames),
+                        float(sequence_summary.get('characterConsistencyMean') or 0.0),
+                    )
+                ),
+                'sequencePersistenceRatio': sequence_summary['persistenceRatio'],
+                'sequenceCharacterConsistency': sequence_summary['characterConsistency'],
+                'dominantSequenceText': sequence_summary.get('dominantText'),
+            }
             fused_candidates.append(candidate)
 
         return fused_candidates, {
@@ -150,6 +220,77 @@ class CandidateFusionService:
             'charFusionApplied': char_fused_candidate is not None,
             'legacyVoteApplied': legacy_candidate is not None,
             'fusedImage': fused_image_diagnostics,
+            'sequence': sequence_summary,
+        }
+
+    def _build_sequence_summary(
+        self,
+        samples: list[FrameSample],
+        char_fused_candidate: PlateCandidate | None,
+    ) -> dict[str, Any]:
+        ordered_candidates = _ordered_top_sample_candidates(samples)
+        readable_entries = [(time_ms, text) for time_ms, _, text in ordered_candidates if text]
+        sample_count = len(ordered_candidates)
+        support_frame_count = len(readable_entries)
+        if support_frame_count == 0:
+            return {
+                'sequenceTier': 'fragmented',
+                'dominantText': None,
+                'persistenceRatio': 0.0,
+                'supportFrameCount': 0,
+                'sampleCount': sample_count,
+                'supportFrameGapCount': 0,
+                'predictionSwitchCount': 0,
+                'characterConsistency': [],
+                'characterConsistencyMean': 0.0,
+            }
+
+        support_text_counts: dict[str, int] = {}
+        support_frames: list[int] = []
+        prediction_switch_count = 0
+        previous_text: str | None = None
+        for time_ms, text in readable_entries:
+            support_text_counts[text] = support_text_counts.get(text, 0) + 1
+            support_frames.append(time_ms)
+            if previous_text is not None and previous_text != text:
+                prediction_switch_count += 1
+            previous_text = text
+
+        dominant_text = max(
+            support_text_counts.items(),
+            key=lambda item: (item[1], len(item[0]), item[0]),
+        )[0]
+        persistence_ratio = support_text_counts[dominant_text] / max(support_frame_count, 1)
+        support_frame_gap_count = _support_gap_count(
+            support_frames,
+            [time_ms for time_ms, _, _ in ordered_candidates],
+        )
+        character_consistency = [
+            float(value)
+            for value in ((char_fused_candidate.diagnostics or {}).get('characterConsistency') or [])
+            if isinstance(value, (int, float))
+        ] if char_fused_candidate is not None else []
+        character_consistency_mean = (
+            sum(character_consistency) / len(character_consistency)
+            if character_consistency
+            else persistence_ratio
+        )
+        return {
+            'sequenceTier': _sequence_tier(
+                persistence_ratio,
+                support_frame_gap_count,
+                prediction_switch_count,
+                support_frame_count,
+                character_consistency_mean,
+            ),
+            'dominantText': dominant_text,
+            'persistenceRatio': persistence_ratio,
+            'supportFrameCount': support_frame_count,
+            'sampleCount': sample_count,
+            'supportFrameGapCount': support_frame_gap_count,
+            'predictionSwitchCount': prediction_switch_count,
+            'characterConsistency': character_consistency,
+            'characterConsistencyMean': character_consistency_mean,
         }
 
     def _legacy_vote_candidate(self, samples: list[FrameSample]) -> PlateCandidate | None:
@@ -222,7 +363,11 @@ class CandidateFusionService:
             return None
 
         fused_text = ''.join(max(votes.items(), key=lambda item: item[1])[0] for votes in position_votes)
-        confidence = sum(max(votes.values()) / max(sum(votes.values()), 1.0) for votes in position_votes) / len(position_votes)
+        character_consistency = [
+            max(votes.values()) / max(sum(votes.values()), 1.0)
+            for votes in position_votes
+        ]
+        confidence = sum(character_consistency) / len(position_votes)
         return PlateCandidate(
             id='fused-char-0',
             text=fused_text,
@@ -232,7 +377,11 @@ class CandidateFusionService:
             country_code=best_candidate.country_code,
             box=best_candidate.box,
             quality=best_candidate.quality,
-            diagnostics={'supportFrames': sorted(set(support_frames)), 'targetLength': target_length},
+            diagnostics={
+                'supportFrames': sorted(set(support_frames)),
+                'targetLength': target_length,
+                'characterConsistency': character_consistency,
+            },
         )
 
     def _fuse_aligned_plate_images(
@@ -256,6 +405,7 @@ class CandidateFusionService:
         total_weight = 1.0
         support = 1
         alignment_scores: list[float] = [1.0]
+        support_times: list[int] = [reference.time_ms]
 
         for observation in observations:
             if observation is reference:
@@ -273,6 +423,7 @@ class CandidateFusionService:
             total_weight += weight
             support += 1
             alignment_scores.append(score)
+            support_times.append(observation.time_ms)
 
         if support < 2:
             return [], {'applied': False, 'reason': 'insufficient-aligned'}
@@ -293,7 +444,8 @@ class CandidateFusionService:
             if candidate.source.startswith('ocr:'):
                 candidate.source = f'fused-image:{candidate.source.split(":", 1)[1]}'
             candidate.diagnostics = (candidate.diagnostics or {}) | {
-                'supportFrames': support,
+                'supportFrames': sorted(set(support_times)),
+                'supportFrameCount': support,
                 'meanAlignmentScore': sum(alignment_scores) / len(alignment_scores),
             }
 

@@ -26,6 +26,15 @@ def build_run_analysis(bundle: dict[str, Any]) -> dict[str, Any]:
     category_case_counts: Counter[str] = Counter()
     category_exact_counts: Counter[str] = Counter()
     category_failure_sources: dict[str, Counter[str]] = defaultdict(Counter)
+    tracking_tier_case_counts: Counter[str] = Counter()
+    tracking_tier_exact_counts: Counter[str] = Counter()
+    tracking_tier_failure_sources: dict[str, Counter[str]] = defaultdict(Counter)
+    sequence_tier_case_counts: Counter[str] = Counter()
+    sequence_tier_exact_counts: Counter[str] = Counter()
+    sequence_tier_failure_sources: dict[str, Counter[str]] = defaultdict(Counter)
+    review_status_case_counts: Counter[str] = Counter()
+    review_status_exact_counts: Counter[str] = Counter()
+    review_status_failure_sources: dict[str, Counter[str]] = defaultdict(Counter)
 
     failure_reason_counts: Counter[str] = Counter()
     failure_source_counts: Counter[str] = Counter()
@@ -49,11 +58,31 @@ def build_run_analysis(bundle: dict[str, Any]) -> dict[str, Any]:
         category_failure_sources[category][failure_source] += 1
         failure_reason_counts[failure_reason] += 1
         failure_source_counts[failure_source] += 1
+        review_status = _review_status(case)
+        review_status_case_counts[review_status] += 1
+        review_status_failure_sources[review_status][failure_source] += 1
+
+        tracking_payload = case.get('tracking') if isinstance(case.get('tracking'), dict) else None
+        if tracking_payload is not None:
+            tracking_tier = str(tracking_payload.get('trackingTier') or 'unknown')
+            tracking_tier_case_counts[tracking_tier] += 1
+            tracking_tier_failure_sources[tracking_tier][failure_source] += 1
+
+        sequence_payload = case.get('sequence') if isinstance(case.get('sequence'), dict) else None
+        if sequence_payload is not None:
+            sequence_tier = str(sequence_payload.get('sequenceTier') or 'unknown')
+            sequence_tier_case_counts[sequence_tier] += 1
+            sequence_tier_failure_sources[sequence_tier][failure_source] += 1
 
         if exact_match:
             dataset_exact_counts[dataset] += 1
             split_exact_counts[split] += 1
             category_exact_counts[category] += 1
+            review_status_exact_counts[review_status] += 1
+            if tracking_payload is not None:
+                tracking_tier_exact_counts[tracking_tier] += 1
+            if sequence_payload is not None:
+                sequence_tier_exact_counts[sequence_tier] += 1
 
     analysis = {
         'runId': bundle.get('runId'),
@@ -65,6 +94,11 @@ def build_run_analysis(bundle: dict[str, Any]) -> dict[str, Any]:
         'datasetBreakdown': _serialize_axis_breakdown(dataset_case_counts, dataset_exact_counts, dataset_failure_sources),
         'splitBreakdown': _serialize_axis_breakdown(split_case_counts, split_exact_counts, split_failure_sources),
         'categoryBreakdown': _serialize_axis_breakdown(category_case_counts, category_exact_counts, category_failure_sources),
+        'difficultyBreakdown': {
+            'trackingTier': _serialize_axis_breakdown(tracking_tier_case_counts, tracking_tier_exact_counts, tracking_tier_failure_sources),
+            'sequenceTier': _serialize_axis_breakdown(sequence_tier_case_counts, sequence_tier_exact_counts, sequence_tier_failure_sources),
+            'reviewStatus': _serialize_axis_breakdown(review_status_case_counts, review_status_exact_counts, review_status_failure_sources),
+        },
     }
 
     taiwan_primary = analysis['datasetBreakdown'].get('AOLP')
@@ -74,6 +108,14 @@ def build_run_analysis(bundle: dict[str, Any]) -> dict[str, Any]:
             'taiwanPrimary': taiwan_primary,
             'movingCameraReliability': moving_camera_gate,
         }
+    fragmented_sequence = analysis['difficultyBreakdown']['sequenceTier'].get('fragmented')
+    degraded_tracking = analysis['difficultyBreakdown']['trackingTier'].get('detection-fallback')
+    if fragmented_sequence is not None or degraded_tracking is not None:
+        analysis.setdefault('focusBreakdown', {})
+        if fragmented_sequence is not None:
+            analysis['focusBreakdown']['fragmentedSequence'] = fragmented_sequence
+        if degraded_tracking is not None:
+            analysis['focusBreakdown']['degradedTracking'] = degraded_tracking
 
     evaluation = build_run_evaluation(bundle)
     analysis['stageBreakdown'] = dict(evaluation.get('stageBreakdown') or {})
@@ -112,6 +154,29 @@ def build_analysis_markdown(bundle: dict[str, Any], analysis: dict[str, Any]) ->
     ])
     for name, count in analysis.get('failureSourceBreakdown', {}).items():
         lines.append(f'- {name}: {count}')
+
+    lines.extend([
+        '',
+        '## Difficulty Focus',
+        '',
+    ])
+    difficulty_breakdown = analysis.get('difficultyBreakdown') if isinstance(analysis.get('difficultyBreakdown'), dict) else {}
+    for axis_name, axis_breakdown in difficulty_breakdown.items():
+        lines.append(f'### {axis_name}')
+        lines.append('')
+        if not axis_breakdown:
+            lines.append('- none')
+            lines.append('')
+            continue
+        for axis_value, payload in axis_breakdown.items():
+            failure_sources = ', '.join(
+                f'{name}={count}'
+                for name, count in (payload.get('failureSources') or {}).items()
+            ) or 'none'
+            lines.append(
+                f"- {axis_value}: cases={payload.get('cases')}, exact={_format_rate(payload.get('exactMatchRate'))}, failureSources={failure_sources}"
+            )
+        lines.append('')
 
     lines.extend([
         '',
@@ -179,3 +244,9 @@ def _format_rate(value: Any) -> str:
     if not isinstance(value, (int, float)):
         return '--'
     return f'{value * 100:.1f}%'
+
+
+def _review_status(case_payload: dict[str, Any]) -> str:
+    review_payload = case_payload.get('review') if isinstance(case_payload.get('review'), dict) else {}
+    status = str(review_payload.get('status') or 'unknown').strip()
+    return status or 'unknown'

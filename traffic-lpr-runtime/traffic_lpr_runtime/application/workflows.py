@@ -65,9 +65,103 @@ def _is_evidence_sample_frame(frame: TrackedRegion) -> bool:
     return diagnostics.get('isEvidenceSample') is True
 
 
-def _select_interval_evidence_frames(tracked_frames: list[TrackedRegion]) -> list[TrackedRegion]:
-    evidence_frames = [frame for frame in tracked_frames if _is_evidence_sample_frame(frame)]
-    return evidence_frames or tracked_frames
+def _mark_selected_for_evidence_analysis(
+    tracked_frames: list[TrackedRegion],
+    selected_times: set[int],
+) -> list[TrackedRegion]:
+    for frame in tracked_frames:
+        frame.diagnostics = {
+            **(frame.diagnostics or {}),
+            'selectedForEvidenceAnalysis': frame.time_ms in selected_times,
+        }
+    return [frame for frame in tracked_frames if frame.time_ms in selected_times]
+
+
+def _select_interval_evidence_frames(tracked_frames: list[TrackedRegion], options: AnalysisOptions) -> list[TrackedRegion]:
+    if not tracked_frames:
+        return []
+
+    scheduled_frames = [frame for frame in tracked_frames if _is_evidence_sample_frame(frame)]
+    if options.temporal_evidence_mode == 'scheduled':
+        selected_frames = scheduled_frames or tracked_frames
+        return _mark_selected_for_evidence_analysis(
+            tracked_frames,
+            {frame.time_ms for frame in selected_frames},
+        )
+
+    evidence_budget = len(scheduled_frames) if scheduled_frames else len(tracked_frames)
+    evidence_budget = max(1, min(evidence_budget, len(tracked_frames)))
+    if evidence_budget >= len(tracked_frames):
+        return _mark_selected_for_evidence_analysis(
+            tracked_frames,
+            {frame.time_ms for frame in tracked_frames},
+        )
+
+    chosen_by_time: dict[int, TrackedRegion] = {}
+
+    def choose(frame: TrackedRegion | None) -> None:
+        if frame is None:
+            return
+        chosen_by_time.setdefault(frame.time_ms, frame)
+
+    choose(tracked_frames[0])
+    choose(tracked_frames[-1])
+    choose(next((frame for frame in tracked_frames if (frame.diagnostics or {}).get('isAnchorFrame') is True), None))
+
+    hotspot_frames = [
+        frame
+        for frame in tracked_frames
+        if (frame.diagnostics or {}).get('isMotionHotspot') is True
+    ]
+    for frame in sorted(
+        hotspot_frames,
+        key=lambda candidate: float((candidate.diagnostics or {}).get('localMotion') or 0.0),
+        reverse=True,
+    ):
+        if len(chosen_by_time) >= evidence_budget:
+            break
+        choose(frame)
+
+    ranked_frames = sorted(
+        tracked_frames,
+        key=lambda candidate: (
+            float((candidate.diagnostics or {}).get('evidencePriority') or 0.0),
+            candidate.confidence,
+        ),
+        reverse=True,
+    )
+    for frame in ranked_frames:
+        if len(chosen_by_time) >= evidence_budget:
+            break
+        choose(frame)
+
+    return _mark_selected_for_evidence_analysis(tracked_frames, set(chosen_by_time))
+
+
+def _sequence_review_reasons(sequence_summary: dict[str, Any], options: AnalysisOptions) -> list[str]:
+    if not sequence_summary or options.sequence_review_mode == 'off':
+        return []
+
+    sequence_tier = str(sequence_summary.get('sequenceTier') or 'fragmented')
+    persistence_ratio = float(sequence_summary.get('persistenceRatio') or 0.0)
+    gap_count = _safe_int(sequence_summary.get('supportFrameGapCount'))
+    support_frame_count = _safe_int(sequence_summary.get('supportFrameCount'))
+    reasons: list[str] = []
+
+    if support_frame_count < options.min_interval_support_frames:
+        reasons.append('too few interval samples produced readable plate support')
+    if persistence_ratio < options.min_sequence_persistence:
+        reasons.append('plate text did not remain stable across interval samples')
+    if gap_count > options.max_sequence_gap_count:
+        reasons.append('readable OCR evidence had large gaps across the interval')
+    if sequence_tier == 'fragmented':
+        reasons.append('sequence evidence stayed fragmented across the interval')
+    elif options.sequence_review_mode == 'strict' and sequence_tier in {'drifting', 'gapped'}:
+        reasons.append('sequence evidence drifted during the interval review path')
+    elif options.sequence_review_mode == 'balanced' and sequence_tier == 'gapped':
+        reasons.append('sequence evidence lost continuity across the interval')
+
+    return _merge_reasons([], reasons)
 
 
 def _tracking_identity_review_reasons(track_diagnostics: dict[str, Any]) -> list[str]:
@@ -262,7 +356,7 @@ class FrameAnalysisWorkflow:
             'candidates': [candidate.to_payload() for candidate in candidates[:8]],
             'acceptedCandidateId': accepted_candidate_id,
             'review': build_review_state(candidates, accepted_candidate_id, selection_diagnostics),
-            'provenance': build_analysis_provenance('analyze-frame', payload, runtime_status),
+            'provenance': build_analysis_provenance('analyze-frame', payload, runtime_status, options.to_payload()),
             'runtime': runtime_status,
             'jobStatus': 'completed',
             'diagnostics': {
@@ -362,7 +456,7 @@ class IntervalAnalysisWorkflow:
             raise RuntimeFailure('Range analysis lost the selected target at the anchor frame. Reselect the vehicle on the intended frame and retry.')
 
         sample_options = options.for_interval_sample(sample_count_hint=len(tracked_frames))
-        evidence_frames = _select_interval_evidence_frames(tracked_frames)
+        evidence_frames = _select_interval_evidence_frames(tracked_frames, options)
 
         samples: list[FrameSample] = []
         observations: list[PlateObservation] = []
@@ -414,6 +508,7 @@ class IntervalAnalysisWorkflow:
             options,
             artifact_root,
         )
+        sequence_summary = dict(fusion_diagnostics.get('sequence') or {})
         _emit_progress(0.78, 'Interval', 'Fusing candidates across interval samples.', trackingTier=tracking['trackingTier'], coverageRatio=tracking['coverageRatio'])
         candidates, accepted_candidate_id, selection_diagnostics = self._apply_reliability_selection(
             candidates,
@@ -423,8 +518,9 @@ class IntervalAnalysisWorkflow:
             True,
         )
         identity_review_reasons = _tracking_identity_review_reasons(track_diagnostics)
+        sequence_review_reasons = _sequence_review_reasons(sequence_summary, options)
         degraded_reasons = [] if tracking['degradedReason'] is None else [str(tracking['degradedReason'])]
-        if identity_review_reasons or tracking['trackingTier'] != 'full':
+        if identity_review_reasons or sequence_review_reasons or tracking['trackingTier'] != 'full':
             accepted_candidate_id = None
             selection_diagnostics = {
                 **selection_diagnostics,
@@ -432,9 +528,10 @@ class IntervalAnalysisWorkflow:
                 'reviewRequired': True,
                 'reasons': _merge_reasons(
                     [reason for reason in selection_diagnostics.get('reasons') or [] if isinstance(reason, str)],
-                    [*identity_review_reasons, *degraded_reasons],
+                    [*identity_review_reasons, *sequence_review_reasons, *degraded_reasons],
                 ),
                 'tracking': track_diagnostics,
+                'sequence': sequence_summary,
             }
         if candidates:
             suggested_candidate = next(
@@ -452,6 +549,8 @@ class IntervalAnalysisWorkflow:
         if tracking['trackingTier'] != 'full':
             coverage_percent = round(float(tracking['coverageRatio']) * 100)
             summary = f'{summary} Coverage {coverage_percent}% ({tracking["trackingTier"]}).'
+        if sequence_summary.get('sequenceTier') and sequence_summary['sequenceTier'] != 'stable':
+            summary = f'{summary} Sequence {sequence_summary["sequenceTier"]}.'
 
         _emit_progress(0.92, 'Interval', 'Finalizing the interval analysis result.', trackingTier=tracking['trackingTier'], coverageRatio=tracking['coverageRatio'])
         runtime_status = self._status()
@@ -465,7 +564,8 @@ class IntervalAnalysisWorkflow:
             'candidates': [candidate.to_payload() for candidate in candidates],
             'acceptedCandidateId': accepted_candidate_id,
             'review': build_review_state(candidates, accepted_candidate_id, selection_diagnostics),
-            'provenance': build_analysis_provenance('analyze-interval', payload, runtime_status),
+            'sequence': sequence_summary,
+            'provenance': build_analysis_provenance('analyze-interval', payload, runtime_status, options.to_payload()),
             'summary': summary,
             'runtime': runtime_status,
             'jobStatus': job_status,
@@ -475,6 +575,7 @@ class IntervalAnalysisWorkflow:
                 'artifactRoot': str(artifact_root) if artifact_root else None,
                 'tracker': track_diagnostics,
                 'trackingSummary': tracking,
+                'sequence': sequence_summary,
                 'fusion': fusion_diagnostics,
                 'selection': selection_diagnostics,
             },

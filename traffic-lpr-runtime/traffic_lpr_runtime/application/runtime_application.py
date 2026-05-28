@@ -167,12 +167,14 @@ class LprRuntimeApplication:
         artifact_root: Path | None,
     ) -> tuple[list[PlateCandidate], FrameSample, PlateObservation | None]:
         working_image, crop_box = self._select_analysis_roi(frame, marker_rect, target_box)
+        recognizer_backend = _normalize_recognizer_backend(options.recognizer_backend)
+        allow_crop_refinement = recognizer_backend != 'baseline'
         baseline_candidates = self._primary_recognizer.recognize(working_image, time_ms, crop_box)
         best_baseline = baseline_candidates[0] if baseline_candidates else None
         observation = None
         crop_candidates: list[PlateCandidate] = []
 
-        if best_baseline and best_baseline.box is not None:
+        if allow_crop_refinement and best_baseline and best_baseline.box is not None:
             observation = self._plate_preprocessor.prepare(
                 frame,
                 time_ms,
@@ -190,7 +192,7 @@ class LprRuntimeApplication:
                     options,
                 )
                 observation.ocr_candidates = crop_candidates
-        elif marker_rect is not None and target_box is None and _looks_like_plate_roi(marker_rect):
+        elif allow_crop_refinement and marker_rect is not None and target_box is None and _looks_like_plate_roi(marker_rect):
             observation = self._plate_preprocessor.prepare(
                 frame,
                 time_ms,
@@ -213,6 +215,11 @@ class LprRuntimeApplication:
                 observation.ocr_candidates = crop_candidates
 
         candidates = self._rank_sample_candidates(baseline_candidates, crop_candidates, observation)
+        for candidate in candidates:
+            candidate.diagnostics = {
+                **(candidate.diagnostics or {}),
+                'recognizerBackend': recognizer_backend,
+            }
         best_candidate = candidates[0] if candidates else best_baseline
         sample_quality = (
             observation.quality
@@ -229,6 +236,8 @@ class LprRuntimeApplication:
             image_path=(observation.artifact_paths.get('working') if observation is not None else None),
             diagnostics={
                 'analysisOptions': options.to_payload(),
+                'recognizerBackend': recognizer_backend,
+                'allowCropRefinement': allow_crop_refinement,
                 'baselineCandidateCount': len(baseline_candidates),
                 'ocrCandidateCount': len(crop_candidates),
                 'baselineCandidates': [
@@ -415,6 +424,11 @@ def _looks_like_plate_roi(rect: NormalizedRect) -> bool:
         return False
     aspect_ratio = rect.width / max(rect.height, 1e-6)
     return rect.area() <= 0.12 and 1.1 <= aspect_ratio <= 12.0
+
+
+def _normalize_recognizer_backend(value: str | None) -> str:
+    normalized = (value or 'hybrid').strip().lower()
+    return normalized if normalized in {'baseline', 'hybrid'} else 'hybrid'
 
 
 def build_default_application(runtime_script: Path) -> LprRuntimeApplication:

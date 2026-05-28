@@ -136,9 +136,16 @@ class TargetTrackingTests(unittest.TestCase):
         self.assertEqual(diagnostics['requestedTrackingFrameCount'], 7)
         self.assertEqual(diagnostics['requestedEvidenceSampleCount'], 4)
         self.assertEqual(diagnostics['trajectoryStepMs'], 100)
+        self.assertEqual(diagnostics['temporalRange']['requestedStartMs'], 1000)
+        self.assertEqual(diagnostics['temporalRange']['requestedEndMs'], 1600)
+        self.assertTrue(diagnostics['temporalRange']['reachedRequestedStart'])
+        self.assertTrue(diagnostics['temporalRange']['reachedRequestedEnd'])
+        self.assertGreaterEqual(diagnostics['temporalRange']['averageMotion'], 0.0)
         evidence_times = [frame.time_ms for frame in tracked_frames if frame.diagnostics.get('isEvidenceSample') is True]
         self.assertEqual(evidence_times, [1000, 1200, 1400, 1600])
         self.assertEqual(tracked_frames[2].diagnostics.get('trajectoryRole'), 'anchor')
+        self.assertIn('anchor', tracked_frames[2].diagnostics.get('evidenceReasons', []))
+
 
     def test_anchor_uses_selected_detection_when_tracker_anchor_points_to_other_vehicle(self) -> None:
         selected_target_box = NormalizedRect(x=0.12, y=0.22, width=0.12, height=0.26)

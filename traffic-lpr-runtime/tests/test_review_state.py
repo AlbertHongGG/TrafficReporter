@@ -89,6 +89,25 @@ class ReviewStateTests(unittest.TestCase):
         self.assertGreaterEqual(provenance['emittedAtMs'], before)
         self.assertLessEqual(provenance['emittedAtMs'], after)
 
+    def test_build_analysis_provenance_includes_resolved_runtime_options(self) -> None:
+        provenance = build_analysis_provenance(
+            'analyze-interval',
+            {'requestId': 'req-002'},
+            {'version': 'runtime-1.2.3'},
+            {
+                'restorationMode': 'classical',
+                'recognizerBackend': 'hybrid',
+                'temporalEvidenceMode': 'motion-aware',
+                'sequenceReviewMode': 'strict',
+            },
+        )
+
+        self.assertEqual(provenance['restorationMode'], 'classical')
+        self.assertEqual(provenance['recognizerBackend'], 'hybrid')
+        self.assertEqual(provenance['temporalEvidenceMode'], 'motion-aware')
+        self.assertEqual(provenance['sequenceReviewMode'], 'strict')
+
+
 
 if __name__ == '__main__':
     unittest.main()

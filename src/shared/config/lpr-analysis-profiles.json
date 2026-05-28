@@ -10,11 +10,14 @@
     {
       "id": "balanced",
       "label": "Balanced",
-      "description": "Baseline profile for routine plate analysis and comparison.",
+      "description": "Routine profile that keeps interval evidence selection conservative while still using the current hybrid recognizer path.",
       "options": {
         "trackerMode": "botsort",
         "fusionMode": "aligned-char",
         "restorationMode": "mambairv2",
+        "recognizerBackend": "hybrid",
+        "temporalEvidenceMode": "scheduled",
+        "sequenceReviewMode": "balanced",
         "enableRectification": true,
         "enableEnhancement": true,
         "enableRecognizerComparison": true,
@@ -26,33 +29,45 @@
         "enableReliabilityGates": true,
         "minAcceptedConfidence": 0.62,
         "minCandidateMargin": 0.08,
-        "minIntervalSupportFrames": 2
+        "minIntervalSupportFrames": 2,
+        "minSequencePersistence": 0.55,
+        "maxSequenceGapCount": 1
       }
     },
     {
       "id": "precision",
       "label": "Precision",
-      "description": "Default profile for final review and benchmark sign-off.",
+      "description": "Default profile for final review, with motion-aware interval evidence selection and strict sequence stability checks.",
       "options": {
+        "recognizerBackend": "hybrid",
+        "temporalEvidenceMode": "motion-aware",
+        "sequenceReviewMode": "strict",
         "maxPlateCandidates": 3,
         "trackerHighConfidence": 0.4,
         "trackerLowConfidence": 0.18,
         "minAcceptedConfidence": 0.72,
         "minCandidateMargin": 0.12,
-        "minIntervalSupportFrames": 3
+        "minIntervalSupportFrames": 3,
+        "minSequencePersistence": 0.72,
+        "maxSequenceGapCount": 0
       }
     },
     {
       "id": "recovery",
       "label": "Recovery",
-      "description": "Looser gates for glare, blur, low-light, and small-plate recovery passes.",
+      "description": "Recovery profile that keeps the current hybrid recognizer path but allows motion-aware evidence sampling with more permissive sequence review.",
       "options": {
+        "recognizerBackend": "hybrid",
+        "temporalEvidenceMode": "motion-aware",
+        "sequenceReviewMode": "relaxed",
         "maxPlateCandidates": 4,
         "trackerLowConfidence": 0.12,
         "maxTrackingGap": 4,
         "minAcceptedConfidence": 0.52,
         "minCandidateMargin": 0.03,
-        "minIntervalSupportFrames": 1
+        "minIntervalSupportFrames": 1,
+        "minSequencePersistence": 0.4,
+        "maxSequenceGapCount": 2
       }
     }
   ]

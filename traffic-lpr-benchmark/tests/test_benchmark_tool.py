@@ -289,6 +289,10 @@ class BenchmarkToolTests(unittest.TestCase):
                         'analysisProfileId': 'precision',
                         'developerDiagnosticsEnabled': False,
                         'runtimeVersion': 'runtime-1',
+                        'restorationMode': 'mambairv2',
+                        'recognizerBackend': 'hybrid',
+                        'temporalEvidenceMode': 'motion-aware',
+                        'sequenceReviewMode': 'strict',
                         'emittedAtMs': 1,
                     },
                     'summary': '',
@@ -399,6 +403,7 @@ class BenchmarkToolTests(unittest.TestCase):
             self.assertEqual(payload['runId'], 'run-001')
             self.assertEqual(payload['suite']['suiteId'], 'bundle-suite')
             self.assertEqual(payload['result']['cases'][0]['provenance']['analysisProfileId'], 'precision')
+            self.assertEqual(payload['result']['cases'][0]['provenance']['recognizerBackend'], 'hybrid')
             run_ledger = json.loads(Path(artifact_paths['runLedgerJson']).read_text(encoding='utf-8'))
             self.assertEqual(run_ledger['caseCount'], 1)
             self.assertEqual(run_ledger['completedCaseCount'], 1)
@@ -780,6 +785,110 @@ class BenchmarkToolTests(unittest.TestCase):
         self.assertEqual(runtime_result['metrics']['datasetBreakdown']['UFPR-ALPR']['reviewRequiredRate'], 1.0)
         self.assertEqual(runtime_result['metrics']['splitBreakdown']['testing']['totalCases'], 1)
 
+    def test_summarize_benchmark_results_builds_sequence_difficulty_breakdown(self) -> None:
+        runtime_result = summarize_benchmark_results(
+            [
+                {
+                    'id': 'case-001',
+                    'mode': 'interval',
+                    'expectationKind': 'readable',
+                    'expectedText': 'AAA1111',
+                    'bestText': 'AAA1111',
+                    'bestSource': 'fused',
+                    'allSources': ['fused'],
+                    'top3Texts': ['AAA1111'],
+                    'exactMatch': True,
+                    'top3Match': True,
+                    'characterErrorRate': 0.0,
+                    'acceptedConfidence': 0.94,
+                    'acceptedMargin': 0.32,
+                    'latencyMs': 18.0,
+                    'localization': {'plateMeanIoU': 0.9, 'plateRecall': 1.0, 'targetMeanIoU': 0.85, 'targetRecall': 1.0},
+                    'trackMetrics': {
+                        'majorityExactMatch': True,
+                        'predictionSwitchCount': 0,
+                        'sampleExactMatchRate': 1.0,
+                        'timeToFirstCorrectMs': 100,
+                    },
+                    'tracking': {
+                        'trackingTier': 'full',
+                        'coverageRatio': 0.96,
+                        'trackedFrameCount': 8,
+                    },
+                    'sequence': {
+                        'sequenceTier': 'stable',
+                        'dominantText': 'AAA1111',
+                        'persistenceRatio': 0.9,
+                        'supportFrameCount': 6,
+                        'sampleCount': 6,
+                        'supportFrameGapCount': 0,
+                        'predictionSwitchCount': 0,
+                        'characterConsistency': [0.92, 0.93],
+                        'characterConsistencyMean': 0.925,
+                    },
+                    'failureReason': 'correct',
+                    'acceptedCandidateId': 'candidate-1',
+                    'review': {'status': 'accepted', 'acceptedCandidateId': 'candidate-1', 'suggestedCandidateId': 'candidate-1', 'reasons': []},
+                    'summary': 'stable interval',
+                    'tags': ['ufpr-alpr'],
+                    'metadata': {'dataset': 'UFPR-ALPR', 'split': 'testing', 'category': 'tracking'},
+                },
+                {
+                    'id': 'case-002',
+                    'mode': 'interval',
+                    'expectationKind': 'readable',
+                    'expectedText': 'BBB2222',
+                    'bestText': 'BBC2222',
+                    'bestSource': 'fused',
+                    'allSources': ['fused'],
+                    'top3Texts': ['BBC2222'],
+                    'exactMatch': False,
+                    'top3Match': False,
+                    'characterErrorRate': 0.2,
+                    'acceptedConfidence': 0.4,
+                    'acceptedMargin': 0.04,
+                    'latencyMs': 25.0,
+                    'localization': {'plateMeanIoU': 0.42, 'plateRecall': 0.0, 'targetMeanIoU': 0.4, 'targetRecall': 0.0},
+                    'trackMetrics': {
+                        'majorityExactMatch': False,
+                        'predictionSwitchCount': 2,
+                        'sampleExactMatchRate': 0.25,
+                        'timeToFirstCorrectMs': None,
+                    },
+                    'tracking': {
+                        'trackingTier': 'detection-fallback',
+                        'coverageRatio': 0.52,
+                        'trackedFrameCount': 4,
+                    },
+                    'sequence': {
+                        'sequenceTier': 'fragmented',
+                        'dominantText': 'BBC2222',
+                        'persistenceRatio': 0.3,
+                        'supportFrameCount': 2,
+                        'sampleCount': 6,
+                        'supportFrameGapCount': 2,
+                        'predictionSwitchCount': 2,
+                        'characterConsistency': [0.55, 0.58],
+                        'characterConsistencyMean': 0.565,
+                    },
+                    'failureReason': 'fusion-unstable',
+                    'acceptedCandidateId': None,
+                    'review': {'status': 'review-required', 'acceptedCandidateId': None, 'suggestedCandidateId': 'candidate-2', 'reasons': ['low-margin']},
+                    'summary': 'fragmented interval',
+                    'tags': ['ufpr-alpr'],
+                    'metadata': {'dataset': 'UFPR-ALPR', 'split': 'testing', 'category': 'tracking'},
+                },
+            ],
+            runtime_status={'status': 'ready'},
+        )
+
+        self.assertEqual(runtime_result['metrics']['sequenceTierBreakdown'], {'fragmented': 1, 'stable': 1})
+        self.assertAlmostEqual(runtime_result['metrics']['meanSequencePersistence'], 0.6)
+        self.assertAlmostEqual(runtime_result['metrics']['meanSequenceGapCount'], 1.0)
+        self.assertEqual(runtime_result['metrics']['difficultyBreakdown']['trackingTier']['detection-fallback']['totalCases'], 1)
+        self.assertEqual(runtime_result['metrics']['difficultyBreakdown']['sequenceTier']['fragmented']['totalCases'], 1)
+        self.assertAlmostEqual(runtime_result['metrics']['difficultyBreakdown']['sequenceTier']['fragmented']['reviewRequiredRate'], 1.0)
+
     def test_interval_localization_matches_each_ground_truth_frame_once(self) -> None:
         localization = _evaluate_localization(
             {
@@ -884,6 +993,42 @@ class BenchmarkToolTests(unittest.TestCase):
         self.assertEqual(analysis['datasetBreakdown']['AOLP']['cases'], 2)
         self.assertEqual(analysis['datasetBreakdown']['AOLP']['failureSources'], {'correct': 1, 'localization': 1})
         self.assertEqual(analysis['focusBreakdown']['movingCameraReliability']['failureSources'], {'tracking': 1})
+
+    def test_build_run_analysis_adds_tracking_and_sequence_difficulty_breakdown(self) -> None:
+        bundle = {
+            'runId': 'run-003',
+            'suite': {'suiteId': 'difficulty-suite', 'title': 'Difficulty Suite', 'caseCount': 2},
+            'result': {
+                'summary': '2 cases',
+                'cases': [
+                    {
+                        'id': 'case-001',
+                        'exactMatch': True,
+                        'failureReason': 'correct',
+                        'review': {'status': 'accepted', 'reasons': []},
+                        'tracking': {'trackingTier': 'full'},
+                        'sequence': {'sequenceTier': 'stable'},
+                        'metadata': {'dataset': 'UFPR-ALPR', 'category': 'tracking'},
+                    },
+                    {
+                        'id': 'case-002',
+                        'exactMatch': False,
+                        'failureReason': 'fusion-unstable',
+                        'review': {'status': 'review-required', 'reasons': ['low-margin']},
+                        'tracking': {'trackingTier': 'detection-fallback'},
+                        'sequence': {'sequenceTier': 'fragmented'},
+                        'metadata': {'dataset': 'UFPR-ALPR', 'category': 'tracking'},
+                    },
+                ],
+            },
+        }
+
+        analysis = build_run_analysis(bundle)
+
+        self.assertEqual(analysis['difficultyBreakdown']['trackingTier']['detection-fallback']['cases'], 1)
+        self.assertEqual(analysis['difficultyBreakdown']['sequenceTier']['fragmented']['failureSources'], {'tracking': 1})
+        self.assertEqual(analysis['difficultyBreakdown']['reviewStatus']['review-required']['cases'], 1)
+        self.assertEqual(analysis['focusBreakdown']['fragmentedSequence']['cases'], 1)
 
     def test_apply_analysis_profile_to_suite_overrides_each_case(self) -> None:
         suite_payload = {

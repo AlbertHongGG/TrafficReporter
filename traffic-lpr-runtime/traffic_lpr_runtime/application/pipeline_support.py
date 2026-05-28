@@ -28,6 +28,9 @@ class AnalysisOptions:
     tracker_mode: str = 'botsort'
     fusion_mode: str = 'aligned-char'
     restoration_mode: str = 'mambairv2'
+    recognizer_backend: str = 'hybrid'
+    temporal_evidence_mode: str = 'motion-aware'
+    sequence_review_mode: str = 'balanced'
     enable_rectification: bool = True
     enable_enhancement: bool = True
     enable_recognizer_comparison: bool = True
@@ -42,6 +45,8 @@ class AnalysisOptions:
     min_accepted_confidence: float = 0.62
     min_candidate_margin: float = 0.08
     min_interval_support_frames: int = 2
+    min_sequence_persistence: float = 0.55
+    max_sequence_gap_count: int = 1
 
     @classmethod
     def from_payload(cls, payload: dict[str, Any] | None) -> 'AnalysisOptions':
@@ -62,6 +67,9 @@ class AnalysisOptions:
             tracker_mode=_to_optional_str(raw.get('trackerMode')) or 'botsort',
             fusion_mode=_to_optional_str(raw.get('fusionMode')) or 'aligned-char',
             restoration_mode=_to_optional_str(raw.get('restorationMode')) or 'mambairv2',
+            recognizer_backend=_to_optional_str(raw.get('recognizerBackend')) or 'hybrid',
+            temporal_evidence_mode=_to_optional_str(raw.get('temporalEvidenceMode')) or 'motion-aware',
+            sequence_review_mode=_to_optional_str(raw.get('sequenceReviewMode')) or 'balanced',
             enable_rectification=raw.get('enableRectification', True) is not False,
             enable_enhancement=raw.get('enableEnhancement', True) is not False,
             enable_recognizer_comparison=raw.get('enableRecognizerComparison', True) is not False,
@@ -76,6 +84,20 @@ class AnalysisOptions:
             min_accepted_confidence=float(raw.get('minAcceptedConfidence') or 0.62),
             min_candidate_margin=float(raw.get('minCandidateMargin') or 0.08),
             min_interval_support_frames=max(1, min(int(raw.get('minIntervalSupportFrames') or 2), 8)),
+            min_sequence_persistence=max(
+                0.0,
+                min(
+                    float(0.55 if raw.get('minSequencePersistence') is None else raw.get('minSequencePersistence')),
+                    1.0,
+                ),
+            ),
+            max_sequence_gap_count=max(
+                0,
+                min(
+                    int(1 if raw.get('maxSequenceGapCount') is None else raw.get('maxSequenceGapCount')),
+                    8,
+                ),
+            ),
         )
 
     def resolve_artifact_root(self, runtime_root: Path, suffix: str | None = None, run_id: str | None = None) -> Path | None:
@@ -129,6 +151,9 @@ class AnalysisOptions:
             'trackerMode': self.tracker_mode,
             'fusionMode': self.fusion_mode,
             'restorationMode': self.restoration_mode,
+            'recognizerBackend': self.recognizer_backend,
+            'temporalEvidenceMode': self.temporal_evidence_mode,
+            'sequenceReviewMode': self.sequence_review_mode,
             'enableRectification': self.enable_rectification,
             'enableEnhancement': self.enable_enhancement,
             'enableRecognizerComparison': self.enable_recognizer_comparison,
@@ -143,6 +168,8 @@ class AnalysisOptions:
             'minAcceptedConfidence': self.min_accepted_confidence,
             'minCandidateMargin': self.min_candidate_margin,
             'minIntervalSupportFrames': self.min_interval_support_frames,
+            'minSequencePersistence': self.min_sequence_persistence,
+            'maxSequenceGapCount': self.max_sequence_gap_count,
         }
 
 
