@@ -48,6 +48,10 @@ class AnalysisOptions:
     min_interval_support_frames: int = 2
     min_sequence_persistence: float = 0.55
     max_sequence_gap_count: int = 1
+    temporal_window_ms: int = 240
+    temporal_neighbor_count: int = 5
+    max_evidence_sample_count: int = 12
+    anchor_burst_count: int = 4
 
     @classmethod
     def from_payload(cls, payload: dict[str, Any] | None) -> 'AnalysisOptions':
@@ -101,6 +105,10 @@ class AnalysisOptions:
                     8,
                 ),
             ),
+            temporal_window_ms=max(80, min(int(raw.get('temporalWindowMs') or 240), 1200)),
+            temporal_neighbor_count=max(1, min(int(raw.get('temporalNeighborCount') or 5), 9)),
+            max_evidence_sample_count=max(4, min(int(raw.get('maxEvidenceSampleCount') or 12), 24)),
+            anchor_burst_count=max(1, min(int(raw.get('anchorBurstCount') or 4), 8)),
         )
 
     def resolve_artifact_root(self, runtime_root: Path, suffix: str | None = None, run_id: str | None = None) -> Path | None:
@@ -122,25 +130,17 @@ class AnalysisOptions:
         return self.ocr_model_names if self.enable_recognizer_comparison else self.ocr_model_names[:1]
 
     def for_interactive_frame(self) -> 'AnalysisOptions':
-        restoration_mode = self.restoration_mode
-        if restoration_mode not in {'off', 'classical'}:
-            restoration_mode = 'classical'
         return replace(
             self,
             enable_recognizer_comparison=False,
             enable_secondary_subcrop_ocr=True,
-            restoration_mode=restoration_mode,
         )
 
     def for_interval_sample(self, sample_count_hint: int | None = None) -> 'AnalysisOptions':
         del sample_count_hint
-        restoration_mode = self.restoration_mode
-        if restoration_mode not in {'off', 'classical'}:
-            restoration_mode = 'classical'
         return replace(
             self,
             enable_recognizer_comparison=False,
-            restoration_mode=restoration_mode,
             persist_artifacts=False,
             artifact_dir=None,
             debug_tag=None,
@@ -174,6 +174,10 @@ class AnalysisOptions:
             'minIntervalSupportFrames': self.min_interval_support_frames,
             'minSequencePersistence': self.min_sequence_persistence,
             'maxSequenceGapCount': self.max_sequence_gap_count,
+            'temporalWindowMs': self.temporal_window_ms,
+            'temporalNeighborCount': self.temporal_neighbor_count,
+            'maxEvidenceSampleCount': self.max_evidence_sample_count,
+            'anchorBurstCount': self.anchor_burst_count,
         }
 
 

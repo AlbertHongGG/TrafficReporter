@@ -19,6 +19,7 @@ export type {
   AiEvidenceJobState,
   AiEvidenceResponse,
   AiEvidenceSessionState,
+  LprDecisionTrace,
   LprFrameSample,
   LprJobState,
   LprPlateCandidate,

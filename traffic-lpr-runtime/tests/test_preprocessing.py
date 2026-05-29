@@ -97,7 +97,7 @@ class PreprocessingTests(unittest.TestCase):
 
         self.assertFalse(sample_options.enable_recognizer_comparison)
         self.assertFalse(sample_options.enable_secondary_subcrop_ocr)
-        self.assertEqual(sample_options.restoration_mode, 'classical')
+        self.assertEqual(sample_options.restoration_mode, 'mambairv2')
         self.assertFalse(sample_options.persist_artifacts)
         self.assertIsNone(sample_options.debug_tag)
 

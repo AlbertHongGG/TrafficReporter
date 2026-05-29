@@ -17,6 +17,10 @@ def build_gate_thresholds(args: Any) -> dict[str, float | None]:
         'maxDegradedTrackingRate': _coerce_optional_float(getattr(args, 'max_degraded_tracking_rate', None)),
         'minAcceptedUnderDegradedTrackingRate': _coerce_optional_float(getattr(args, 'min_accepted_under_degraded_tracking_rate', None)),
         'maxDetectionFallbackReviewRequiredRate': _coerce_optional_float(getattr(args, 'max_detection_fallback_review_required_rate', None)),
+        'minMeanDecisionAgreementRatio': _coerce_optional_float(getattr(args, 'min_mean_decision_agreement_ratio', None)),
+        'minMeanDecisionSupportFrameCount': _coerce_optional_float(getattr(args, 'min_mean_decision_support_frame_count', None)),
+        'minTemporalDecisionRate': _coerce_optional_float(getattr(args, 'min_temporal_decision_rate', None)),
+        'minMultiFrameDecisionRate': _coerce_optional_float(getattr(args, 'min_multi_frame_decision_rate', None)),
         'maxP95LatencyMs': _coerce_optional_float(getattr(args, 'max_p95_latency_ms', None)),
     }
 
@@ -82,6 +86,35 @@ def evaluate_runtime_result_gate(
         metrics.get('detectionFallbackReviewRequiredRate'),
         thresholds.get('maxDetectionFallbackReviewRequiredRate'),
         sample_size=detection_fallback_case_count,
+    )
+    decision_case_count = _coerce_optional_int(metrics.get('decisionCaseCount'))
+    _append_min_check(
+        checks,
+        'meanDecisionAgreementRatio',
+        metrics.get('meanDecisionAgreementRatio'),
+        thresholds.get('minMeanDecisionAgreementRatio'),
+        sample_size=decision_case_count,
+    )
+    _append_min_check(
+        checks,
+        'meanDecisionSupportFrameCount',
+        metrics.get('meanDecisionSupportFrameCount'),
+        thresholds.get('minMeanDecisionSupportFrameCount'),
+        sample_size=decision_case_count,
+    )
+    _append_min_check(
+        checks,
+        'temporalDecisionRate',
+        metrics.get('temporalDecisionRate'),
+        thresholds.get('minTemporalDecisionRate'),
+        sample_size=decision_case_count,
+    )
+    _append_min_check(
+        checks,
+        'multiFrameDecisionRate',
+        metrics.get('multiFrameDecisionRate'),
+        thresholds.get('minMultiFrameDecisionRate'),
+        sample_size=decision_case_count,
     )
     latency_payload = metrics.get('latencyMs') if isinstance(metrics.get('latencyMs'), dict) else {}
     _append_max_check(checks, 'p95LatencyMs', latency_payload.get('p95'), thresholds.get('maxP95LatencyMs'), sample_size=total_cases)

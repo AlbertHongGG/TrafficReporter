@@ -338,6 +338,7 @@ class CandidateFusionTests(unittest.TestCase):
                 enhanced_image=_ImageStub(100 + index),
                 restored_image=None,
                 working_image=_ImageStub(100 + index),
+                working_stage='working',
                 quality=make_quality(0.95 - (index * 0.01)),
                 artifact_paths={},
                 diagnostics={'selectionScore': 0.9 - (index * 0.01)},

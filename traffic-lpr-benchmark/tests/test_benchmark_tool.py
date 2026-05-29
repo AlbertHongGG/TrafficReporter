@@ -294,6 +294,12 @@ class BenchmarkToolTests(unittest.TestCase):
                     'meanSampleExactMatchRate': 0.6,
                     'meanSequencePersistence': 0.55,
                     'meanCharacterConsistencyMean': 0.71,
+                    'meanDecisionAgreementRatio': 0.82,
+                    'meanDecisionSupportFrameCount': 4.5,
+                    'temporalDecisionRate': 0.4,
+                    'multiFrameDecisionRate': 0.8,
+                    'decisionSourceBreakdown': {'fused-image': 2, 'temporal-restored': 3},
+                    'decisionStageBreakdown': {'restored': 2, 'temporal-restored': 3},
                 },
                 'cases': [],
             },
@@ -309,6 +315,12 @@ class BenchmarkToolTests(unittest.TestCase):
         self.assertEqual(analysis['focusBreakdown']['hardCaseStability']['meanSampleExactMatchRate'], 0.6)
         self.assertEqual(analysis['focusBreakdown']['hardCaseStability']['meanSequencePersistence'], 0.55)
         self.assertEqual(analysis['focusBreakdown']['hardCaseStability']['meanCharacterConsistencyMean'], 0.71)
+        self.assertIn('decisionProvenance', analysis['focusBreakdown'])
+        self.assertEqual(analysis['focusBreakdown']['decisionProvenance']['meanDecisionAgreementRatio'], 0.82)
+        self.assertEqual(analysis['focusBreakdown']['decisionProvenance']['meanDecisionSupportFrameCount'], 4.5)
+        self.assertEqual(analysis['focusBreakdown']['decisionProvenance']['temporalDecisionRate'], 0.4)
+        self.assertEqual(analysis['focusBreakdown']['decisionProvenance']['multiFrameDecisionRate'], 0.8)
+        self.assertEqual(analysis['focusBreakdown']['decisionProvenance']['decisionSourceBreakdown'], {'fused-image': 2, 'temporal-restored': 3})
 
     def test_validate_profile_catalog_file_accepts_shared_catalog(self) -> None:
         catalog_path = TOOL_ROOT.parent / 'src' / 'shared' / 'config' / 'lpr-analysis-profiles.json'
@@ -892,6 +904,12 @@ class BenchmarkToolTests(unittest.TestCase):
                         'coverageRatio': 0.96,
                         'trackedFrameCount': 8,
                     },
+                    'decision': {
+                        'source': 'temporal-restored',
+                        'stage': 'temporal-restored',
+                        'supportFrameCount': 6,
+                        'agreementRatio': 0.9,
+                    },
                     'sequence': {
                         'sequenceTier': 'stable',
                         'dominantText': 'AAA1111',
@@ -937,6 +955,12 @@ class BenchmarkToolTests(unittest.TestCase):
                         'coverageRatio': 0.52,
                         'trackedFrameCount': 4,
                     },
+                    'decision': {
+                        'source': 'fused-image',
+                        'stage': 'restored',
+                        'supportFrameCount': 2,
+                        'agreementRatio': 0.64,
+                    },
                     'sequence': {
                         'sequenceTier': 'fragmented',
                         'dominantText': 'BBC2222',
@@ -965,6 +989,12 @@ class BenchmarkToolTests(unittest.TestCase):
         self.assertAlmostEqual(runtime_result['metrics']['meanPredictionSwitchCount'], 1.0)
         self.assertAlmostEqual(runtime_result['metrics']['meanSampleExactMatchRate'], 0.625)
         self.assertAlmostEqual(runtime_result['metrics']['meanCharacterConsistencyMean'], 0.745)
+        self.assertEqual(runtime_result['metrics']['decisionSourceBreakdown'], {'fused-image': 1, 'temporal-restored': 1})
+        self.assertEqual(runtime_result['metrics']['decisionStageBreakdown'], {'restored': 1, 'temporal-restored': 1})
+        self.assertAlmostEqual(runtime_result['metrics']['meanDecisionAgreementRatio'], 0.77)
+        self.assertAlmostEqual(runtime_result['metrics']['meanDecisionSupportFrameCount'], 4.0)
+        self.assertAlmostEqual(runtime_result['metrics']['temporalDecisionRate'], 0.5)
+        self.assertAlmostEqual(runtime_result['metrics']['multiFrameDecisionRate'], 1.0)
         self.assertEqual(runtime_result['metrics']['difficultyBreakdown']['trackingTier']['detection-fallback']['totalCases'], 1)
         self.assertEqual(runtime_result['metrics']['difficultyBreakdown']['sequenceTier']['fragmented']['totalCases'], 1)
         self.assertAlmostEqual(runtime_result['metrics']['difficultyBreakdown']['sequenceTier']['fragmented']['reviewRequiredRate'], 1.0)
@@ -1042,6 +1072,11 @@ class BenchmarkToolTests(unittest.TestCase):
                 'meanCharacterErrorRate': 0.05,
                 'reviewRequiredRate': 0.5,
                 'noCandidateRate': 0.0,
+                'decisionCaseCount': 2,
+                'meanDecisionAgreementRatio': 0.6,
+                'meanDecisionSupportFrameCount': 1.5,
+                'temporalDecisionRate': 0.0,
+                'multiFrameDecisionRate': 0.5,
                 'latencyMs': {'p95': 850.0},
             },
         }
@@ -1053,12 +1088,28 @@ class BenchmarkToolTests(unittest.TestCase):
             'maxReviewRequiredRate': 0.25,
             'maxNoCandidateRate': 0.1,
             'minPlateIou': 0.75,
+            'minMeanDecisionAgreementRatio': 0.7,
+            'minMeanDecisionSupportFrameCount': 2.0,
+            'minTemporalDecisionRate': 0.25,
+            'minMultiFrameDecisionRate': 0.75,
             'maxP95LatencyMs': 500.0,
         })
 
         self.assertFalse(gate_result['passed'])
         failed_metrics = {check['metric'] for check in gate_result['checks'] if not check['passed']}
-        self.assertEqual(failed_metrics, {'exactMatchRate', 'reviewRequiredRate', 'meanPlateIoU', 'p95LatencyMs'})
+        self.assertEqual(
+            failed_metrics,
+            {
+                'exactMatchRate',
+                'reviewRequiredRate',
+                'meanPlateIoU',
+                'meanDecisionAgreementRatio',
+                'meanDecisionSupportFrameCount',
+                'temporalDecisionRate',
+                'multiFrameDecisionRate',
+                'p95LatencyMs',
+            },
+        )
 
     def test_build_run_analysis_groups_failure_sources_by_dataset(self) -> None:
         bundle = {

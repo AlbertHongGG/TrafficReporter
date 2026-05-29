@@ -97,7 +97,7 @@ class IntervalWorkflowTests(unittest.TestCase):
             frame_reader=type('FrameReaderStub', (), {'read_frame': staticmethod(lambda source_path, time_ms: object())})(),
             track_target_across_interval=lambda *args, **kwargs: ([tracked_region], {'trackerMode': 'botsort'}),
             calibrate_interval_target_boxes=lambda *args, **kwargs: {},
-            analyze_plate_candidates=lambda frame, time_ms, marker_rect, target_box, country_hints, options, artifact_root: (
+            analyze_plate_candidates=lambda frame, time_ms, marker_rect, target_box, country_hints, options, artifact_root, support_observations=None: (
                 [candidate],
                 FrameSample(
                     id=f'sample-{time_ms}',
@@ -214,8 +214,8 @@ class IntervalWorkflowTests(unittest.TestCase):
         )
         calls: list[NormalizedRect | None] = []
 
-        def analyze_plate_candidates(frame, time_ms, marker_rect, target_box, country_hints, options, artifact_root):
-            del frame, marker_rect, country_hints, options, artifact_root
+        def analyze_plate_candidates(frame, time_ms, marker_rect, target_box, country_hints, options, artifact_root, support_observations=None):
+            del frame, marker_rect, country_hints, options, artifact_root, support_observations
             calls.append(target_box)
             sample = FrameSample(
                 id=f'sample-{time_ms}',
@@ -290,7 +290,8 @@ class IntervalWorkflowTests(unittest.TestCase):
         )
         calls: list[NormalizedRect] = []
 
-        def analyze_plate_candidates(frame, time_ms, plate_box, target_box, country_hints, options, artifact_root):
+        def analyze_plate_candidates(frame, time_ms, plate_box, target_box, country_hints, options, artifact_root, support_observations=None):
+            del support_observations
             calls.append(target_box)
             sample = FrameSample(
                 id='sample-11000',
@@ -368,7 +369,7 @@ class IntervalWorkflowTests(unittest.TestCase):
             frame_reader=type('FrameReaderStub', (), {'read_frame': staticmethod(lambda source_path, time_ms: object())})(),
             track_target_across_interval=lambda *args, **kwargs: ([tracked_region], {'trackerMode': 'botsort'}),
             calibrate_interval_target_boxes=lambda *args, **kwargs: {},
-            analyze_plate_candidates=lambda frame, time_ms, marker_rect, target_box, country_hints, options, artifact_root: (
+            analyze_plate_candidates=lambda frame, time_ms, marker_rect, target_box, country_hints, options, artifact_root, support_observations=None: (
                 [candidate],
                 FrameSample(
                     id=f'sample-{time_ms}',
@@ -450,7 +451,7 @@ class IntervalWorkflowTests(unittest.TestCase):
                 'terminatedEarly': True,
             }),
             calibrate_interval_target_boxes=lambda *args, **kwargs: {},
-            analyze_plate_candidates=lambda frame, time_ms, marker_rect, target_box, country_hints, options, artifact_root: (
+            analyze_plate_candidates=lambda frame, time_ms, marker_rect, target_box, country_hints, options, artifact_root, support_observations=None: (
                 [candidate],
                 FrameSample(
                     id=f'sample-{time_ms}',
@@ -535,7 +536,7 @@ class IntervalWorkflowTests(unittest.TestCase):
                 'terminatedEarly': True,
             }),
             calibrate_interval_target_boxes=lambda *args, **kwargs: {},
-            analyze_plate_candidates=lambda frame, time_ms, marker_rect, target_box, country_hints, options, artifact_root: (
+            analyze_plate_candidates=lambda frame, time_ms, marker_rect, target_box, country_hints, options, artifact_root, support_observations=None: (
                 [candidate],
                 FrameSample(
                     id=f'sample-{time_ms}',
@@ -618,7 +619,7 @@ class IntervalWorkflowTests(unittest.TestCase):
                 'terminatedEarly': False,
             }),
             calibrate_interval_target_boxes=lambda *args, **kwargs: {},
-            analyze_plate_candidates=lambda frame, time_ms, marker_rect, target_box, country_hints, options, artifact_root: (
+            analyze_plate_candidates=lambda frame, time_ms, marker_rect, target_box, country_hints, options, artifact_root, support_observations=None: (
                 [candidate],
                 FrameSample(
                     id=f'sample-{time_ms}',

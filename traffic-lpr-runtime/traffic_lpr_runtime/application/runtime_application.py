@@ -177,6 +177,7 @@ class LprRuntimeApplication:
         country_hints: list[str],
         options: AnalysisOptions,
         artifact_root: Path | None,
+        support_observations: list[PlateObservation] | None = None,
     ) -> tuple[list[PlateCandidate], FrameSample, PlateObservation | None]:
         working_image, crop_box = self._select_analysis_roi(frame, marker_rect, target_box)
         recognizer_backend = _normalize_recognizer_backend(options.recognizer_backend)
@@ -196,6 +197,13 @@ class LprRuntimeApplication:
                 artifact_root,
             )
             if observation is not None:
+                if support_observations:
+                    observation = self._plate_preprocessor.integrate_temporal_support(
+                        observation,
+                        support_observations,
+                        options,
+                        artifact_root,
+                    )
                 crop_candidates = self._recognize_observation_crop(
                     observation,
                     time_ms,
@@ -214,6 +222,13 @@ class LprRuntimeApplication:
                 artifact_root,
             )
             if observation is not None:
+                if support_observations:
+                    observation = self._plate_preprocessor.integrate_temporal_support(
+                        observation,
+                        support_observations,
+                        options,
+                        artifact_root,
+                    )
                 crop_candidates = self._recognize_observation_crop(
                     observation,
                     time_ms,
@@ -246,6 +261,9 @@ class LprRuntimeApplication:
             quality=sample_quality,
             candidates=candidates[:6],
             image_path=(observation.artifact_paths.get('working') if observation is not None else None),
+            selection=None,
+            ocr_input=self._observation_ocr_input(observation),
+            temporal_support=(observation.temporal_support if observation is not None else None),
             diagnostics={
                 'analysisOptions': options.to_payload(),
                 'recognizerBackend': recognizer_backend,
@@ -273,6 +291,19 @@ class LprRuntimeApplication:
             },
         )
         return candidates, sample, observation
+
+    def _observation_ocr_input(self, observation: PlateObservation | None) -> dict[str, Any] | None:
+        if observation is None:
+            return None
+        support = observation.temporal_support or {}
+        source = 'temporal-restored' if observation.working_stage == 'temporal-restored' else 'single-frame'
+        return {
+            'stage': observation.working_stage,
+            'variant': observation.working_stage,
+            'source': source,
+            'imagePath': observation.artifact_paths.get('working'),
+            'supportFrameCount': int(support.get('supportFrameCount') or 1),
+        }
 
     def _recognize_observation_crop(
         self,

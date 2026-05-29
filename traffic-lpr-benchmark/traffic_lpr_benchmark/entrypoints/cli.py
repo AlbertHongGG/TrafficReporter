@@ -59,6 +59,10 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument('--max-degraded-tracking-rate', type=float)
     run_parser.add_argument('--min-accepted-under-degraded-tracking-rate', type=float)
     run_parser.add_argument('--max-detection-fallback-review-required-rate', type=float)
+    run_parser.add_argument('--min-mean-decision-agreement-ratio', type=float)
+    run_parser.add_argument('--min-mean-decision-support-frame-count', type=float)
+    run_parser.add_argument('--min-temporal-decision-rate', type=float)
+    run_parser.add_argument('--min-multi-frame-decision-rate', type=float)
     run_parser.add_argument('--max-p95-latency-ms', type=float)
 
     sweep_parser = subparsers.add_parser('profile-sweep', help='Run the same suite across multiple analysis profiles and emit a comparison summary.')
@@ -79,6 +83,10 @@ def build_parser() -> argparse.ArgumentParser:
     sweep_parser.add_argument('--max-degraded-tracking-rate', type=float)
     sweep_parser.add_argument('--min-accepted-under-degraded-tracking-rate', type=float)
     sweep_parser.add_argument('--max-detection-fallback-review-required-rate', type=float)
+    sweep_parser.add_argument('--min-mean-decision-agreement-ratio', type=float)
+    sweep_parser.add_argument('--min-mean-decision-support-frame-count', type=float)
+    sweep_parser.add_argument('--min-temporal-decision-rate', type=float)
+    sweep_parser.add_argument('--min-multi-frame-decision-rate', type=float)
     sweep_parser.add_argument('--max-p95-latency-ms', type=float)
 
     return parser

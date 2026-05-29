@@ -193,9 +193,9 @@ class TargetTrackingTests(unittest.TestCase):
 
         del tracked_frames
         self.assertEqual(diagnostics['rawRequestedEvidenceSampleCount'], 16)
-        self.assertEqual(diagnostics['requestedEvidenceSampleCount'], 8)
+        self.assertEqual(diagnostics['requestedEvidenceSampleCount'], 12)
         self.assertTrue(diagnostics['sparseEvidenceSamplingApplied'])
-        self.assertEqual(diagnostics['evidenceSampleTimes'], [1450, 1600, 1750, 1800, 1900, 2050, 2200, 2350])
+        self.assertEqual(diagnostics['evidenceSampleTimes'], [0, 1540, 1630, 1720, 1750, 1810, 1900, 1990, 2080, 2170, 2260, 3000])
 
     def test_interval_tracking_preserves_dense_evidence_schedule_when_ground_truth_timeline_is_required(self) -> None:
         tracker = RecordingTracker()

@@ -10,7 +10,7 @@
     {
       "id": "balanced",
       "label": "Balanced",
-      "description": "Routine profile that keeps interval evidence selection conservative while still using the current hybrid recognizer path.",
+      "description": "Routine profile with temporal restoration enabled, moderate anchor bursts, and balanced review gating.",
       "options": {
         "trackerMode": "botsort",
         "fusionMode": "aligned-char",
@@ -18,6 +18,10 @@
         "recognizerBackend": "hybrid",
         "temporalEvidenceMode": "scheduled",
         "sequenceReviewMode": "balanced",
+        "temporalWindowMs": 220,
+        "temporalNeighborCount": 5,
+        "maxEvidenceSampleCount": 12,
+        "anchorBurstCount": 4,
         "enableRectification": true,
         "enableEnhancement": true,
         "enableRecognizerComparison": true,
@@ -37,11 +41,15 @@
     {
       "id": "precision",
       "label": "Precision",
-      "description": "Default profile for final review, with motion-aware interval evidence selection and strict sequence stability checks.",
+      "description": "Default profile for final review with anchor-centric temporal restoration, denser support, and strict stability checks.",
       "options": {
         "recognizerBackend": "hybrid",
         "temporalEvidenceMode": "motion-aware",
         "sequenceReviewMode": "strict",
+        "temporalWindowMs": 260,
+        "temporalNeighborCount": 5,
+        "maxEvidenceSampleCount": 14,
+        "anchorBurstCount": 5,
         "maxPlateCandidates": 3,
         "trackerHighConfidence": 0.4,
         "trackerLowConfidence": 0.18,
@@ -55,11 +63,15 @@
     {
       "id": "recovery",
       "label": "Recovery",
-      "description": "Recovery profile that keeps the current hybrid recognizer path but allows motion-aware evidence sampling with more permissive sequence review.",
+      "description": "Recovery profile with the widest temporal window, denser support frames, and permissive interval review thresholds.",
       "options": {
         "recognizerBackend": "hybrid",
         "temporalEvidenceMode": "motion-aware",
         "sequenceReviewMode": "relaxed",
+        "temporalWindowMs": 340,
+        "temporalNeighborCount": 7,
+        "maxEvidenceSampleCount": 18,
+        "anchorBurstCount": 6,
         "maxPlateCandidates": 4,
         "trackerLowConfidence": 0.12,
         "maxTrackingGap": 4,

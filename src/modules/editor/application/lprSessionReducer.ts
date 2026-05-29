@@ -1,4 +1,5 @@
 import type {
+  LprDecisionTrace,
   LprFrameSample,
   LprJobState,
   LprPlateCandidate,
@@ -32,6 +33,7 @@ export type LprSessionAction =
   | { type: 'set-lpr-candidates'; candidates: LprPlateCandidate[] }
   | { type: 'set-lpr-review'; review: LprReviewState | null }
   | { type: 'set-lpr-provenance'; provenance: LprAnalysisProvenance | null }
+  | { type: 'set-lpr-decision'; decision: LprDecisionTrace | null }
   | { type: 'accept-lpr-candidate'; candidateId: string | null }
   | { type: 'append-lpr-history'; entry: LprResultHistoryEntry }
   | { type: 'clear-lpr-results' }
@@ -52,6 +54,7 @@ const LPR_SESSION_ACTION_TYPES = new Set<LprSessionAction['type']>([
   'set-lpr-samples',
   'set-lpr-review',
   'set-lpr-provenance',
+  'set-lpr-decision',
   'set-lpr-candidates',
   'accept-lpr-candidate',
   'append-lpr-history',
@@ -203,6 +206,12 @@ export function reduceLprSession(lprState: LprSessionState, action: LprSessionAc
         lastAnalysisProvenance: action.provenance ? buildDefaultLprState({ lastAnalysisProvenance: action.provenance }).lastAnalysisProvenance : null,
       };
 
+    case 'set-lpr-decision':
+      return {
+        ...lprState,
+        decision: action.decision ? buildDefaultLprState({ decision: action.decision }).decision : null,
+      };
+
     case 'accept-lpr-candidate':
       return {
         ...lprState,
@@ -229,6 +238,7 @@ export function reduceLprSession(lprState: LprSessionState, action: LprSessionAc
         candidates: [],
         review: null,
         lastAnalysisProvenance: null,
+        decision: null,
         acceptedCandidateId: null,
       };
 

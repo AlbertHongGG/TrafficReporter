@@ -133,6 +133,16 @@ def build_run_analysis(bundle: dict[str, Any]) -> dict[str, Any]:
             'meanSequencePersistence': result_metrics.get('meanSequencePersistence'),
             'meanCharacterConsistencyMean': result_metrics.get('meanCharacterConsistencyMean'),
         }
+    if any(result_metrics.get(key) is not None for key in ['meanDecisionAgreementRatio', 'meanDecisionSupportFrameCount', 'temporalDecisionRate', 'multiFrameDecisionRate']):
+        analysis.setdefault('focusBreakdown', {})
+        analysis['focusBreakdown']['decisionProvenance'] = {
+            'meanDecisionAgreementRatio': result_metrics.get('meanDecisionAgreementRatio'),
+            'meanDecisionSupportFrameCount': result_metrics.get('meanDecisionSupportFrameCount'),
+            'temporalDecisionRate': result_metrics.get('temporalDecisionRate'),
+            'multiFrameDecisionRate': result_metrics.get('multiFrameDecisionRate'),
+            'decisionSourceBreakdown': dict(result_metrics.get('decisionSourceBreakdown') or {}),
+            'decisionStageBreakdown': dict(result_metrics.get('decisionStageBreakdown') or {}),
+        }
 
     evaluation = build_run_evaluation(bundle)
     analysis['stageBreakdown'] = dict(evaluation.get('stageBreakdown') or {})
@@ -194,6 +204,27 @@ def build_analysis_markdown(bundle: dict[str, Any], analysis: dict[str, Any]) ->
             f"- Mean sample exact match rate: {_format_rate(hard_case_stability.get('meanSampleExactMatchRate'))}",
             f"- Mean sequence persistence: {_format_rate(hard_case_stability.get('meanSequencePersistence'))}",
             f"- Mean character consistency: {_format_number(hard_case_stability.get('meanCharacterConsistencyMean'))}",
+        ])
+    decision_provenance = focus_breakdown.get('decisionProvenance') if isinstance(focus_breakdown.get('decisionProvenance'), dict) else None
+    if decision_provenance is not None:
+        source_breakdown = ', '.join(
+            f'{name}={count}'
+            for name, count in (decision_provenance.get('decisionSourceBreakdown') or {}).items()
+        ) or 'none'
+        stage_breakdown = ', '.join(
+            f'{name}={count}'
+            for name, count in (decision_provenance.get('decisionStageBreakdown') or {}).items()
+        ) or 'none'
+        lines.extend([
+            '',
+            '## Decision Provenance Focus',
+            '',
+            f"- Mean decision agreement: {_format_rate(decision_provenance.get('meanDecisionAgreementRatio'))}",
+            f"- Mean support frames: {_format_number(decision_provenance.get('meanDecisionSupportFrameCount'))}",
+            f"- Temporal decision rate: {_format_rate(decision_provenance.get('temporalDecisionRate'))}",
+            f"- Multi-frame decision rate: {_format_rate(decision_provenance.get('multiFrameDecisionRate'))}",
+            f"- Decision sources: {source_breakdown}",
+            f"- Decision stages: {stage_breakdown}",
         ])
 
     lines.extend([

@@ -129,6 +129,9 @@ class FrameSample:
     quality: QualityMetrics | None
     candidates: list[PlateCandidate]
     image_path: str | None
+    selection: dict[str, Any] | None = None
+    ocr_input: dict[str, Any] | None = None
+    temporal_support: dict[str, Any] | None = None
     diagnostics: dict[str, Any] | None = None
 
     def to_payload(self) -> dict[str, Any]:
@@ -140,5 +143,8 @@ class FrameSample:
             'quality': self.quality.to_payload() if self.quality else None,
             'candidates': [candidate.to_payload() for candidate in self.candidates],
             'imagePath': self.image_path,
+            'selection': self.selection,
+            'ocrInput': self.ocr_input,
+            'temporalSupport': self.temporal_support,
             'diagnostics': self.diagnostics,
         }

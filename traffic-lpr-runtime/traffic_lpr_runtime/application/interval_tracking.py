@@ -95,12 +95,13 @@ def _resolve_evidence_sample_budget(
     sample_times: list[int],
     duration_ms: int,
     preserve_dense_schedule: bool,
+    max_evidence_sample_count: int,
 ) -> int:
-    if preserve_dense_schedule or len(sample_times) <= 8:
+    if preserve_dense_schedule or len(sample_times) <= max_evidence_sample_count:
         return len(sample_times)
     if duration_ms <= 4000:
-        return min(len(sample_times), 8)
-    return min(len(sample_times), 10)
+        return min(len(sample_times), max(max_evidence_sample_count, 8))
+    return min(len(sample_times), max_evidence_sample_count)
 
 
 def _sparsify_evidence_sample_times(
@@ -108,6 +109,7 @@ def _sparsify_evidence_sample_times(
     anchor_time_ms: int,
     sample_step_ms: int,
     budget: int,
+    anchor_burst_count: int,
 ) -> list[int]:
     start_ms = int(interval['startMs'])
     end_ms = int(interval['endMs'])
@@ -122,7 +124,18 @@ def _sparsify_evidence_sample_times(
         chosen.append(time_ms)
 
     choose(anchor_time_ms)
-    choose(anchor_time_ms - max(50, min(100, sample_step_ms)))
+    choose(start_ms)
+    choose(end_ms)
+
+    burst_step_ms = max(45, min(sample_step_ms, 90))
+    for burst_index in range(1, max(1, anchor_burst_count) + 1):
+        choose(anchor_time_ms - (burst_step_ms * burst_index))
+        if len(chosen) >= budget:
+            break
+        choose(anchor_time_ms + (burst_step_ms * burst_index))
+        if len(chosen) >= budget:
+            break
+
     offset_ms = sample_step_ms
     while len(chosen) < budget and (anchor_time_ms - offset_ms >= start_ms or anchor_time_ms + offset_ms <= end_ms):
         choose(anchor_time_ms - offset_ms)
@@ -187,6 +200,7 @@ class IntervalTrackingService:
             raw_evidence_sample_times,
             duration_ms,
             preserve_dense_evidence_samples or options.temporal_evidence_mode == 'scheduled',
+            options.max_evidence_sample_count,
         )
         evidence_sample_times = raw_evidence_sample_times
         if evidence_budget < len(raw_evidence_sample_times):
@@ -195,6 +209,7 @@ class IntervalTrackingService:
                 anchor_time_ms,
                 sample_step_ms,
                 evidence_budget,
+                options.anchor_burst_count,
             )
         evidence_sample_time_set = set(evidence_sample_times)
         trajectory_step_ms = sample_step_ms if preserve_dense_evidence_samples else self.resolve_tracking_step_ms(interval, sample_step_ms)
@@ -224,6 +239,7 @@ class IntervalTrackingService:
                 trajectory_step_ms,
                 anchor_time_ms,
                 raw_evidence_sample_times,
+                options.anchor_burst_count,
             )
 
         anchor_frame = self._frame_reader.read_frame(source_path, anchor_time_ms)
@@ -287,7 +303,7 @@ class IntervalTrackingService:
             trajectory_step_ms,
             anchor_time_ms,
             raw_evidence_sample_times,
-            raw_evidence_sample_times,
+            options.anchor_burst_count,
         )
 
     def calibrate_interval_target_boxes(
@@ -445,8 +461,15 @@ class IntervalTrackingService:
         trajectory_step_ms: int,
         anchor_time_ms: int,
         raw_evidence_sample_times: list[int],
+        anchor_burst_count: int,
     ) -> tuple[list[TrackedRegion], dict[str, Any]]:
         evidence_sample_time_set = set(evidence_sample_times)
+        burst_step_ms = max(45, min(trajectory_step_ms, 90))
+        temporal_burst_time_set = {
+            time_ms
+            for time_ms in raw_evidence_sample_times
+            if abs(time_ms - anchor_time_ms) <= (burst_step_ms * max(anchor_burst_count, 1))
+        }
         temporal_range = _build_temporal_range_diagnostics(
             tracked_frames,
             tracking_times,
@@ -473,6 +496,8 @@ class IntervalTrackingService:
                 evidence_reasons.append('anchor')
             if tracked_frame.time_ms in evidence_sample_time_set:
                 evidence_reasons.append('scheduled-sample')
+            if tracked_frame.time_ms in temporal_burst_time_set and tracked_frame.time_ms != anchor_time_ms:
+                evidence_reasons.append('temporal-burst')
             if index == len(tracked_frames) - 1:
                 evidence_reasons.append('interval-end')
             if is_motion_hotspot:

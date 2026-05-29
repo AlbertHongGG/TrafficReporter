@@ -176,6 +176,106 @@ def _select_interval_evidence_frames(tracked_frames: list[TrackedRegion], option
     return _mark_selected_for_evidence_analysis(tracked_frames, set(chosen_by_time))
 
 
+def _select_temporal_support_frames(
+    tracked_frames: list[TrackedRegion],
+    reference_time_ms: int,
+    options: AnalysisOptions,
+) -> list[TrackedRegion]:
+    candidates = [
+        frame
+        for frame in tracked_frames
+        if frame.time_ms != reference_time_ms and abs(frame.time_ms - reference_time_ms) <= options.temporal_window_ms
+    ]
+    candidates.sort(
+        key=lambda frame: (
+            abs(frame.time_ms - reference_time_ms),
+            -float((frame.diagnostics or {}).get('evidencePriority') or 0.0),
+            -frame.confidence,
+        ),
+    )
+    return candidates[:max(0, options.temporal_neighbor_count - 1)]
+
+
+def _build_sample_selection_payload(sample: FrameSample, tracked_frame: TrackedRegion) -> dict[str, Any]:
+    reasons = [
+        reason
+        for reason in ((tracked_frame.diagnostics or {}).get('evidenceReasons') or [])
+        if isinstance(reason, str)
+    ]
+    if sample.quality is not None and sample.quality.sharpness >= 0.72 and 'sharpness-peak' not in reasons:
+        reasons.append('sharpness-peak')
+    return {
+        'selected': True,
+        'priority': float((tracked_frame.diagnostics or {}).get('evidencePriority') or sample.quality.overall_score if sample.quality is not None else 0.0),
+        'reasons': reasons,
+    }
+
+
+def _decision_source_for_candidate(candidate: PlateCandidate, sample: FrameSample | None) -> str:
+    if candidate.source.startswith('fused-image:'):
+        return 'fused-image'
+    if candidate.source == 'fused-char':
+        return 'fused-char'
+    if candidate.source == 'legacy-vote':
+        return 'legacy-vote'
+    if sample is not None and sample.ocr_input is not None and sample.ocr_input.get('stage') == 'temporal-restored':
+        return 'temporal-restored'
+    if (candidate.diagnostics or {}).get('bestFrameCarryThrough') is True:
+        return 'support-carry'
+    return 'single-frame'
+
+
+def _build_decision_trace(
+    candidates: list[PlateCandidate],
+    accepted_candidate_id: str | None,
+    selection_diagnostics: dict[str, Any],
+    samples: list[FrameSample],
+    sequence_summary: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    candidate_id = accepted_candidate_id or selection_diagnostics.get('suggestedCandidateId')
+    chosen_candidate = next((candidate for candidate in candidates if candidate.id == candidate_id), candidates[0] if candidates else None)
+    if chosen_candidate is None:
+        return None
+
+    chosen_sample = None
+    if chosen_candidate.frame_time_ms is not None:
+        chosen_sample = next((sample for sample in samples if sample.time_ms == chosen_candidate.frame_time_ms), None)
+    if chosen_sample is None:
+        chosen_sample = next(
+            (
+                sample
+                for sample in samples
+                if any(candidate.id == chosen_candidate.id or candidate.text == chosen_candidate.text for candidate in sample.candidates)
+            ),
+            None,
+        )
+
+    support_frame_count = 1
+    if chosen_sample is not None and chosen_sample.temporal_support is not None:
+        support_frame_count = int(chosen_sample.temporal_support.get('supportFrameCount') or support_frame_count)
+    else:
+        support_frame_count = int((chosen_candidate.diagnostics or {}).get('supportFrameCount') or support_frame_count)
+
+    agreement_ratio = (chosen_candidate.diagnostics or {}).get('sequenceSupportRatio')
+    if agreement_ratio is None and sequence_summary:
+        agreement_ratio = sequence_summary.get('persistenceRatio')
+
+    stage = None
+    if chosen_sample is not None and chosen_sample.ocr_input is not None:
+        stage = chosen_sample.ocr_input.get('stage')
+
+    return {
+        'source': _decision_source_for_candidate(chosen_candidate, chosen_sample),
+        'candidateId': chosen_candidate.id,
+        'sampleId': chosen_sample.id if chosen_sample is not None else None,
+        'frameTimeMs': chosen_candidate.frame_time_ms,
+        'stage': stage,
+        'supportFrameCount': support_frame_count,
+        'agreementRatio': float(agreement_ratio) if isinstance(agreement_ratio, (int, float)) else None,
+        'margin': float(selection_diagnostics.get('acceptedMargin')) if isinstance(selection_diagnostics.get('acceptedMargin'), (int, float)) else None,
+    }
+
+
 def _sequence_hard_review_reasons(sequence_summary: dict[str, Any], options: AnalysisOptions) -> list[str]:
     if not sequence_summary or options.sequence_review_mode == 'off':
         return []
@@ -402,12 +502,14 @@ class FrameAnalysisWorkflow:
             options,
             False,
         )
+        sample.selection = {'selected': True, 'priority': 1.0, 'reasons': ['anchor']}
         sample.diagnostics = {
             **(sample.diagnostics or {}),
             'selection': selection_diagnostics,
         }
         _emit_progress(0.9, 'Frame', 'Finalizing the frame analysis result.')
         runtime_status = self._status()
+        decision = _build_decision_trace(candidates, accepted_candidate_id, selection_diagnostics, [sample])
         return {
             'detections': [detection.to_payload() for detection in detections],
             'sample': sample.to_payload(),
@@ -415,6 +517,7 @@ class FrameAnalysisWorkflow:
             'acceptedCandidateId': accepted_candidate_id,
             'review': build_review_state(candidates, accepted_candidate_id, selection_diagnostics),
             'provenance': build_analysis_provenance('analyze-frame', payload, runtime_status, options.to_payload()),
+            'decision': decision,
             'runtime': runtime_status,
             'jobStatus': 'completed',
             'diagnostics': {
@@ -524,6 +627,7 @@ class IntervalAnalysisWorkflow:
 
         samples: list[FrameSample] = []
         observations: list[PlateObservation] = []
+        observation_cache: dict[int, PlateObservation | None] = {}
         sample_count = len(evidence_frames)
         for index, tracked_frame in enumerate(evidence_frames, start=1):
             raw_tracking_box = tracked_frame.box
@@ -543,6 +647,33 @@ class IntervalAnalysisWorkflow:
                 trackingTier=tracking['trackingTier'],
                 coverageRatio=tracking['coverageRatio'],
             )
+            support_observations: list[PlateObservation] = []
+            for support_frame in _select_temporal_support_frames(tracked_frames, tracked_frame.time_ms, sample_options):
+                cached_support = observation_cache.get(support_frame.time_ms)
+                if cached_support is not None:
+                    support_observations.append(cached_support)
+                    continue
+                support_calibrated_box = calibrated_target_boxes.get(support_frame.time_ms)
+                support_target_box, _ = _resolve_analysis_target_box(
+                    support_frame.box,
+                    support_calibrated_box,
+                    selected_target_box,
+                    support_frame.time_ms,
+                    anchor_time_ms,
+                )
+                support_frame_image = self._frame_reader.read_frame(payload['sourcePath'], support_frame.time_ms)
+                _, _, cached_support = self._analyze_plate_candidates(
+                    support_frame_image,
+                    support_frame.time_ms,
+                    None,
+                    support_target_box,
+                    payload.get('countryHints') or [],
+                    sample_options,
+                    None,
+                )
+                observation_cache[support_frame.time_ms] = cached_support
+                if cached_support is not None:
+                    support_observations.append(cached_support)
             frame = self._frame_reader.read_frame(payload['sourcePath'], tracked_frame.time_ms)
             _, sample, observation = self._analyze_plate_candidates(
                 frame,
@@ -552,7 +683,9 @@ class IntervalAnalysisWorkflow:
                 payload.get('countryHints') or [],
                 sample_options,
                 artifact_root / f'sample-{tracked_frame.time_ms}' if artifact_root else None,
+                support_observations,
             )
+            observation_cache[tracked_frame.time_ms] = observation
             if calibrated_target_box is not None:
                 tracked_frame.diagnostics = {
                     **(tracked_frame.diagnostics or {}),
@@ -563,6 +696,7 @@ class IntervalAnalysisWorkflow:
                 }
                 if analysis_box_source == 'calibrated':
                     tracked_frame.box = calibrated_target_box
+            sample.selection = _build_sample_selection_payload(sample, tracked_frame)
             sample.diagnostics = {
                 **(sample.diagnostics or {}),
                 'analysisTargetBox': analysis_target_box.to_payload(),
@@ -642,6 +776,7 @@ class IntervalAnalysisWorkflow:
         job_status = 'degraded' if tracking['trackingTier'] != 'full' else 'completed'
         analysis_tracks = self._build_track_payload(tracked_frames, track_diagnostics)
         analysis_track = analysis_tracks[0].to_payload() if analysis_tracks else None
+        decision = _build_decision_trace(candidates, accepted_candidate_id, selection_diagnostics, samples, sequence_summary)
         return {
             'targetTracks': [track.to_payload() for track in analysis_tracks],
             'analysisTrack': analysis_track,
@@ -651,6 +786,7 @@ class IntervalAnalysisWorkflow:
             'review': build_review_state(candidates, accepted_candidate_id, selection_diagnostics),
             'sequence': sequence_summary,
             'provenance': build_analysis_provenance('analyze-interval', payload, runtime_status, options.to_payload()),
+            'decision': decision,
             'summary': summary,
             'runtime': runtime_status,
             'jobStatus': job_status,

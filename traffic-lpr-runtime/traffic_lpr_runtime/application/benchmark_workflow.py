@@ -128,6 +128,7 @@ class BenchmarkRunWorkflow:
             if isinstance(diagnostics_payload, dict) and isinstance(diagnostics_payload.get('tracker'), dict):
                 tracker_diagnostics_payload = dict(diagnostics_payload['tracker'])
             tracking_payload = dict(response.get('tracking') or {}) if isinstance(response.get('tracking'), dict) else None
+            decision_payload = dict(response.get('decision') or {}) if isinstance(response.get('decision'), dict) else None
             if tracking_payload is not None:
                 for key in [
                     'identityBreaks',
@@ -162,6 +163,7 @@ class BenchmarkRunWorkflow:
                     'localization': localization,
                     'trackMetrics': track_metrics_case,
                     'tracking': tracking_payload,
+                    'decision': decision_payload,
                     'sequence': sequence_payload,
                     'failureReason': failure_reason,
                     'review': dict(review_payload),
@@ -231,6 +233,14 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
                 'detectionFallbackReviewRequiredRate': None,
                 'meanDetectionFallbackReacquireFrames': None,
                 'meanTrackedFrameCount': None,
+                'decisionCaseCount': 0,
+                'decisionSourceBreakdown': {},
+                'decisionStageBreakdown': {},
+                'meanDecisionAgreementRatio': None,
+                'meanDecisionSupportFrameCount': None,
+                'multiFrameDecisionCaseCount': 0,
+                'multiFrameDecisionRate': None,
+                'temporalDecisionRate': None,
                 'intervalSequenceCaseCount': 0,
                 'sequenceTierBreakdown': {},
                 'meanSequencePersistence': None,
@@ -272,6 +282,13 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
     detection_fallback_cases = 0
     detection_fallback_review_required_cases = 0
     detection_fallback_reacquire_values: list[float] = []
+    decision_case_count = 0
+    decision_source_counts: dict[str, int] = {}
+    decision_stage_counts: dict[str, int] = {}
+    decision_agreement_values: list[float] = []
+    decision_support_frame_values: list[float] = []
+    multi_frame_decision_cases = 0
+    temporal_decision_cases = 0
     sequence_tier_counts: dict[str, int] = {}
     sequence_persistence_values: list[float] = []
     sequence_gap_values: list[float] = []
@@ -296,6 +313,7 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
         localization = dict(result.get('localization') or {})
         track_metrics_case = dict(result.get('trackMetrics') or {}) if isinstance(result.get('trackMetrics'), dict) else None
         tracking_payload = dict(result.get('tracking') or {}) if isinstance(result.get('tracking'), dict) else None
+        decision_payload = dict(result.get('decision') or {}) if isinstance(result.get('decision'), dict) else None
         sequence_payload = dict(result.get('sequence') or {}) if isinstance(result.get('sequence'), dict) else None
         metadata = dict(result.get('metadata') or {})
         review_payload = _normalized_review_payload(result)
@@ -333,6 +351,22 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
             tracked_frame_count = _coerce_optional_int(tracking_payload.get('trackedFrameCount'))
             if tracked_frame_count is not None:
                 tracked_frame_counts.append(tracked_frame_count)
+        if decision_payload:
+            decision_case_count += 1
+            decision_source = str(decision_payload.get('source') or 'unknown')
+            decision_stage = str(decision_payload.get('stage') or 'unknown')
+            decision_source_counts[decision_source] = decision_source_counts.get(decision_source, 0) + 1
+            decision_stage_counts[decision_stage] = decision_stage_counts.get(decision_stage, 0) + 1
+            decision_agreement = _coerce_optional_float(decision_payload.get('agreementRatio'))
+            if decision_agreement is not None:
+                decision_agreement_values.append(decision_agreement)
+            support_frame_count = _coerce_optional_int(decision_payload.get('supportFrameCount'))
+            if support_frame_count is not None:
+                decision_support_frame_values.append(float(support_frame_count))
+                if support_frame_count > 1:
+                    multi_frame_decision_cases += 1
+            if decision_source == 'temporal-restored' or decision_stage == 'temporal-restored':
+                temporal_decision_cases += 1
         if sequence_payload:
             interval_sequence_cases += 1
             sequence_tier = str(sequence_payload.get('sequenceTier') or 'unknown')
@@ -374,6 +408,14 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
             'trackingCoverageRatio': (tracking_payload or {}).get('coverageRatio'),
             'trackedFrameCount': (tracking_payload or {}).get('trackedFrameCount'),
             'reacquireFrames': (tracking_payload or {}).get('reacquireFrames'),
+            'decisionCase': bool(decision_payload),
+            'decisionAgreementRatio': (decision_payload or {}).get('agreementRatio'),
+            'decisionSupportFrameCount': (decision_payload or {}).get('supportFrameCount'),
+            'temporalDecisionCase': bool(decision_payload) and (
+                str((decision_payload or {}).get('source') or 'unknown') == 'temporal-restored'
+                or str((decision_payload or {}).get('stage') or 'unknown') == 'temporal-restored'
+            ),
+            'multiFrameDecisionCase': bool(decision_payload) and (_coerce_optional_int((decision_payload or {}).get('supportFrameCount')) or 0) > 1,
             'sequencePersistence': (sequence_payload or {}).get('persistenceRatio'),
             'sequenceGapCount': (sequence_payload or {}).get('supportFrameGapCount'),
             'characterConsistencyMean': (sequence_payload or {}).get('characterConsistencyMean'),
@@ -425,6 +467,14 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
         'detectionFallbackReviewRequiredRate': (detection_fallback_review_required_cases / detection_fallback_cases) if detection_fallback_cases else None,
         'meanDetectionFallbackReacquireFrames': _mean_values(detection_fallback_reacquire_values),
         'meanTrackedFrameCount': (sum(tracked_frame_counts) / len(tracked_frame_counts)) if tracked_frame_counts else None,
+        'decisionCaseCount': decision_case_count,
+        'decisionSourceBreakdown': dict(sorted(decision_source_counts.items())),
+        'decisionStageBreakdown': dict(sorted(decision_stage_counts.items())),
+        'meanDecisionAgreementRatio': _mean_values(decision_agreement_values),
+        'meanDecisionSupportFrameCount': _mean_values(decision_support_frame_values),
+        'multiFrameDecisionCaseCount': multi_frame_decision_cases,
+        'multiFrameDecisionRate': (multi_frame_decision_cases / decision_case_count) if decision_case_count else None,
+        'temporalDecisionRate': (temporal_decision_cases / decision_case_count) if decision_case_count else None,
         'intervalSequenceCaseCount': interval_sequence_cases,
         'sequenceTierBreakdown': dict(sorted(sequence_tier_counts.items())),
         'meanSequencePersistence': _mean_values(sequence_persistence_values),
@@ -472,6 +522,10 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
         f"plateIoU={_safe_metric_average(benchmark_results, 'localization', 'plateMeanIoU'):.3f}, "
         f"p95={metrics['latencyMs']['p95']:.1f}ms"
     )
+    if metrics['temporalDecisionRate'] is not None:
+        summary = f"{summary}, temporal={metrics['temporalDecisionRate']:.1%}"
+    if metrics['meanDecisionSupportFrameCount'] is not None:
+        summary = f"{summary}, support={metrics['meanDecisionSupportFrameCount']:.1f}f"
     if metrics['acceptedUnderDegradedTrackingRate'] is not None:
         summary = f"{summary}, degradedAccepted={metrics['acceptedUnderDegradedTrackingRate']:.1%}"
     if metrics['detectionFallbackReviewRequiredRate'] is not None:
@@ -679,6 +733,13 @@ def _new_metric_bucket() -> dict[str, float]:
         'sequenceGapCountCount': 0.0,
         'characterConsistencyMean': 0.0,
         'characterConsistencyMeanCount': 0.0,
+        'decisionAgreementRatio': 0.0,
+        'decisionAgreementRatioCount': 0.0,
+        'decisionSupportFrameCount': 0.0,
+        'decisionSupportFrameCountCount': 0.0,
+        'decisionCaseCount': 0.0,
+        'temporalDecision': 0.0,
+        'multiFrameDecision': 0.0,
     }
 
 
@@ -741,6 +802,16 @@ def _update_metric_bucket(bucket: dict[str, float], case_metrics: dict[str, Any]
     if isinstance(case_metrics.get('characterConsistencyMean'), (int, float)):
         bucket['characterConsistencyMean'] += float(case_metrics['characterConsistencyMean'])
         bucket['characterConsistencyMeanCount'] += 1.0
+    if isinstance(case_metrics.get('decisionAgreementRatio'), (int, float)):
+        bucket['decisionAgreementRatio'] += float(case_metrics['decisionAgreementRatio'])
+        bucket['decisionAgreementRatioCount'] += 1.0
+    if case_metrics.get('decisionCase'):
+        bucket['decisionCaseCount'] += 1.0
+        bucket['temporalDecision'] += 1.0 if case_metrics.get('temporalDecisionCase') else 0.0
+        bucket['multiFrameDecision'] += 1.0 if case_metrics.get('multiFrameDecisionCase') else 0.0
+    if isinstance(case_metrics.get('decisionSupportFrameCount'), (int, float)):
+        bucket['decisionSupportFrameCount'] += float(case_metrics['decisionSupportFrameCount'])
+        bucket['decisionSupportFrameCountCount'] += 1.0
 
 
 def _finalize_metric_bucket(bucket: dict[str, float]) -> dict[str, float | None]:
@@ -770,6 +841,10 @@ def _finalize_metric_bucket(bucket: dict[str, float]) -> dict[str, float | None]
         'meanSequencePersistence': bucket['sequencePersistence'] / bucket['sequencePersistenceCount'] if bucket['sequencePersistenceCount'] else None,
         'meanSequenceGapCount': bucket['sequenceGapCount'] / bucket['sequenceGapCountCount'] if bucket['sequenceGapCountCount'] else None,
         'meanCharacterConsistencyMean': bucket['characterConsistencyMean'] / bucket['characterConsistencyMeanCount'] if bucket['characterConsistencyMeanCount'] else None,
+        'meanDecisionAgreementRatio': bucket['decisionAgreementRatio'] / bucket['decisionAgreementRatioCount'] if bucket['decisionAgreementRatioCount'] else None,
+        'meanDecisionSupportFrameCount': bucket['decisionSupportFrameCount'] / bucket['decisionSupportFrameCountCount'] if bucket['decisionSupportFrameCountCount'] else None,
+        'temporalDecisionRate': bucket['temporalDecision'] / bucket['decisionCaseCount'] if bucket['decisionCaseCount'] else None,
+        'multiFrameDecisionRate': bucket['multiFrameDecision'] / bucket['decisionCaseCount'] if bucket['decisionCaseCount'] else None,
     }
 
 

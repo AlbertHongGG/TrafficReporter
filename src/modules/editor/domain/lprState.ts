@@ -1,4 +1,5 @@
 import type {
+  LprDecisionTrace,
   LprAnalysisProvenance,
   LprFrameSample,
   LprJobState,
@@ -44,6 +45,10 @@ function cloneLprReviewState(review: LprReviewState | null) {
 
 function cloneLprAnalysisProvenance(provenance: LprAnalysisProvenance | null) {
   return provenance ? { ...provenance } : null;
+}
+
+function cloneLprDecisionTrace(decision: LprDecisionTrace | null) {
+  return decision ? { ...decision } : null;
 }
 
 function cloneLprTargetTracks(targetTracks: LprTargetTrack[]) {
@@ -121,6 +126,9 @@ function cloneLprSamples(samples: LprFrameSample[]) {
     targetBox: sample.targetBox ? { ...sample.targetBox } : null,
     plateBox: sample.plateBox ? { ...sample.plateBox } : null,
     quality: sample.quality ? { ...sample.quality } : null,
+    selection: sample.selection ? { ...sample.selection, reasons: [...sample.selection.reasons] } : null,
+    ocrInput: sample.ocrInput ? { ...sample.ocrInput } : null,
+    temporalSupport: sample.temporalSupport ? { ...sample.temporalSupport, supportTimes: [...sample.temporalSupport.supportTimes] } : null,
     candidates: cloneLprPlateCandidates(sample.candidates),
   }));
 }
@@ -166,6 +174,7 @@ export function buildDefaultLprState(overrides: Partial<LprSessionState> = {}): 
     candidates: cloneLprPlateCandidates(overrides.candidates ?? []),
     review: cloneLprReviewState(overrides.review ?? null),
     lastAnalysisProvenance: cloneLprAnalysisProvenance(overrides.lastAnalysisProvenance ?? null),
+    decision: cloneLprDecisionTrace(overrides.decision ?? null),
     acceptedCandidateId: overrides.acceptedCandidateId ?? null,
     history: cloneLprHistory(overrides.history ?? []),
   };

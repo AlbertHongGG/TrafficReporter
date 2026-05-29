@@ -79,7 +79,7 @@ class FrameWorkflowTests(unittest.TestCase):
         })
 
         self.assertEqual(result['jobStatus'], 'completed')
-        self.assertEqual(observed_options['restorationMode'], 'classical')
+        self.assertEqual(observed_options['restorationMode'], 'mambairv2')
         self.assertFalse(observed_options['enableRecognizerComparison'])
 
 

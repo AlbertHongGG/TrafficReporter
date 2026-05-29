@@ -34,6 +34,10 @@
         "minAcceptedConfidence": { "type": "number" },
         "minCandidateMargin": { "type": "number" },
         "minIntervalSupportFrames": { "type": "integer", "minimum": 1 },
+        "temporalWindowMs": { "type": "integer", "minimum": 0 },
+        "temporalNeighborCount": { "type": "integer", "minimum": 0 },
+        "maxEvidenceSampleCount": { "type": "integer", "minimum": 1 },
+        "anchorBurstCount": { "type": "integer", "minimum": 1 },
         "minSequencePersistence": { "type": "number", "minimum": 0, "maximum": 1 },
         "maxSequenceGapCount": { "type": "integer", "minimum": 0 }
       }
@@ -75,6 +79,10 @@
               "minAcceptedConfidence": { "type": "number" },
               "minCandidateMargin": { "type": "number" },
               "minIntervalSupportFrames": { "type": "integer", "minimum": 1 },
+              "temporalWindowMs": { "type": "integer", "minimum": 0 },
+              "temporalNeighborCount": { "type": "integer", "minimum": 0 },
+              "maxEvidenceSampleCount": { "type": "integer", "minimum": 1 },
+              "anchorBurstCount": { "type": "integer", "minimum": 1 },
               "minSequencePersistence": { "type": "number", "minimum": 0, "maximum": 1 },
               "maxSequenceGapCount": { "type": "integer", "minimum": 0 }
             }

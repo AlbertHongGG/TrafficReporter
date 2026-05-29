@@ -1482,6 +1482,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       candidates: response.projection.candidates,
       review: response.projection.review ?? null,
       lastAnalysisProvenance: response.projection.provenance ?? null,
+      decision: null,
       acceptedCandidateId,
       job: {
         ...currentLprState.job,
@@ -1723,6 +1724,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       dispatch({ type: 'set-lpr-candidates', candidates: response.candidates });
       dispatch({ type: 'set-lpr-review', review: response.review ?? null });
       dispatch({ type: 'set-lpr-provenance', provenance: response.provenance ?? null });
+      dispatch({ type: 'set-lpr-decision', decision: response.decision ?? null });
       if (response.candidates.length > 0) {
         const completionDetail = buildLprCompletionDetail(response.candidates, response.review);
         dispatch({
@@ -1829,8 +1831,10 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     const countryHints = applyCountryHints(
       latestCountryHintDraftRef.current ?? (lprState.countryHints.join(', ')),
     );
-    const sampleDivisor = lprState.useDenseSampling ? 16 : 8;
-    const sampleEveryMs = Math.max(120, Math.round((interval.endMs - interval.startMs) / sampleDivisor) || 120);
+    const durationMs = Math.max(0, interval.endMs - interval.startMs);
+    const sampleDivisor = lprState.useDenseSampling ? 28 : 14;
+    const sampleEveryMs = Math.max(lprState.useDenseSampling ? 70 : 90, Math.round(durationMs / sampleDivisor) || 90);
+    const maxSamples = lprState.useDenseSampling ? 24 : 14;
 
     const requestId = beginLprRequest('Interval', 'Tracking the selected target across the chosen interval.', 0.12);
 
@@ -1844,7 +1848,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         selectedTargetTrackId: lprSelectedTrack?.id ?? lprState.selectedTargetTrackId ?? null,
         countryHints,
         sampleEveryMs,
-        maxSamples: lprState.useDenseSampling ? 18 : 8,
+        maxSamples,
         analysisProfileId: lprState.selectedAnalysisProfileId,
         enableDeveloperDiagnostics: lprState.showDeveloperDiagnostics,
         requestId,
@@ -1861,6 +1865,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       dispatch({ type: 'set-lpr-candidates', candidates: response.candidates });
       dispatch({ type: 'set-lpr-review', review: response.review ?? null });
       dispatch({ type: 'set-lpr-provenance', provenance: response.provenance ?? null });
+      dispatch({ type: 'set-lpr-decision', decision: response.decision ?? null });
       const intervalDetail = response.jobStatus === 'degraded'
         ? response.summary
         : (buildLprCompletionDetail(response.candidates, response.review) ?? response.summary);

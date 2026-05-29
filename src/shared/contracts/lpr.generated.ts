@@ -22,6 +22,49 @@ export type LprRecognitionSource = 'baseline' | 'fused' | 'legacy-vote' | 'fused
 
 export type LprDiagnostics = Record<string, unknown>;
 
+export type LprArtifactStage = 'original' | 'rectified' | 'enhanced' | 'restored' | 'temporal-restored' | 'working';
+
+export type LprEvidenceReason = 'interval-start' | 'interval-end' | 'anchor' | 'scheduled-sample' | 'motion-hotspot' | 'high-confidence' | 'sharpness-peak' | 'temporal-burst';
+
+export type LprDecisionSource = 'single-frame' | 'temporal-restored' | 'fused-image' | 'fused-char' | 'legacy-vote' | 'support-carry';
+
+export interface LprSampleSelection {
+  selected: boolean;
+  priority: number;
+  reasons: LprEvidenceReason[];
+}
+
+export interface LprTemporalSupport {
+  strategy: string;
+  referenceTimeMs: number;
+  supportFrameCount: number;
+  supportWindowMs: number;
+  supportTimes: number[];
+  meanAlignmentScore: number;
+  meanQualityScore: number;
+  sourceStage: LprArtifactStage;
+  selectedStage: LprArtifactStage;
+}
+
+export interface LprOcrInput {
+  stage: LprArtifactStage;
+  variant: string;
+  source: LprDecisionSource;
+  imagePath: string | null;
+  supportFrameCount: number;
+}
+
+export interface LprDecisionTrace {
+  source: LprDecisionSource;
+  candidateId: string | null;
+  sampleId: string | null;
+  frameTimeMs: number | null;
+  stage: LprArtifactStage | null;
+  supportFrameCount: number;
+  agreementRatio: number | null;
+  margin: number | null;
+}
+
 export interface LprAnalysisOptions {
   persistArtifacts?: boolean;
   artifactDir?: string | null;
@@ -47,6 +90,10 @@ export interface LprAnalysisOptions {
   minIntervalSupportFrames?: number;
   minSequencePersistence?: number;
   maxSequenceGapCount?: number;
+  temporalWindowMs?: number;
+  temporalNeighborCount?: number;
+  maxEvidenceSampleCount?: number;
+  anchorBurstCount?: number;
 }
 
 export interface LprAnalysisProfileDefinition {
@@ -147,6 +194,9 @@ export interface LprFrameSample {
   quality: LprQualityMetrics | null;
   candidates: LprPlateCandidate[];
   imagePath: string | null;
+  selection?: LprSampleSelection | null;
+  ocrInput?: LprOcrInput | null;
+  temporalSupport?: LprTemporalSupport | null;
   diagnostics?: LprDiagnostics | null;
 }
 
@@ -229,6 +279,7 @@ export interface LprSessionState {
   candidates: LprPlateCandidate[];
   review: LprReviewState | null;
   lastAnalysisProvenance: LprAnalysisProvenance | null;
+  decision: LprDecisionTrace | null;
   acceptedCandidateId: string | null;
   history: LprResultHistoryEntry[];
 }
@@ -276,6 +327,7 @@ export interface LprFrameAnalysisResponse {
   acceptedCandidateId: string | null;
   review: LprReviewState;
   provenance: LprAnalysisProvenance;
+  decision?: LprDecisionTrace | null;
   runtime: LprRuntimeStatus;
   jobStatus?: LprJobStatus;
   diagnostics?: LprDiagnostics | null;
@@ -305,6 +357,7 @@ export interface LprIntervalAnalysisResponse {
   acceptedCandidateId: string | null;
   review: LprReviewState;
   provenance: LprAnalysisProvenance;
+  decision?: LprDecisionTrace | null;
   summary: string;
   runtime: LprRuntimeStatus;
   jobStatus?: LprJobStatus;

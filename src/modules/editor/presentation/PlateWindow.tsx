@@ -34,7 +34,7 @@ import {
 import { requestPlateWindowSession, sendPlateWindowAction } from '../infrastructure/plateWindowApi';
 import { clamp, formatRulerLabel, formatTransportTime } from '../domain/model';
 import { buildDefaultLprState } from '../domain/lprState';
-import type { LprFrameSample, LprJobState, LprPlateCandidate, LprReviewState, LprTargetTrack, TimelineIntervalSelection } from '../../../shared/contracts';
+import type { LprDecisionTrace, LprFrameSample, LprJobState, LprPlateCandidate, LprReviewState, LprTargetTrack, TimelineIntervalSelection } from '../../../shared/contracts';
 import { getLprAnalysisProfileLabel, getLprAnalysisProfiles } from '../../../shared/lprAnalysisProfiles';
 import { createLogger, getErrorSummary, serializeError } from '../../../utils/logger';
 import { shouldApplyRevisionedWindowSnapshot, unwrapRevisionedWindowSnapshot } from '../../../vnext/windowing/revisionedSnapshot';
@@ -123,6 +123,7 @@ function asArtifacts(sample: LprFrameSample): EvidenceArtifact[] {
     ['rectified', 'Rectified'],
     ['enhanced', 'Enhanced'],
     ['restored', 'Restored'],
+    ['temporal-restored', 'Temporal'],
     ['working', 'Working'],
   ] satisfies Array<[string, string]>) {
     const rawPath = artifacts?.[key];
@@ -426,6 +427,78 @@ function candidateBadgeLabel(candidate: LprPlateCandidate, acceptedCandidateId: 
   return confidenceLabel;
 }
 
+function decisionSourceLabel(source: string | null | undefined) {
+  switch (source) {
+    case 'temporal-restored':
+      return 'Temporal';
+    case 'fused-image':
+      return 'Fused';
+    case 'fused-char':
+      return 'Consensus';
+    case 'legacy-vote':
+      return 'Legacy';
+    case 'support-carry':
+      return 'Carry';
+    default:
+      return 'Single';
+  }
+}
+
+function artifactStageLabel(stage: string | null | undefined) {
+  switch (stage) {
+    case 'temporal-restored':
+      return 'Temporal';
+    case 'rectified':
+      return 'Rectified';
+    case 'enhanced':
+      return 'Enhanced';
+    case 'restored':
+      return 'Restored';
+    case 'original':
+      return 'Original';
+    default:
+      return 'Working';
+  }
+}
+
+function evidenceReasonLabel(reason: string) {
+  switch (reason) {
+    case 'interval-start':
+      return 'Start';
+    case 'interval-end':
+      return 'End';
+    case 'anchor':
+      return 'Anchor';
+    case 'scheduled-sample':
+      return 'Schedule';
+    case 'motion-hotspot':
+      return 'Motion';
+    case 'high-confidence':
+      return 'Stable';
+    case 'sharpness-peak':
+      return 'Sharp';
+    case 'temporal-burst':
+      return 'Burst';
+    default:
+      return reason;
+  }
+}
+
+function buildDecisionCards(decision: LprDecisionTrace | null, sample: LprFrameSample | null) {
+  const supportCount = sample?.temporalSupport?.supportFrameCount ?? decision?.supportFrameCount ?? 1;
+  const agreement = decision?.agreementRatio;
+  return [
+    { key: 'source', value: decisionSourceLabel(decision?.source ?? sample?.ocrInput?.source), meta: 'Source' },
+    { key: 'stage', value: artifactStageLabel(sample?.ocrInput?.stage ?? decision?.stage), meta: 'Input' },
+    { key: 'support', value: `${supportCount}`, meta: 'Frames' },
+    { key: 'agreement', value: agreement !== null && agreement !== undefined ? formatConfidence(agreement) : '--', meta: 'Agree' },
+  ];
+}
+
+function sampleReasonTokens(sample: LprFrameSample) {
+  return (sample.selection?.reasons ?? []).map(evidenceReasonLabel).slice(0, 4);
+}
+
 export const PlateWindow: React.FC = () => {
   const [snapshot, setSnapshot] = React.useState<PlateWindowSessionSnapshot | null>(null);
   const [countryHintsDraft, setCountryHintsDraft] = React.useState('');
@@ -457,6 +530,10 @@ export const PlateWindow: React.FC = () => {
     }
     return playheadEvidenceSample ?? evidenceSamples[0] ?? null;
   }, [evidenceSamples, isEvidenceSelectionPinned, playheadEvidenceSample, selectedEvidenceSampleId]);
+  const decisionCards = React.useMemo(
+    () => buildDecisionCards(lprState.decision, activeEvidenceSample?.sample ?? null),
+    [activeEvidenceSample?.sample, lprState.decision],
+  );
 
   React.useEffect(() => {
     let disposed = false;
@@ -617,6 +694,14 @@ export const PlateWindow: React.FC = () => {
                       {evidenceCount}
                     </span>
                   )}
+                </div>
+                <div className={styles.heroDecisionStrip}>
+                  {decisionCards.map((card) => (
+                    <motion.div key={card.key} layout className={styles.heroDecisionCard}>
+                      <strong className={styles.heroDecisionValue}>{card.value}</strong>
+                      <span className={styles.heroDecisionMeta}>{card.meta}</span>
+                    </motion.div>
+                  ))}
                 </div>
                 <AnimatePresence>
                   {(lprState.job.error || errorMessage) && (
@@ -808,6 +893,7 @@ export const PlateWindow: React.FC = () => {
                       {evidenceSamples.map((entry) => {
                         const isActive = entry.sample.id === activeEvidenceSample?.sample.id;
                         const trackingLines = lprState.showDeveloperDiagnostics ? buildSampleTrackingLines(entry.sample) : [];
+                        const reasonTokens = sampleReasonTokens(entry.sample);
                         return (
                           <motion.div
                             layout
@@ -829,6 +915,13 @@ export const PlateWindow: React.FC = () => {
                                   <strong className={styles.evidenceChipText}>{entry.matchingCandidate?.text ?? samplePrimaryText(entry.sample)}</strong>
                                   <span className={styles.evidenceChipBadge}>{formatConfidence(entry.sample.quality?.overallScore ?? 0)}</span>
                                 </div>
+                                {reasonTokens.length > 0 && (
+                                  <div className={styles.evidenceReasonRow}>
+                                    {reasonTokens.map((reason) => (
+                                      <span key={`${entry.sample.id}-${reason}`} className={styles.evidenceReasonChip}>{reason}</span>
+                                    ))}
+                                  </div>
+                                )}
                               </button>
                               
                               <button
@@ -843,16 +936,49 @@ export const PlateWindow: React.FC = () => {
 
                             {isActive && (
                               <div className={styles.evidenceExpanded}>
-                                <div className={styles.evidencePreviewGrid}>
-                                  {entry.artifacts.map((artifact) => (
-                                    <div key={artifact.key} className={styles.evidencePreviewCard}>
-                                      <div className={styles.evidencePreviewLabel}><Image size={12} className={styles.mutedIcon} /> {artifact.label}</div>
-                                      <img className={styles.evidencePreviewImage} src={toImageSrc(artifact.path)} alt={`${artifact.label} ${formatSampleTimestamp(entry.sample.timeMs)}`} />
+                                <div className={styles.evidenceInsightStrip}>
+                                  {buildDecisionCards(lprState.decision, entry.sample).map((card) => (
+                                    <div key={`${entry.sample.id}-${card.key}`} className={styles.evidenceInsightCard}>
+                                      <strong className={styles.evidenceInsightValue}>{card.value}</strong>
+                                      <span className={styles.evidenceInsightMeta}>{card.meta}</span>
                                     </div>
                                   ))}
                                 </div>
+                                <div className={styles.evidencePreviewGrid}>
+                                  {entry.artifacts.map((artifact) => {
+                                    const isOcrInputArtifact = artifact.key === entry.sample.ocrInput?.stage || (artifact.key === 'working' && entry.sample.ocrInput?.stage === 'working');
+                                    return (
+                                    <div key={artifact.key} className={`${styles.evidencePreviewCard} ${isOcrInputArtifact ? styles.evidencePreviewCardActive : ''}`}>
+                                      <div className={styles.evidencePreviewLabel}><Image size={12} className={styles.mutedIcon} /> {artifact.label}</div>
+                                      {isOcrInputArtifact && <span className={styles.evidencePreviewInputBadge}>OCR</span>}
+                                      <img className={styles.evidencePreviewImage} src={toImageSrc(artifact.path)} alt={`${artifact.label} ${formatSampleTimestamp(entry.sample.timeMs)}`} />
+                                    </div>
+                                  );})}
+                                </div>
 
                                 <div className={styles.evidenceMetaRail}>
+                                  {(entry.sample.ocrInput || entry.sample.temporalSupport) && (
+                                    <div className={styles.evidenceMetaSection}>
+                                      <div className={styles.evidenceMetaHeader}>
+                                        <Search size={14} className={styles.metaIcon} />
+                                        <span className={styles.evidenceMetaTitle}>Input</span>
+                                      </div>
+                                      <div className={styles.signalStack}>
+                                        {entry.sample.ocrInput && (
+                                          <div className={styles.signalRow}>
+                                            <span className={styles.signalPrimary}>{artifactStageLabel(entry.sample.ocrInput.stage)}</span>
+                                            <span className={styles.signalSecondary}>{decisionSourceLabel(entry.sample.ocrInput.source)}</span>
+                                          </div>
+                                        )}
+                                        {entry.sample.temporalSupport && (
+                                          <div className={styles.signalRow}>
+                                            <span className={styles.signalPrimary}>{entry.sample.temporalSupport.supportFrameCount}f</span>
+                                            <span className={styles.signalSecondary}>{formatConfidence(entry.sample.temporalSupport.meanAlignmentScore)}</span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
                                   <div className={styles.evidenceMetaSection}>
                                     <div className={styles.evidenceMetaHeader}>
                                       <Zap size={14} className={styles.metaIcon} />

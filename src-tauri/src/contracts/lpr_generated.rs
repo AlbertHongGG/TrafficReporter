@@ -20,6 +20,57 @@ pub type LprRecognitionSource = String;
 
 pub type LprDiagnostics = Value;
 
+pub type LprArtifactStage = String;
+
+pub type LprEvidenceReason = String;
+
+pub type LprDecisionSource = String;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LprSampleSelection {
+    pub selected: bool,
+    pub priority: f64,
+    pub reasons: Vec<LprEvidenceReason>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LprTemporalSupport {
+    pub strategy: String,
+    pub reference_time_ms: u64,
+    pub support_frame_count: u32,
+    pub support_window_ms: u64,
+    pub support_times: Vec<f64>,
+    pub mean_alignment_score: f64,
+    pub mean_quality_score: f64,
+    pub source_stage: LprArtifactStage,
+    pub selected_stage: LprArtifactStage,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LprOcrInput {
+    pub stage: LprArtifactStage,
+    pub variant: String,
+    pub source: LprDecisionSource,
+    pub image_path: Option<String>,
+    pub support_frame_count: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LprDecisionTrace {
+    pub source: LprDecisionSource,
+    pub candidate_id: Option<String>,
+    pub sample_id: Option<String>,
+    pub frame_time_ms: Option<u64>,
+    pub stage: Option<LprArtifactStage>,
+    pub support_frame_count: u32,
+    pub agreement_ratio: Option<f64>,
+    pub margin: Option<f64>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LprAnalysisOptionsPayload {
@@ -47,6 +98,10 @@ pub struct LprAnalysisOptionsPayload {
     pub min_interval_support_frames: Option<u32>,
     pub min_sequence_persistence: Option<f64>,
     pub max_sequence_gap_count: Option<u32>,
+    pub temporal_window_ms: Option<u64>,
+    pub temporal_neighbor_count: Option<u32>,
+    pub max_evidence_sample_count: Option<u32>,
+    pub anchor_burst_count: Option<u32>,
 }
 
 pub type LprReviewStatus = String;
@@ -142,6 +197,9 @@ pub struct LprFrameSamplePayload {
     pub quality: Option<LprQualityMetricsPayload>,
     pub candidates: Vec<LprPlateCandidatePayload>,
     pub image_path: Option<String>,
+    pub selection: Option<LprSampleSelection>,
+    pub ocr_input: Option<LprOcrInput>,
+    pub temporal_support: Option<LprTemporalSupport>,
     pub diagnostics: Option<LprDiagnostics>,
 }
 
@@ -240,6 +298,7 @@ pub struct LprFrameAnalysisResponsePayload {
     pub accepted_candidate_id: Option<String>,
     pub review: LprReviewStatePayload,
     pub provenance: LprAnalysisProvenancePayload,
+    pub decision: Option<LprDecisionTrace>,
     pub runtime: LprRuntimeStatusPayload,
     pub job_status: Option<LprJobStatus>,
     pub diagnostics: Option<LprDiagnostics>,
@@ -273,6 +332,7 @@ pub struct LprIntervalAnalysisResponsePayload {
     pub accepted_candidate_id: Option<String>,
     pub review: LprReviewStatePayload,
     pub provenance: LprAnalysisProvenancePayload,
+    pub decision: Option<LprDecisionTrace>,
     pub summary: String,
     pub runtime: LprRuntimeStatusPayload,
     pub job_status: Option<LprJobStatus>,
