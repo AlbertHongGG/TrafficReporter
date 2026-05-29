@@ -34,6 +34,7 @@ class AnalysisOptions:
     enable_rectification: bool = True
     enable_enhancement: bool = True
     enable_recognizer_comparison: bool = True
+    enable_secondary_subcrop_ocr: bool = False
     debug_tag: str | None = None
     ocr_model_names: list[str] = field(default_factory=lambda: list(DEFAULT_OCR_MODEL_NAMES))
     max_plate_candidates: int = 3
@@ -127,6 +128,7 @@ class AnalysisOptions:
         return replace(
             self,
             enable_recognizer_comparison=False,
+            enable_secondary_subcrop_ocr=True,
             restoration_mode=restoration_mode,
         )
 

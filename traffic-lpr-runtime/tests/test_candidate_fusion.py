@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from traffic_lpr_runtime.application.candidate_fusion import CandidateFusionService
 from traffic_lpr_runtime.application.candidate_fusion import MAX_INTERVAL_FUSION_OBSERVATIONS
+from traffic_lpr_runtime.application.candidate_fusion import apply_reliability_selection
 from traffic_lpr_runtime.application.candidate_fusion import _candidate_weight
 from traffic_lpr_runtime.application.pipeline_support import AnalysisOptions
 from traffic_lpr_runtime.application.preprocessing import PlateObservation
@@ -217,6 +218,46 @@ class CandidateFusionTests(unittest.TestCase):
             _candidate_weight(mismatched_char_fusion, source_weights),
             _candidate_weight(aligned_char_fusion, source_weights),
         )
+
+    def test_reliability_selection_prefers_format_complete_fallback_candidate(self) -> None:
+        top_candidate = PlateCandidate(
+            id='gm500',
+            text='GM500',
+            confidence=0.68422406789603,
+            source='ocr:cct-xs-v2-global-model',
+            frame_time_ms=2535,
+            country_code='TW',
+            box=None,
+            quality=make_quality(0.84),
+            diagnostics={},
+        )
+        fallback_candidate = PlateCandidate(
+            id='bjf5714',
+            text='BJF5714',
+            confidence=0.6417224917425172,
+            source='ocr:cct-s-v2-global-model',
+            frame_time_ms=2535,
+            country_code='TW',
+            box=None,
+            quality=make_quality(0.84),
+            diagnostics={},
+        )
+
+        ordered_candidates, accepted_candidate_id, diagnostics = apply_reliability_selection(
+            [top_candidate, fallback_candidate],
+            [make_sample_with_candidates('sample-2535', 2535, [top_candidate, fallback_candidate])],
+            ['tw'],
+            AnalysisOptions(min_accepted_confidence=0.72, min_candidate_margin=0.12),
+            False,
+        )
+
+        self.assertIsNone(accepted_candidate_id)
+        self.assertEqual(ordered_candidates[0].text, 'BJF5714')
+        self.assertTrue(diagnostics['usedFallback'])
+        self.assertEqual(diagnostics['topCandidateText'], 'GM500')
+        self.assertEqual(diagnostics['suggestedText'], 'BJF5714')
+        self.assertEqual(diagnostics['formatScore'], 1.0)
+        self.assertEqual(ordered_candidates[0].diagnostics['selection']['reasons'], ['low-confidence', 'low-margin'])
 
     def test_aligned_fusion_caps_observations(self) -> None:
         class _Cv2Stub:

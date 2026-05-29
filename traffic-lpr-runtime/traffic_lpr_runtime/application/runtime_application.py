@@ -6,6 +6,7 @@ from typing import Any
 from traffic_lpr_runtime.domain.errors import RuntimeFailure
 from traffic_lpr_runtime.domain.interfaces import FrameReader, PlateRecognizer, TargetDetector
 from traffic_lpr_runtime.domain.models import FrameSample, PlateCandidate, TargetTrack, TrackedRegion
+from traffic_lpr_runtime.domain.text import normalize_plate_text
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect, crop_image
 from traffic_lpr_runtime.application.benchmark_workflow import BenchmarkRunWorkflow
 from traffic_lpr_runtime.application.ai_evidence_workflow import AiEvidenceRuntimeBridge, AiEvidenceWorkflow
@@ -30,6 +31,17 @@ from traffic_lpr_runtime.vnext import (
     RuntimeServiceContainer,
     build_default_runtime_service_container,
 )
+
+
+HARD_PLATE_SECONDARY_CROP_SPECS = (
+    (0.0, 0.3),
+    (0.25, 0.0),
+    (0.25, 0.3),
+    (0.5, 0.0),
+    (0.5, 0.3),
+)
+
+HARD_PLATE_SECONDARY_OCR_MODELS = ('cct-s-v2-global-model',)
 
 
 class LprRuntimeApplication:
@@ -286,32 +298,122 @@ class LprRuntimeApplication:
                 'ocrVariant': 'working',
             }
 
-        if crop_candidates:
-            return crop_candidates
+        if not crop_candidates:
+            for variant_name, variant_image in [
+                ('enhanced', observation.enhanced_image),
+                ('rectified', observation.rectified_image),
+                ('original', observation.original_image),
+            ]:
+                if variant_image is None or getattr(variant_image, 'size', 0) == 0 or variant_image is observation.working_image:
+                    continue
+                variant_candidates = self._primary_recognizer.recognize_plate_crop(
+                    variant_image,
+                    time_ms,
+                    plate_box,
+                    country_hints,
+                    options.ocr_models(),
+                )
+                for candidate in variant_candidates:
+                    candidate.diagnostics = {
+                        **(candidate.diagnostics or {}),
+                        **diagnostics_extra,
+                        'ocrVariant': variant_name,
+                    }
+                crop_candidates.extend(variant_candidates)
 
-        for variant_name, variant_image in [
-            ('enhanced', observation.enhanced_image),
-            ('rectified', observation.rectified_image),
-            ('original', observation.original_image),
-        ]:
-            if variant_image is None or getattr(variant_image, 'size', 0) == 0 or variant_image is observation.working_image:
-                continue
-            variant_candidates = self._primary_recognizer.recognize_plate_crop(
-                variant_image,
+        crop_candidates.extend(
+            self._secondary_subcrop_candidates(
+                observation,
                 time_ms,
                 plate_box,
                 country_hints,
-                options.ocr_models(),
+                options,
+                diagnostics_extra,
             )
-            for candidate in variant_candidates:
+        )
+
+        return _merge_unique_crop_candidates(crop_candidates)
+
+    def _secondary_subcrop_candidates(
+        self,
+        observation: PlateObservation,
+        time_ms: int,
+        plate_box: NormalizedRect | None,
+        country_hints: list[str],
+        options: AnalysisOptions,
+        diagnostics_extra: dict[str, Any],
+    ) -> list[PlateCandidate]:
+        if not options.enable_secondary_subcrop_ocr:
+            return []
+
+        diagnostics = observation.diagnostics or {}
+        quality_route = str(diagnostics.get('qualityRoute') or '')
+        if quality_route not in {'high-angle', 'tiny-plate', 'motion-soft'}:
+            return []
+
+        original_image = observation.original_image
+        if original_image is None or getattr(original_image, 'size', 0) == 0:
+            return []
+
+        shape = getattr(original_image, 'shape', None)
+        if shape is None or min(shape[:2]) > 96:
+            return []
+
+        crop_box_payload = diagnostics.get('ocrCropBox')
+        source_box_payload = diagnostics.get('sourcePlateBox')
+        if not isinstance(crop_box_payload, dict) or not isinstance(source_box_payload, dict):
+            return []
+
+        try:
+            crop_box = NormalizedRect.from_payload(crop_box_payload)
+            source_box = NormalizedRect.from_payload(source_box_payload)
+        except (TypeError, ValueError):
+            return []
+        if crop_box is None or source_box is None or crop_box.width <= 0 or crop_box.height <= 0:
+            return []
+
+        relative_box = NormalizedRect(
+            x=(source_box.x - crop_box.x) / crop_box.width,
+            y=(source_box.y - crop_box.y) / crop_box.height,
+            width=source_box.width / crop_box.width,
+            height=source_box.height / crop_box.height,
+        )
+        model_names = list(dict.fromkeys([*options.ocr_models(), *HARD_PLATE_SECONDARY_OCR_MODELS]))
+        secondary_candidates: list[PlateCandidate] = []
+
+        for width_pad_ratio, height_pad_ratio in HARD_PLATE_SECONDARY_CROP_SPECS:
+            x1 = max(0.0, relative_box.x - (relative_box.width * width_pad_ratio))
+            y1 = max(0.0, relative_box.y - (relative_box.height * height_pad_ratio))
+            x2 = min(1.0, relative_box.x + relative_box.width * (1.0 + width_pad_ratio))
+            y2 = min(1.0, relative_box.y + relative_box.height * (1.0 + height_pad_ratio))
+            if x2 <= x1 or y2 <= y1:
+                continue
+
+            subcrop_box = NormalizedRect(x=x1, y=y1, width=x2 - x1, height=y2 - y1)
+            subcrop_image = crop_image(original_image, subcrop_box)
+            if subcrop_image is None or getattr(subcrop_image, 'size', 0) == 0:
+                continue
+
+            subcrop_candidates = self._primary_recognizer.recognize_plate_crop(
+                subcrop_image,
+                time_ms,
+                plate_box,
+                country_hints,
+                model_names,
+            )
+            for candidate in subcrop_candidates:
                 candidate.diagnostics = {
                     **(candidate.diagnostics or {}),
                     **diagnostics_extra,
-                    'ocrVariant': variant_name,
+                    'ocrVariant': 'secondary-subcrop',
+                    'subcrop': {
+                        'wx': width_pad_ratio,
+                        'hy': height_pad_ratio,
+                    },
                 }
-            crop_candidates.extend(variant_candidates)
+            secondary_candidates.extend(subcrop_candidates)
 
-        return crop_candidates
+        return secondary_candidates
 
     def _aggregate_candidates(
         self,
@@ -431,6 +533,26 @@ def _looks_like_plate_roi(rect: NormalizedRect) -> bool:
 def _normalize_recognizer_backend(value: str | None) -> str:
     normalized = (value or 'hybrid').strip().lower()
     return normalized if normalized in {'baseline', 'hybrid'} else 'hybrid'
+
+
+def _merge_unique_crop_candidates(candidates: list[PlateCandidate]) -> list[PlateCandidate]:
+    merged: dict[tuple[str, str], PlateCandidate] = {}
+    for candidate in candidates:
+        text = normalize_plate_text(candidate.text)
+        if not text:
+            continue
+        key = (text, candidate.source)
+        current = merged.get(key)
+        if current is None or candidate.confidence >= current.confidence:
+            merged[key] = candidate
+    return sorted(
+        merged.values(),
+        key=lambda candidate: (
+            candidate.confidence,
+            candidate.quality.overall_score if candidate.quality else 0.0,
+        ),
+        reverse=True,
+    )
 
 
 def build_default_application(runtime_script: Path) -> LprRuntimeApplication:

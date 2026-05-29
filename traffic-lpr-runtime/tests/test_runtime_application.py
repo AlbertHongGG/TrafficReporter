@@ -12,6 +12,11 @@ from traffic_lpr_runtime.application.runtime_application import LprRuntimeApplic
 from traffic_lpr_runtime.domain.models import FrameSample, PlateCandidate, QualityMetrics
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect
 
+try:
+    import numpy as np
+except Exception:  # pragma: no cover - dependency-gated test environment
+    np = None
+
 
 def make_quality() -> QualityMetrics:
     return QualityMetrics(
@@ -47,22 +52,44 @@ class RecognizerStub:
             )
         ]
 
+
+class HardPlateRecognizerStub:
+    def recognize(self, image, time_ms: int, crop_box: NormalizedRect | None) -> list[PlateCandidate]:
+        del image, time_ms, crop_box
+        return []
+
     def recognize_plate_crop(self, image, time_ms: int, plate_box, country_hints, model_names):
-        del image, time_ms, plate_box, country_hints, model_names
-        self.crop_calls += 1
-        return [
-            PlateCandidate(
-                id='ocr-1',
-                text='ABC1234',
-                confidence=0.96,
-                source='ocr:cct-xs-v2-global-model',
-                frame_time_ms=100,
-                country_code='TW',
-                box=None,
-                quality=make_quality(),
-                diagnostics={},
-            )
-        ]
+        del time_ms, plate_box, country_hints
+        height, width = image.shape[:2]
+        if (height, width) == (80, 83) and list(model_names) == ['cct-xs-v2-global-model']:
+            return [
+                PlateCandidate(
+                    id='ocr-original',
+                    text='GM400',
+                    confidence=0.38,
+                    source='ocr:cct-xs-v2-global-model',
+                    frame_time_ms=2535,
+                    country_code='TW',
+                    box=None,
+                    quality=make_quality(),
+                    diagnostics={},
+                )
+            ]
+        if (height, width) == (37, 47) and 'cct-s-v2-global-model' in model_names:
+            return [
+                PlateCandidate(
+                    id='ocr-subcrop',
+                    text='BJF5714',
+                    confidence=0.64,
+                    source='ocr:cct-s-v2-global-model',
+                    frame_time_ms=2535,
+                    country_code='TW',
+                    box=None,
+                    quality=make_quality(),
+                    diagnostics={},
+                )
+            ]
+        return []
 
 
 class RuntimeApplicationTests(unittest.TestCase):
@@ -102,6 +129,48 @@ class RuntimeApplicationTests(unittest.TestCase):
         self.assertEqual(sample.diagnostics['recognizerBackend'], 'baseline')
         self.assertFalse(sample.diagnostics['allowCropRefinement'])
         self.assertIsNone(observation)
+
+    @unittest.skipIf(np is None, 'NumPy is required for OCR crop regression tests.')
+    def test_recognize_observation_crop_adds_secondary_subcrop_candidates_for_hard_plate(self) -> None:
+        app = object.__new__(LprRuntimeApplication)
+        app._primary_recognizer = HardPlateRecognizerStub()
+
+        observation = types.SimpleNamespace(
+            working_image=np.zeros((40, 128, 3), dtype=np.uint8),
+            enhanced_image=np.zeros((40, 128, 3), dtype=np.uint8),
+            rectified_image=np.zeros((40, 128, 3), dtype=np.uint8),
+            original_image=np.zeros((80, 83, 3), dtype=np.uint8),
+            diagnostics={
+                'qualityRoute': 'high-angle',
+                'ocrCropBox': {
+                    'x': 0.21702389717102052,
+                    'y': 0.2337021075538434,
+                    'width': 0.06488330187620936,
+                    'height': 0.11165465683836012,
+                },
+                'sourcePlateBox': {
+                    'x': 0.23108639717102053,
+                    'y': 0.2735787707104006,
+                    'width': 0.0367583018762094,
+                    'height': 0.03190133052524574,
+                },
+            },
+        )
+
+        candidates = app._recognize_observation_crop(
+            observation,
+            2535,
+            NormalizedRect(x=0.23108639717102053, y=0.2735787707104006, width=0.0367583018762094, height=0.03190133052524574),
+            ['tw'],
+            AnalysisOptions(enable_recognizer_comparison=False, enable_secondary_subcrop_ocr=True),
+        )
+
+        texts = [candidate.text for candidate in candidates]
+        self.assertIn('GM400', texts)
+        self.assertIn('BJF5714', texts)
+        secondary_candidate = next(candidate for candidate in candidates if candidate.text == 'BJF5714')
+        self.assertEqual(secondary_candidate.diagnostics['ocrVariant'], 'secondary-subcrop')
+        self.assertEqual(secondary_candidate.diagnostics['subcrop'], {'wx': 0.0, 'hy': 0.3})
 
 
 if __name__ == '__main__':

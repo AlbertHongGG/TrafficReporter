@@ -96,9 +96,18 @@ class PreprocessingTests(unittest.TestCase):
         sample_options = options.for_interval_sample(sample_count_hint=12)
 
         self.assertFalse(sample_options.enable_recognizer_comparison)
+        self.assertFalse(sample_options.enable_secondary_subcrop_ocr)
         self.assertEqual(sample_options.restoration_mode, 'classical')
         self.assertFalse(sample_options.persist_artifacts)
         self.assertIsNone(sample_options.debug_tag)
+
+    def test_interactive_frame_enables_secondary_subcrop_ocr(self) -> None:
+        options = AnalysisOptions(restoration_mode='mambairv2', enable_recognizer_comparison=True)
+
+        frame_options = options.for_interactive_frame()
+
+        self.assertTrue(frame_options.enable_secondary_subcrop_ocr)
+        self.assertFalse(frame_options.enable_recognizer_comparison)
 
     def test_persist_artifacts_requires_developer_diagnostics(self) -> None:
         options = AnalysisOptions.from_payload({
