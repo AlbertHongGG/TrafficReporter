@@ -476,6 +476,7 @@ export interface AiEvidenceSharedProjection {
   acceptedCandidateId: string | null;
   review: LprReviewState | null;
   provenance: LprAnalysisProvenance | null;
+  decision: LprDecisionTrace | null;
 }
 
 export interface AiEvidenceResponse {

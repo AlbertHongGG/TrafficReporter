@@ -1482,7 +1482,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       candidates: response.projection.candidates,
       review: response.projection.review ?? null,
       lastAnalysisProvenance: response.projection.provenance ?? null,
-      decision: null,
+      decision: response.projection.decision ?? null,
       acceptedCandidateId,
       job: {
         ...currentLprState.job,

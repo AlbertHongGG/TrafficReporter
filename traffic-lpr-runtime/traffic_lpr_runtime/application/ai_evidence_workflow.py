@@ -984,6 +984,7 @@ class AiEvidenceWorkflow:
             'acceptedCandidateId': interval_result.get('acceptedCandidateId'),
             'review': interval_result.get('review'),
             'provenance': interval_result.get('provenance'),
+            'decision': interval_result.get('decision'),
         }
 
     def _record_tool_call(

@@ -720,7 +720,8 @@
         { "name": "candidates", "type": "array", "items": "LprPlateCandidate" },
         { "name": "acceptedCandidateId", "type": "string", "nullable": true },
         { "name": "review", "type": "LprReviewState", "nullable": true },
-        { "name": "provenance", "type": "LprAnalysisProvenance", "nullable": true }
+        { "name": "provenance", "type": "LprAnalysisProvenance", "nullable": true },
+        { "name": "decision", "type": "LprDecisionTrace", "nullable": true }
       ]
     },
     {

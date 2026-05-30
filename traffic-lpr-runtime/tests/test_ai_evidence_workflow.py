@@ -208,6 +208,12 @@ class AiEvidenceWorkflowTests(unittest.TestCase):
                     'acceptedCandidateId': None,
                     'review': None,
                     'provenance': None,
+                    'decision': {
+                        'source': 'fused-image',
+                        'stage': 'temporal-restored',
+                        'supportFrameCount': 3,
+                        'agreementRatio': 0.84,
+                    },
                 },
                 {'startMs': 5800, 'endMs': 7200},
                 {
@@ -248,6 +254,8 @@ class AiEvidenceWorkflowTests(unittest.TestCase):
             self.assertEqual(projection['targetTracks'][1]['label'], 'candidate plate')
             self.assertEqual(projection['analysisTrack']['id'], 'candidate-track-2')
             self.assertEqual(projection['analysisTrack']['diagnostics']['canonicalizedFromTrackId'], 'analysis-track-1')
+            self.assertEqual(projection['decision']['source'], 'fused-image')
+            self.assertEqual(projection['decision']['stage'], 'temporal-restored')
 
     def test_build_projection_prefers_explicit_interval_analysis_track(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

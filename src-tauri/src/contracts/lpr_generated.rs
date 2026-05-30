@@ -459,6 +459,7 @@ pub struct AiEvidenceSharedProjectionPayload {
     pub accepted_candidate_id: Option<String>,
     pub review: Option<LprReviewStatePayload>,
     pub provenance: Option<LprAnalysisProvenancePayload>,
+    pub decision: Option<LprDecisionTrace>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

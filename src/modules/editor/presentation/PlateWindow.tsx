@@ -34,7 +34,7 @@ import {
 import { requestPlateWindowSession, sendPlateWindowAction } from '../infrastructure/plateWindowApi';
 import { clamp, formatRulerLabel, formatTransportTime } from '../domain/model';
 import { buildDefaultLprState } from '../domain/lprState';
-import type { LprDecisionTrace, LprFrameSample, LprJobState, LprPlateCandidate, LprReviewState, LprTargetTrack, TimelineIntervalSelection } from '../../../shared/contracts';
+import type { LprFrameSample, LprJobState, LprPlateCandidate, LprReviewState, LprTargetTrack, TimelineIntervalSelection } from '../../../shared/contracts';
 import { getLprAnalysisProfileLabel, getLprAnalysisProfiles } from '../../../shared/lprAnalysisProfiles';
 import { createLogger, getErrorSummary, serializeError } from '../../../utils/logger';
 import { shouldApplyRevisionedWindowSnapshot, unwrapRevisionedWindowSnapshot } from '../../../vnext/windowing/revisionedSnapshot';
@@ -180,17 +180,6 @@ function formatMetric(value: number | null | undefined) {
   return `${Math.round(clamp(value, 0, 1) * 100)}%`;
 }
 
-function formatSignedPercent(value: number | null | undefined) {
-  if (typeof value !== 'number' || Number.isNaN(value)) {
-    return '--';
-  }
-  const percent = `${Math.abs(value * 100).toFixed(1)}%`;
-  if (Math.abs(value) < 0.0005) {
-    return `0.0%`;
-  }
-  return `${value > 0 ? '+' : '-'}${percent}`;
-}
-
 function qualityMetrics(sample: LprFrameSample): Array<[string, number | null | undefined]> {
   const quality = sample.quality;
   return [
@@ -331,56 +320,6 @@ function buildTargetDiagnosticsLines(track: LprTargetTrack | null): string[] {
   return lines.filter((line) => line.length > 0);
 }
 
-function buildSampleTrackingLines(sample: LprFrameSample): string[] {
-  const diagnostics = asRecord(sample.diagnostics);
-  const tracking = asRecord(diagnostics?.tracking);
-  if (!tracking) {
-    return [];
-  }
-
-  const selection = asRecord(tracking.selection);
-  const transition = asRecord(tracking.transition);
-  const sceneMotion = asRecord(tracking.sceneMotion);
-  const selectionScore = asNumber(tracking.selectionScore);
-  const predictedIou = asNumber(selection?.predictedIou);
-  const previousIou = asNumber(selection?.previousIou);
-  const continuityScore = asNumber(transition?.continuityScore);
-  const continuityCredit = asNumber(transition?.continuityCredit);
-  const sceneMotionDx = asNumber(sceneMotion?.dx);
-  const sceneMotionDy = asNumber(sceneMotion?.dy);
-  const sceneMotionMagnitude = asNumber(sceneMotion?.magnitude);
-  const sceneMotionScore = asNumber(sceneMotion?.score);
-  const source = typeof tracking.trackingSource === 'string' ? tracking.trackingSource : null;
-  const trackingState = typeof tracking.trackingState === 'string' ? tracking.trackingState : null;
-  const preferredTrackId = typeof tracking.preferredTrackId === 'string' ? tracking.preferredTrackId : null;
-  const canonicalTargetId = typeof tracking.canonicalTargetId === 'string' ? tracking.canonicalTargetId : null;
-
-  const lines = [
-    [
-      source ? `source ${source}` : null,
-      trackingState ? `state ${trackingState}` : null,
-      preferredTrackId ? `track ${preferredTrackId}` : null,
-      canonicalTargetId ? `id ${canonicalTargetId}` : null,
-    ].filter(Boolean).join(' · '),
-    [
-      selectionScore !== null ? `score ${formatConfidence(selectionScore)}` : null,
-      predictedIou !== null ? `pred ${formatConfidence(predictedIou)}` : null,
-      previousIou !== null ? `prev ${formatConfidence(previousIou)}` : null,
-      continuityScore !== null ? `cont ${formatConfidence(continuityScore)}` : null,
-      continuityCredit !== null && continuityCredit > 0.001 ? `credit ${formatConfidence(continuityCredit)}` : null,
-      selection?.motionGatePassed === true ? 'motion ok' : selection?.motionGatePassed === false ? 'motion rejected' : null,
-    ].filter(Boolean).join(' · '),
-    [
-      sceneMotionMagnitude !== null && sceneMotionMagnitude > 0.001 ? `scene ${formatConfidence(sceneMotionMagnitude)}` : null,
-      sceneMotionDx !== null && Math.abs(sceneMotionDx) > 0.001 ? `dx ${formatSignedPercent(sceneMotionDx)}` : null,
-      sceneMotionDy !== null && Math.abs(sceneMotionDy) > 0.001 ? `dy ${formatSignedPercent(sceneMotionDy)}` : null,
-      sceneMotionScore !== null && sceneMotionScore > 0.001 ? `scene conf ${formatConfidence(sceneMotionScore)}` : null,
-    ].filter(Boolean).join(' · '),
-  ];
-
-  return lines.filter((line) => line.length > 0);
-}
-
 type StatusTone = 'neutral' | 'success' | 'warning' | 'danger';
 
 function buildJobBadge(job: LprJobState): { label: string; tone: StatusTone } {
@@ -427,40 +366,6 @@ function candidateBadgeLabel(candidate: LprPlateCandidate, acceptedCandidateId: 
   return confidenceLabel;
 }
 
-function decisionSourceLabel(source: string | null | undefined) {
-  switch (source) {
-    case 'temporal-restored':
-      return 'Temporal';
-    case 'fused-image':
-      return 'Fused';
-    case 'fused-char':
-      return 'Consensus';
-    case 'legacy-vote':
-      return 'Legacy';
-    case 'support-carry':
-      return 'Carry';
-    default:
-      return 'Single';
-  }
-}
-
-function artifactStageLabel(stage: string | null | undefined) {
-  switch (stage) {
-    case 'temporal-restored':
-      return 'Temporal';
-    case 'rectified':
-      return 'Rectified';
-    case 'enhanced':
-      return 'Enhanced';
-    case 'restored':
-      return 'Restored';
-    case 'original':
-      return 'Original';
-    default:
-      return 'Working';
-  }
-}
-
 function evidenceReasonLabel(reason: string) {
   switch (reason) {
     case 'interval-start':
@@ -482,17 +387,6 @@ function evidenceReasonLabel(reason: string) {
     default:
       return reason;
   }
-}
-
-function buildDecisionCards(decision: LprDecisionTrace | null, sample: LprFrameSample | null) {
-  const supportCount = sample?.temporalSupport?.supportFrameCount ?? decision?.supportFrameCount ?? 1;
-  const agreement = decision?.agreementRatio;
-  return [
-    { key: 'source', value: decisionSourceLabel(decision?.source ?? sample?.ocrInput?.source), meta: 'Source' },
-    { key: 'stage', value: artifactStageLabel(sample?.ocrInput?.stage ?? decision?.stage), meta: 'Input' },
-    { key: 'support', value: `${supportCount}`, meta: 'Frames' },
-    { key: 'agreement', value: agreement !== null && agreement !== undefined ? formatConfidence(agreement) : '--', meta: 'Agree' },
-  ];
 }
 
 function sampleReasonTokens(sample: LprFrameSample) {
@@ -530,10 +424,6 @@ export const PlateWindow: React.FC = () => {
     }
     return playheadEvidenceSample ?? evidenceSamples[0] ?? null;
   }, [evidenceSamples, isEvidenceSelectionPinned, playheadEvidenceSample, selectedEvidenceSampleId]);
-  const decisionCards = React.useMemo(
-    () => buildDecisionCards(lprState.decision, activeEvidenceSample?.sample ?? null),
-    [activeEvidenceSample?.sample, lprState.decision],
-  );
 
   React.useEffect(() => {
     let disposed = false;
@@ -694,14 +584,6 @@ export const PlateWindow: React.FC = () => {
                       {evidenceCount}
                     </span>
                   )}
-                </div>
-                <div className={styles.heroDecisionStrip}>
-                  {decisionCards.map((card) => (
-                    <motion.div key={card.key} layout className={styles.heroDecisionCard}>
-                      <strong className={styles.heroDecisionValue}>{card.value}</strong>
-                      <span className={styles.heroDecisionMeta}>{card.meta}</span>
-                    </motion.div>
-                  ))}
                 </div>
                 <AnimatePresence>
                   {(lprState.job.error || errorMessage) && (
@@ -892,7 +774,6 @@ export const PlateWindow: React.FC = () => {
                       {evidenceSamples.length === 0 && <div className={styles.emptyInline}>No evidence</div>}
                       {evidenceSamples.map((entry) => {
                         const isActive = entry.sample.id === activeEvidenceSample?.sample.id;
-                        const trackingLines = lprState.showDeveloperDiagnostics ? buildSampleTrackingLines(entry.sample) : [];
                         const reasonTokens = sampleReasonTokens(entry.sample);
                         return (
                           <motion.div
@@ -936,14 +817,6 @@ export const PlateWindow: React.FC = () => {
 
                             {isActive && (
                               <div className={styles.evidenceExpanded}>
-                                <div className={styles.evidenceInsightStrip}>
-                                  {buildDecisionCards(lprState.decision, entry.sample).map((card) => (
-                                    <div key={`${entry.sample.id}-${card.key}`} className={styles.evidenceInsightCard}>
-                                      <strong className={styles.evidenceInsightValue}>{card.value}</strong>
-                                      <span className={styles.evidenceInsightMeta}>{card.meta}</span>
-                                    </div>
-                                  ))}
-                                </div>
                                 <div className={styles.evidencePreviewGrid}>
                                   {entry.artifacts.map((artifact) => {
                                     const isOcrInputArtifact = artifact.key === entry.sample.ocrInput?.stage || (artifact.key === 'working' && entry.sample.ocrInput?.stage === 'working');
@@ -957,28 +830,6 @@ export const PlateWindow: React.FC = () => {
                                 </div>
 
                                 <div className={styles.evidenceMetaRail}>
-                                  {(entry.sample.ocrInput || entry.sample.temporalSupport) && (
-                                    <div className={styles.evidenceMetaSection}>
-                                      <div className={styles.evidenceMetaHeader}>
-                                        <Search size={14} className={styles.metaIcon} />
-                                        <span className={styles.evidenceMetaTitle}>Input</span>
-                                      </div>
-                                      <div className={styles.signalStack}>
-                                        {entry.sample.ocrInput && (
-                                          <div className={styles.signalRow}>
-                                            <span className={styles.signalPrimary}>{artifactStageLabel(entry.sample.ocrInput.stage)}</span>
-                                            <span className={styles.signalSecondary}>{decisionSourceLabel(entry.sample.ocrInput.source)}</span>
-                                          </div>
-                                        )}
-                                        {entry.sample.temporalSupport && (
-                                          <div className={styles.signalRow}>
-                                            <span className={styles.signalPrimary}>{entry.sample.temporalSupport.supportFrameCount}f</span>
-                                            <span className={styles.signalSecondary}>{formatConfidence(entry.sample.temporalSupport.meanAlignmentScore)}</span>
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
-                                  )}
                                   <div className={styles.evidenceMetaSection}>
                                     <div className={styles.evidenceMetaHeader}>
                                       <Zap size={14} className={styles.metaIcon} />
@@ -1025,20 +876,6 @@ export const PlateWindow: React.FC = () => {
                                             </div>
                                           );
                                         })}
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  {trackingLines.length > 0 && (
-                                    <div className={styles.evidenceMetaSection}>
-                                      <div className={styles.evidenceMetaHeader}>
-                                        <Target size={14} className={styles.metaIcon} />
-                                        <span className={styles.evidenceMetaTitle}>Tracking</span>
-                                      </div>
-                                      <div className={styles.diagnosticLineList}>
-                                        {trackingLines.map((line) => (
-                                          <div key={`${entry.sample.id}-${line}`} className={styles.diagnosticLine}>{line}</div>
-                                        ))}
                                       </div>
                                     </div>
                                   )}

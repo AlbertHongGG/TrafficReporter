@@ -162,40 +162,6 @@
   gap: 8px;
 }
 
-.heroDecisionStrip {
-  display: grid;
-  width: min(100%, 560px);
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.heroDecisionCard {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-}
-
-.heroDecisionValue {
-  font-size: 15px;
-  font-weight: 700;
-  color: #fff;
-  letter-spacing: 0.03em;
-}
-
-.heroDecisionMeta {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
 .statusLine {
   display: flex;
   align-items: center;
@@ -982,36 +948,6 @@
   gap: 16px;
 }
 
-.evidenceInsightStrip {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.evidenceInsightCard {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.035);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.evidenceInsightValue {
-  color: #fff;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.evidenceInsightMeta {
-  font-family: var(--font-mono);
-  color: var(--text-muted);
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
 .evidencePreviewGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
@@ -1075,19 +1011,6 @@
   gap: 12px;
 }
 
-.diagnosticLineList {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.diagnosticLine {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1.45;
-  color: var(--text-secondary);
-}
-
 .evidenceMetaSection {
   display: flex;
   flex-direction: column;
@@ -1096,31 +1019,6 @@
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.signalStack {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.signalRow {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.signalPrimary {
-  color: #fff;
-  font-size: 15px;
-  font-weight: 700;
-}
-
-.signalSecondary {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--accent-primary);
 }
 
 .evidenceMetaHeader {
@@ -1226,11 +1124,6 @@
 }
 
 @media (max-width: 860px) {
-  .heroDecisionStrip,
-  .evidenceInsightStrip {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .evidenceExpanded {
     padding-left: 0;
   }
