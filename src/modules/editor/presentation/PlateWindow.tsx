@@ -31,6 +31,7 @@ import {
   type RevisionedPlateWindowSessionSnapshot,
   type PlateWindowSessionSnapshot,
 } from '../application/plateWindow';
+import { buildJobTimingSnapshot, formatElapsedDuration } from '../application/jobTiming';
 import { requestPlateWindowSession, sendPlateWindowAction } from '../infrastructure/plateWindowApi';
 import { clamp, formatRulerLabel, formatTransportTime } from '../domain/model';
 import { buildDefaultLprState } from '../domain/lprState';
@@ -326,6 +327,9 @@ function buildJobBadge(job: LprJobState): { label: string; tone: StatusTone } {
   if (job.status === 'running' || job.status === 'queued') {
     return { label: job.stage || 'Run', tone: 'warning' };
   }
+  if (job.status === 'degraded') {
+    return { label: 'Degraded', tone: 'warning' };
+  }
   if (job.status === 'failed') {
     return { label: 'Fail', tone: 'danger' };
   }
@@ -393,6 +397,10 @@ function sampleReasonTokens(sample: LprFrameSample) {
   return (sample.selection?.reasons ?? []).map(evidenceReasonLabel).slice(0, 4);
 }
 
+function formatJobTiming(ms: number | null | undefined) {
+  return formatElapsedDuration(ms);
+}
+
 export const PlateWindow: React.FC = () => {
   const [snapshot, setSnapshot] = React.useState<PlateWindowSessionSnapshot | null>(null);
   const [countryHintsDraft, setCountryHintsDraft] = React.useState('');
@@ -400,6 +408,7 @@ export const PlateWindow: React.FC = () => {
   const [activeTab, setActiveTab] = React.useState<TabType>('targets');
   const [selectedEvidenceSampleId, setSelectedEvidenceSampleId] = React.useState<string | null>(null);
   const [isEvidenceSelectionPinned, setIsEvidenceSelectionPinned] = React.useState(false);
+  const [clockNowMs, setClockNowMs] = React.useState(() => Date.now());
   const latestRevisionRef = React.useRef(0);
   const [liveTransport, setLiveTransport] = React.useState<PlateWindowLiveTransport | null>(null);
 
@@ -414,6 +423,8 @@ export const PlateWindow: React.FC = () => {
   const reviewBadge = React.useMemo(() => buildReviewBadge(lprState.review), [lprState.review]);
   const evidenceCount = evidenceSamples.length > 0 ? evidenceSamples.length : lprState.samples.length;
   const statusDetail = lprState.job.detail || runtimeStatus?.detail || 'Ready for analysis.';
+  const jobTiming = React.useMemo(() => buildJobTimingSnapshot(lprState.job, clockNowMs), [clockNowMs, lprState.job]);
+  const progressPercent = Math.round(clamp(lprState.job.progress ?? 0, 0, 1) * 100);
   const playheadEvidenceSample = React.useMemo(
     () => evidenceSamples.find((entry) => entry.sample.timeMs === currentPlayheadMs) ?? null,
     [currentPlayheadMs, evidenceSamples],
@@ -424,6 +435,23 @@ export const PlateWindow: React.FC = () => {
     }
     return playheadEvidenceSample ?? evidenceSamples[0] ?? null;
   }, [evidenceSamples, isEvidenceSelectionPinned, playheadEvidenceSample, selectedEvidenceSampleId]);
+
+  React.useEffect(() => {
+    let intervalId: ReturnType<typeof setInterval> | undefined;
+    if (isBusy) {
+      intervalId = setInterval(() => {
+        setClockNowMs(Date.now());
+      }, 200);
+    } else {
+      setClockNowMs(Date.now());
+    }
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [isBusy, lprState.job.startedAt, lprState.job.updatedAt]);
 
   React.useEffect(() => {
     let disposed = false;
@@ -562,6 +590,39 @@ export const PlateWindow: React.FC = () => {
                     </motion.span>
                   </AnimatePresence>
                 </div>
+                {(jobTiming.totalElapsedMs !== null || (isBusy && jobTiming.idleSinceUpdateMs !== null) || lprState.job.trackingTier) && (
+                  <div className={styles.statusPillRow}>
+                    {isBusy && jobTiming.idleSinceUpdateMs !== null && (
+                      <span className={styles.counterChip}>Step {formatJobTiming(jobTiming.idleSinceUpdateMs)}</span>
+                    )}
+                    {jobTiming.totalElapsedMs !== null && (
+                      <span className={styles.counterChip}>Total {formatJobTiming(jobTiming.totalElapsedMs)}</span>
+                    )}
+                    {isBusy && (
+                      <span className={styles.counterChip}>{progressPercent}%</span>
+                    )}
+                    {jobTiming.isStalled && (
+                      <span className={`${styles.counterChip} ${styles.counterChipWarning}`}>No update</span>
+                    )}
+                    {lprState.job.trackingTier && (
+                      <span className={styles.counterChip}>
+                        {lprState.job.trackingTier}
+                        {typeof lprState.job.coverageRatio === 'number' ? ` ${Math.round(lprState.job.coverageRatio * 100)}%` : ''}
+                      </span>
+                    )}
+                  </div>
+                )}
+                {isBusy && (
+                  <div className={styles.statusProgressBlock}>
+                    <div className={styles.statusProgressMeta}>
+                      <span>{lprState.job.stage || 'LPR'}</span>
+                      <span>{progressPercent}%</span>
+                    </div>
+                    <div className={styles.statusProgressTrack}>
+                      <div className={styles.statusProgressFill} style={{ width: `${progressPercent}%` }} />
+                    </div>
+                  </div>
+                )}
                 <div className={styles.heroBadgeRow}>
                   <span className={`${styles.statusChip} ${styles[`statusChip${jobBadge.tone[0].toUpperCase()}${jobBadge.tone.slice(1)}`]}`}>
                     {isBusy ? <LoaderCircle size={12} className={styles.spinningIcon} /> : jobBadge.tone === 'success' ? <Check size={12} className={styles.successIcon} /> : <AlertCircle size={12} className={styles.idleIcon} />}

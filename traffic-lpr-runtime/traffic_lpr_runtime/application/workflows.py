@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from time import perf_counter
 from typing import Any, Callable
 
 from traffic_lpr_runtime.application.pipeline_support import AnalysisOptions
@@ -194,6 +195,54 @@ def _select_temporal_support_frames(
         ),
     )
     return candidates[:max(0, options.temporal_neighbor_count - 1)]
+
+
+def _resolve_temporal_support_budget(
+    tracked_frame_count: int,
+    sample_count: int,
+    options: AnalysisOptions,
+) -> int:
+    if sample_count <= 0 or options.temporal_neighbor_count <= 1 or options.temporal_window_ms <= 0:
+        return 0
+
+    budget = sample_count
+    if tracked_frame_count >= 60:
+        budget = min(budget, 4)
+    elif tracked_frame_count >= 32:
+        budget = min(budget, 6)
+
+    return max(1, budget)
+
+
+def _resolve_temporal_support_reason(
+    sample: FrameSample,
+    tracked_frame: TrackedRegion,
+    options: AnalysisOptions,
+) -> str | None:
+    if options.temporal_neighbor_count <= 1 or options.temporal_window_ms <= 0:
+        return None
+
+    if not sample.candidates:
+        return 'no-candidate'
+    if sample.quality is None:
+        return 'missing-quality'
+
+    quality = sample.quality
+    best_confidence = max((candidate.confidence for candidate in sample.candidates), default=0.0)
+    legibility_level = quality.legibility_level.lower()
+    if legibility_level in {'poor', 'very-poor', 'unreadable'}:
+        return 'poor-legibility'
+    if quality.overall_score < 0.76 or quality.legibility_score < 0.79:
+        return 'low-quality'
+    if best_confidence < max(0.84, options.min_accepted_confidence + 0.18):
+        return 'low-confidence'
+
+    diagnostics = tracked_frame.diagnostics or {}
+    if (
+        diagnostics.get('isAnchorFrame') is True or diagnostics.get('isMotionHotspot') is True
+    ) and best_confidence < max(0.9, options.min_accepted_confidence + 0.24):
+        return 'priority-frame'
+    return None
 
 
 def _build_sample_selection_payload(sample: FrameSample, tracked_frame: TrackedRegion) -> dict[str, Any]:
@@ -556,6 +605,7 @@ class IntervalAnalysisWorkflow:
 
     def run(self, payload: dict[str, Any]) -> dict[str, Any]:
         self._ensure_ready()
+        run_started = perf_counter()
         options = AnalysisOptions.from_payload(payload)
         artifact_root = options.resolve_artifact_root(self._runtime_root(), 'interval', _request_run_id(payload))
         interval = payload['interval']
@@ -570,6 +620,7 @@ class IntervalAnalysisWorkflow:
         requested_frame_count = max(1, _safe_int(payload.get('maxSamples'), 0))
 
         _emit_progress(0.1, 'Interval', 'Validating the anchor frame and starting interval tracking.')
+        tracking_started = perf_counter()
         tracked_frames, track_diagnostics = self._track_target_across_interval(
             payload['sourcePath'],
             interval,
@@ -612,6 +663,7 @@ class IntervalAnalysisWorkflow:
             anchor_ok,
             anchor_status,
         )
+        tracking_ms = (perf_counter() - tracking_started) * 1000.0
         _emit_progress(
             0.32,
             'Interval',
@@ -629,6 +681,10 @@ class IntervalAnalysisWorkflow:
         observations: list[PlateObservation] = []
         observation_cache: dict[int, PlateObservation | None] = {}
         sample_count = len(evidence_frames)
+        temporal_support_budget = _resolve_temporal_support_budget(len(tracked_frames), sample_count, sample_options)
+        temporal_support_samples_used = 0
+        sample_analysis_ms = 0.0
+        temporal_support_ms = 0.0
         for index, tracked_frame in enumerate(evidence_frames, start=1):
             raw_tracking_box = tracked_frame.box
             calibrated_target_box = calibrated_target_boxes.get(tracked_frame.time_ms)
@@ -647,35 +703,9 @@ class IntervalAnalysisWorkflow:
                 trackingTier=tracking['trackingTier'],
                 coverageRatio=tracking['coverageRatio'],
             )
-            support_observations: list[PlateObservation] = []
-            for support_frame in _select_temporal_support_frames(tracked_frames, tracked_frame.time_ms, sample_options):
-                cached_support = observation_cache.get(support_frame.time_ms)
-                if cached_support is not None:
-                    support_observations.append(cached_support)
-                    continue
-                support_calibrated_box = calibrated_target_boxes.get(support_frame.time_ms)
-                support_target_box, _ = _resolve_analysis_target_box(
-                    support_frame.box,
-                    support_calibrated_box,
-                    selected_target_box,
-                    support_frame.time_ms,
-                    anchor_time_ms,
-                )
-                support_frame_image = self._frame_reader.read_frame(payload['sourcePath'], support_frame.time_ms)
-                _, _, cached_support = self._analyze_plate_candidates(
-                    support_frame_image,
-                    support_frame.time_ms,
-                    None,
-                    support_target_box,
-                    payload.get('countryHints') or [],
-                    sample_options,
-                    None,
-                )
-                observation_cache[support_frame.time_ms] = cached_support
-                if cached_support is not None:
-                    support_observations.append(cached_support)
+            sample_started = perf_counter()
             frame = self._frame_reader.read_frame(payload['sourcePath'], tracked_frame.time_ms)
-            _, sample, observation = self._analyze_plate_candidates(
+            _, sample, base_observation = self._analyze_plate_candidates(
                 frame,
                 tracked_frame.time_ms,
                 None,
@@ -683,9 +713,68 @@ class IntervalAnalysisWorkflow:
                 payload.get('countryHints') or [],
                 sample_options,
                 artifact_root / f'sample-{tracked_frame.time_ms}' if artifact_root else None,
-                support_observations,
             )
-            observation_cache[tracked_frame.time_ms] = observation
+            sample_analysis_ms += (perf_counter() - sample_started) * 1000.0
+            observation_cache[tracked_frame.time_ms] = base_observation
+
+            temporal_support_reason = _resolve_temporal_support_reason(sample, tracked_frame, sample_options)
+            temporal_support_skipped_reason: str | None = None
+            temporal_support_applied = False
+            final_observation = base_observation
+            support_observations: list[PlateObservation] = []
+
+            if temporal_support_reason is not None:
+                if temporal_support_samples_used >= temporal_support_budget:
+                    temporal_support_skipped_reason = 'budget-exhausted'
+                else:
+                    support_started = perf_counter()
+                    for support_frame in _select_temporal_support_frames(tracked_frames, tracked_frame.time_ms, sample_options):
+                        if support_frame.time_ms in observation_cache:
+                            cached_support = observation_cache[support_frame.time_ms]
+                            if cached_support is not None:
+                                support_observations.append(cached_support)
+                            continue
+                        support_calibrated_box = calibrated_target_boxes.get(support_frame.time_ms)
+                        support_target_box, _ = _resolve_analysis_target_box(
+                            support_frame.box,
+                            support_calibrated_box,
+                            selected_target_box,
+                            support_frame.time_ms,
+                            anchor_time_ms,
+                        )
+                        support_frame_image = self._frame_reader.read_frame(payload['sourcePath'], support_frame.time_ms)
+                        _, _, cached_support = self._analyze_plate_candidates(
+                            support_frame_image,
+                            support_frame.time_ms,
+                            None,
+                            support_target_box,
+                            payload.get('countryHints') or [],
+                            sample_options,
+                            None,
+                        )
+                        observation_cache[support_frame.time_ms] = cached_support
+                        if cached_support is not None:
+                            support_observations.append(cached_support)
+
+                    if support_observations:
+                        _, sample, supported_observation = self._analyze_plate_candidates(
+                            frame,
+                            tracked_frame.time_ms,
+                            None,
+                            analysis_target_box,
+                            payload.get('countryHints') or [],
+                            sample_options,
+                            artifact_root / f'sample-{tracked_frame.time_ms}' if artifact_root else None,
+                            support_observations,
+                        )
+                        final_observation = supported_observation or base_observation
+                        temporal_support_samples_used += 1
+                        temporal_support_applied = True
+                    else:
+                        temporal_support_skipped_reason = 'no-support-observations'
+
+                    temporal_support_ms += (perf_counter() - support_started) * 1000.0
+
             if calibrated_target_box is not None:
                 tracked_frame.diagnostics = {
                     **(tracked_frame.diagnostics or {}),
@@ -703,11 +792,21 @@ class IntervalAnalysisWorkflow:
                 'analysisBoxSource': analysis_box_source,
                 'rawTrackingBox': raw_tracking_box.to_payload(),
                 'tracking': tracked_frame.diagnostics,
+                'temporalSupportDecision': {
+                    'budget': temporal_support_budget,
+                    'used': temporal_support_samples_used,
+                    'requested': temporal_support_reason is not None,
+                    'applied': temporal_support_applied,
+                    'reason': temporal_support_reason,
+                    'skippedReason': temporal_support_skipped_reason,
+                    'supportFrameCount': len(support_observations),
+                },
             }
             samples.append(sample)
-            if observation is not None:
-                observations.append(observation)
+            if final_observation is not None:
+                observations.append(final_observation)
 
+        fusion_started = perf_counter()
         candidates, fusion_diagnostics = self._aggregate_candidates(
             samples,
             observations,
@@ -724,6 +823,7 @@ class IntervalAnalysisWorkflow:
             options,
             True,
         )
+        fusion_ms = (perf_counter() - fusion_started) * 1000.0
         identity_review_reasons = _tracking_identity_review_reasons(track_diagnostics)
         sequence_hard_review_reasons = _sequence_hard_review_reasons(sequence_summary, options)
         sequence_advisory_reasons = _sequence_advisory_reasons(sequence_summary, options)
@@ -777,6 +877,7 @@ class IntervalAnalysisWorkflow:
         analysis_tracks = self._build_track_payload(tracked_frames, track_diagnostics)
         analysis_track = analysis_tracks[0].to_payload() if analysis_tracks else None
         decision = _build_decision_trace(candidates, accepted_candidate_id, selection_diagnostics, samples, sequence_summary)
+        total_ms = (perf_counter() - run_started) * 1000.0
         return {
             'targetTracks': [track.to_payload() for track in analysis_tracks],
             'analysisTrack': analysis_track,
@@ -799,5 +900,14 @@ class IntervalAnalysisWorkflow:
                 'sequence': sequence_summary,
                 'fusion': fusion_diagnostics,
                 'selection': selection_diagnostics,
+                'timing': {
+                    'trackingMs': tracking_ms,
+                    'sampleAnalysisMs': sample_analysis_ms,
+                    'temporalSupportMs': temporal_support_ms,
+                    'fusionMs': fusion_ms,
+                    'totalMs': total_ms,
+                    'temporalSupportBudget': temporal_support_budget,
+                    'temporalSupportSamplesUsed': temporal_support_samples_used,
+                },
             },
         }

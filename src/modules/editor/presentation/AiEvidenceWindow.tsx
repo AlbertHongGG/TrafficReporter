@@ -25,6 +25,7 @@ import {
   type AiPanelAction,
   type AiPanelSessionSnapshot,
 } from '../application/aiPanelWindow';
+import { buildJobTimingSnapshot, formatElapsedDuration } from '../application/jobTiming';
 import { buildDefaultAiEvidenceState } from '../domain/aiEvidenceState';
 import { formatRulerLabel, formatTransportTime } from '../domain/model';
 import { shouldApplyRevisionedWindowSnapshot, unwrapRevisionedWindowSnapshot } from '../../../vnext/windowing/revisionedSnapshot';
@@ -53,7 +54,7 @@ export const AiEvidenceWindow: React.FC = () => {
   const [promptDraft, setPromptDraft] = React.useState('');
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const [isFocused, setIsFocused] = React.useState(false);
-  const [elapsedSeconds, setElapsedSeconds] = React.useState(0);
+  const [clockNowMs, setClockNowMs] = React.useState(() => Date.now());
   const latestRevisionRef = React.useRef(0);
 
   const aiState = snapshot?.ai ?? buildDefaultAiEvidenceState();
@@ -65,6 +66,9 @@ export const AiEvidenceWindow: React.FC = () => {
   const hasError = Boolean(errorMessage || aiState.job.error);
   const canRun = Boolean(snapshot?.hasActiveFile) && runtimeReady && !isRunning;
   const canReset = !isRunning && (Boolean(aiState.prompt.trim()) || Boolean(result));
+  const jobTiming = React.useMemo(() => buildJobTimingSnapshot(aiState.job, clockNowMs), [aiState.job, clockNowMs]);
+  const stepElapsedLabel = formatElapsedDuration(jobTiming.idleSinceUpdateMs);
+  const totalElapsedLabel = formatElapsedDuration(jobTiming.totalElapsedMs);
 
   const statusMessage = compactLabel(
     aiState.job.error || errorMessage || result?.summary || aiState.job.detail,
@@ -103,15 +107,13 @@ export const AiEvidenceWindow: React.FC = () => {
     let intervalId: ReturnType<typeof setInterval>;
     if (isRunning) {
       intervalId = setInterval(() => {
-        const startedAt = aiState.job.updatedAt ? new Date(aiState.job.updatedAt).getTime() : Date.now();
-        const elapsed = (Date.now() - startedAt) / 1000;
-        setElapsedSeconds(elapsed);
-      }, 100);
+        setClockNowMs(Date.now());
+      }, 200);
     } else {
-      setElapsedSeconds(0);
+      setClockNowMs(Date.now());
     }
     return () => clearInterval(intervalId);
-  }, [isRunning, aiState.job.updatedAt]);
+  }, [isRunning, aiState.job.startedAt, aiState.job.updatedAt]);
 
   React.useEffect(() => {
     setPromptDraft(snapshot?.ai.prompt ?? '');
@@ -252,10 +254,18 @@ export const AiEvidenceWindow: React.FC = () => {
               {isRunning && (
                 <motion.div key="running" layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className={styles.progressSection}>
                   <div className={styles.progressHeader}>
-                    <div className={styles.progressStatusRow}>
-                      <Brain size={14} className={styles.spinningIcon} />
-                      <span>{statusMessage || 'Analyzing...'}</span>
-                      <span className={styles.elapsedTimer}>{elapsedSeconds.toFixed(1)}s</span>
+                    <div className={styles.progressStatusBlock}>
+                      <div className={styles.progressStatusRow}>
+                        <Brain size={14} className={styles.spinningIcon} />
+                        <span>{statusMessage || 'Analyzing...'}</span>
+                      </div>
+                      <div className={styles.timerRow}>
+                        <span className={styles.elapsedTimer}>Step {stepElapsedLabel}</span>
+                        <span className={styles.elapsedTimer}>Total {totalElapsedLabel}</span>
+                        {jobTiming.isStalled && (
+                          <span className={`${styles.elapsedTimer} ${styles.elapsedTimerWarning}`}>No update</span>
+                        )}
+                      </div>
                     </div>
                     <span className={styles.progressPercent}>{Math.round(progress * 100)}%</span>
                   </div>

@@ -101,6 +101,14 @@ class PreprocessingTests(unittest.TestCase):
         self.assertFalse(sample_options.persist_artifacts)
         self.assertIsNone(sample_options.debug_tag)
 
+    def test_interval_sample_downscales_temporal_support_for_dense_ranges(self) -> None:
+        options = AnalysisOptions(temporal_window_ms=260, temporal_neighbor_count=5)
+
+        sample_options = options.for_interval_sample(sample_count_hint=64)
+
+        self.assertEqual(sample_options.temporal_window_ms, 120)
+        self.assertEqual(sample_options.temporal_neighbor_count, 1)
+
     def test_interactive_frame_enables_secondary_subcrop_ocr(self) -> None:
         options = AnalysisOptions(restoration_mode='mambairv2', enable_recognizer_comparison=True)
 

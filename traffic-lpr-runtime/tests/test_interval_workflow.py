@@ -687,6 +687,139 @@ class IntervalWorkflowTests(unittest.TestCase):
         self.assertIn('plate text did not remain stable across interval samples', result['review']['reasons'])
         self.assertIn('sequence evidence drifted during the interval review path', result['review']['reasons'])
 
+    def test_interval_analysis_only_applies_temporal_support_to_unstable_samples(self) -> None:
+        tracked_frames = [
+            TrackedRegion(
+                id=f'track-{time_ms}',
+                time_ms=time_ms,
+                box=NormalizedRect(x=0.32, y=0.2, width=0.18, height=0.24),
+                confidence=0.92,
+                class_name='motorcycle',
+                diagnostics={
+                    'isEvidenceSample': True,
+                    'isAnchorFrame': time_ms == 1000,
+                    'isMotionHotspot': time_ms == 1200,
+                },
+            )
+            for time_ms in [1000, 1100, 1200, 1300]
+        ]
+        support_retries: list[tuple[int, int]] = []
+        fused_candidate = PlateCandidate(
+            id='fused-1',
+            text='NCE9762',
+            confidence=0.97,
+            source='fused-char',
+            frame_time_ms=1100,
+            country_code='TW',
+            box=None,
+            quality=make_quality(),
+        )
+
+        def quality_for(time_ms: int) -> QualityMetrics:
+            if time_ms == 1100:
+                return QualityMetrics(
+                    sharpness=0.56,
+                    contrast=0.58,
+                    plate_area=0.08,
+                    angle_score=0.82,
+                    occlusion_score=0.88,
+                    glare_score=0.84,
+                    legibility_score=0.68,
+                    overall_score=0.66,
+                    legibility_level='fair',
+                )
+            return make_quality()
+
+        def analyze_plate_candidates(frame, time_ms, marker_rect, target_box, country_hints, options, artifact_root, support_observations=None):
+            del frame, marker_rect, country_hints, options, artifact_root
+            if support_observations is not None:
+                support_retries.append((time_ms, len(support_observations)))
+                sample_candidate = PlateCandidate(
+                    id=f'candidate-{time_ms}',
+                    text='NCE9762',
+                    confidence=0.96,
+                    source='ocr:fastplate',
+                    frame_time_ms=time_ms,
+                    country_code='TW',
+                    box=None,
+                    quality=make_quality(),
+                )
+                return [sample_candidate], FrameSample(
+                    id=f'sample-{time_ms}',
+                    time_ms=time_ms,
+                    target_box=target_box,
+                    plate_box=None,
+                    quality=make_quality(),
+                    candidates=[sample_candidate],
+                    image_path=None,
+                    diagnostics={},
+                ), object()
+
+            confidence = 0.72 if time_ms == 1100 else 0.96
+            sample_candidate = PlateCandidate(
+                id=f'candidate-{time_ms}',
+                text='NCE9762',
+                confidence=confidence,
+                source='ocr:fastplate',
+                frame_time_ms=time_ms,
+                country_code='TW',
+                box=None,
+                quality=quality_for(time_ms),
+            )
+            return [sample_candidate], FrameSample(
+                id=f'sample-{time_ms}',
+                time_ms=time_ms,
+                target_box=target_box,
+                plate_box=None,
+                quality=quality_for(time_ms),
+                candidates=[sample_candidate],
+                image_path=None,
+                diagnostics={},
+            ), object()
+
+        workflow = IntervalAnalysisWorkflow(
+            ensure_ready=lambda: None,
+            status=lambda: {'available': True, 'detail': 'ok'},
+            runtime_root=lambda: Path('runtime-root'),
+            frame_reader=type('FrameReaderStub', (), {'read_frame': staticmethod(lambda source_path, time_ms: object())})(),
+            track_target_across_interval=lambda *args, **kwargs: (tracked_frames, {'trackerMode': 'botsort'}),
+            calibrate_interval_target_boxes=lambda *args, **kwargs: {},
+            analyze_plate_candidates=analyze_plate_candidates,
+            aggregate_candidates=lambda samples, observations, country_hints, options, artifact_root: (
+                [fused_candidate],
+                {'mode': 'stub', 'sequence': {'sequenceTier': 'stable', 'persistenceRatio': 1.0, 'supportFrameCount': 4, 'sampleCount': 4, 'supportFrameGapCount': 0}},
+            ),
+            apply_reliability_selection=lambda candidates, samples, country_hints, options, interval_mode: (
+                candidates,
+                fused_candidate.id,
+                {'suggestedCandidateId': fused_candidate.id, 'acceptedCandidateId': fused_candidate.id, 'reviewRequired': False, 'reasons': []},
+            ),
+            build_track_payload=lambda tracked_frames, diagnostics: [
+                TargetTrack(
+                    id='track-1',
+                    class_name='motorcycle',
+                    label='motorcycle 1000ms',
+                    confidence=0.92,
+                    frames=tracked_frames,
+                    diagnostics=diagnostics,
+                ),
+            ],
+        )
+
+        result = workflow.run({
+            'sourcePath': 'demo.mp4',
+            'interval': {'startMs': 1000, 'endMs': 1300},
+            'anchorTimeMs': 1000,
+            'targetVehicleKind': 'motorcycle',
+            'selectedTargetBox': tracked_frames[0].box.to_payload(),
+            'countryHints': ['tw'],
+        })
+
+        self.assertEqual(support_retries, [(1100, 3)])
+        self.assertEqual(result['acceptedCandidateId'], fused_candidate.id)
+        self.assertEqual(result['diagnostics']['timing']['temporalSupportSamplesUsed'], 1)
+        self.assertEqual(result['diagnostics']['timing']['temporalSupportBudget'], 4)
+
 
 if __name__ == '__main__':
     unittest.main()

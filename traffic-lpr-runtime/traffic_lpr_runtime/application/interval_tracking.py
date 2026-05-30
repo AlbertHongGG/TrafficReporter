@@ -97,11 +97,30 @@ def _resolve_evidence_sample_budget(
     preserve_dense_schedule: bool,
     max_evidence_sample_count: int,
 ) -> int:
-    if preserve_dense_schedule or len(sample_times) <= max_evidence_sample_count:
+    adaptive_cap = max_evidence_sample_count
+    if duration_ms >= 12000:
+        adaptive_cap = min(adaptive_cap, 10)
+    if duration_ms >= 20000:
+        adaptive_cap = min(adaptive_cap, 8)
+
+    if preserve_dense_schedule or len(sample_times) <= adaptive_cap:
         return len(sample_times)
     if duration_ms <= 4000:
-        return min(len(sample_times), max(max_evidence_sample_count, 8))
-    return min(len(sample_times), max_evidence_sample_count)
+        return min(len(sample_times), max(adaptive_cap, 8))
+    return min(len(sample_times), adaptive_cap)
+
+
+def _resolve_anchor_burst_count(
+    duration_ms: int,
+    evidence_budget: int,
+    anchor_burst_count: int,
+) -> int:
+    resolved = max(1, anchor_burst_count)
+    if duration_ms >= 12000 or evidence_budget <= 10:
+        resolved = min(resolved, 3)
+    if duration_ms >= 20000 or evidence_budget <= 8:
+        resolved = min(resolved, 2)
+    return max(1, resolved)
 
 
 def _sparsify_evidence_sample_times(
@@ -202,6 +221,11 @@ class IntervalTrackingService:
             preserve_dense_evidence_samples or options.temporal_evidence_mode == 'scheduled',
             options.max_evidence_sample_count,
         )
+        resolved_anchor_burst_count = _resolve_anchor_burst_count(
+            duration_ms,
+            evidence_budget,
+            options.anchor_burst_count,
+        )
         evidence_sample_times = raw_evidence_sample_times
         if evidence_budget < len(raw_evidence_sample_times):
             evidence_sample_times = _sparsify_evidence_sample_times(
@@ -209,7 +233,7 @@ class IntervalTrackingService:
                 anchor_time_ms,
                 sample_step_ms,
                 evidence_budget,
-                options.anchor_burst_count,
+                resolved_anchor_burst_count,
             )
         evidence_sample_time_set = set(evidence_sample_times)
         trajectory_step_ms = sample_step_ms if preserve_dense_evidence_samples else self.resolve_tracking_step_ms(interval, sample_step_ms)
@@ -239,7 +263,7 @@ class IntervalTrackingService:
                 trajectory_step_ms,
                 anchor_time_ms,
                 raw_evidence_sample_times,
-                options.anchor_burst_count,
+                resolved_anchor_burst_count,
             )
 
         anchor_frame = self._frame_reader.read_frame(source_path, anchor_time_ms)
@@ -303,7 +327,7 @@ class IntervalTrackingService:
             trajectory_step_ms,
             anchor_time_ms,
             raw_evidence_sample_times,
-            options.anchor_burst_count,
+            resolved_anchor_burst_count,
         )
 
     def calibrate_interval_target_boxes(
@@ -538,6 +562,7 @@ class IntervalTrackingService:
             'requestedTrackingFrameCount': len(tracking_times),
             'requestedEvidenceSampleCount': len(evidence_sample_times),
             'rawRequestedEvidenceSampleCount': len(raw_evidence_sample_times),
+            'effectiveAnchorBurstCount': anchor_burst_count,
             'trajectoryFrameCount': len(tracked_frames),
             'trajectoryStepMs': trajectory_step_ms,
             'evidenceSampleTimes': evidence_sample_times,
