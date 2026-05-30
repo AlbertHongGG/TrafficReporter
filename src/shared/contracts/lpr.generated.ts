@@ -18,6 +18,8 @@ export type LprLegibilityLevel = 'perfect' | 'good' | 'poor' | 'illegible' | 'un
 
 export type LprAnalysisProfileId = string;
 
+export type LprAnalysisIntent = 'interactive-short-range' | 'interactive-range' | 'interactive-dense-range' | 'ai-evidence-range' | 'benchmark-case';
+
 export type LprRecognitionSource = 'baseline' | 'fused' | 'legacy-vote' | 'fused-char' | `ocr:${string}` | `fused-image:${string}`;
 
 export type LprDiagnostics = Record<string, unknown>;
@@ -344,6 +346,8 @@ export interface LprIntervalAnalysisRequest {
   countryHints: string[];
   sampleEveryMs?: number;
   maxSamples?: number;
+  analysisIntent?: LprAnalysisIntent;
+  latencyBudgetMs?: number;
   analysisProfileId?: LprAnalysisProfileId | null;
   enableDeveloperDiagnostics?: boolean;
   analysisOptions?: LprAnalysisOptions | null;

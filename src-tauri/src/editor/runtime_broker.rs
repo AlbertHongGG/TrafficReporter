@@ -1,6 +1,9 @@
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStdin, ChildStdout, Stdio};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Mutex, OnceLock,
+};
 use std::time::Duration;
 
 use serde::de::DeserializeOwned;
@@ -19,6 +22,7 @@ static RUNTIME_BROKER: OnceLock<RuntimeBroker> = OnceLock::new();
 struct RuntimeBroker {
     worker: Mutex<Option<PersistentLprRuntime>>,
     worker_pid: Mutex<Option<u32>>,
+    cancel_generation: AtomicU64,
 }
 
 struct PersistentLprRuntime {
@@ -73,6 +77,10 @@ where
             error,
         ))
     })
+}
+
+fn cancel_generation_changed(invoke_generation: u64, current_generation: u64) -> bool {
+    invoke_generation != current_generation
 }
 
 fn parse_worker_response_line<TResponse>(
@@ -133,7 +141,12 @@ impl RuntimeBroker {
         Self {
             worker: Mutex::new(None),
             worker_pid: Mutex::new(None),
+            cancel_generation: AtomicU64::new(0),
         }
+    }
+
+    fn cancel_generation(&self) -> u64 {
+        self.cancel_generation.load(Ordering::SeqCst)
     }
 
     fn set_worker_pid(&self, pid: Option<u32>) {
@@ -198,6 +211,7 @@ impl RuntimeBroker {
             .lock()
             .map_err(|_| "Failed to lock the local LPR runtime worker slot.".to_string())?;
         let mut attempt = 0usize;
+        let invoke_cancel_generation = self.cancel_generation();
 
         loop {
             let needs_restart = worker_guard
@@ -217,14 +231,23 @@ impl RuntimeBroker {
                 Ok(response) => return Ok(response),
                 Err(RuntimeWorkerInvokeError::Unrecoverable(error)) => return Err(error),
                 Err(RuntimeWorkerInvokeError::Recoverable(error)) => {
+                    self.set_worker_pid(None);
+                    *worker_guard = None;
+                    if cancel_generation_changed(invoke_cancel_generation, self.cancel_generation()) {
+                        super::emit_app_log(
+                            &app_handle,
+                            "info",
+                            "LprRuntimeWorker",
+                            format!("Worker request cancelled without retry: {}", error),
+                        );
+                        return Err("The local LPR runtime request was cancelled.".to_string());
+                    }
                     super::emit_app_log(
                         &app_handle,
                         "warn",
                         "LprRuntimeWorker",
                         format!("Worker request failed and will be restarted: {}", error),
                     );
-                    self.set_worker_pid(None);
-                    *worker_guard = None;
                     if attempt >= LPR_RUNTIME_RETRY_LIMIT {
                         return Err(error);
                     }
@@ -252,8 +275,9 @@ impl RuntimeBroker {
             format!("Terminating persistent Python runtime worker pid={} reason={}", pid, reason),
         );
         kill_process_tree(pid)?;
+        self.cancel_generation.fetch_add(1, Ordering::SeqCst);
         self.set_worker_pid(None);
-        if let Ok(mut guard) = self.worker.lock() {
+        if let Ok(mut guard) = self.worker.try_lock() {
             *guard = None;
         }
         Ok(true)
@@ -549,7 +573,13 @@ mod tests {
     use crate::contracts::AiEvidenceProgressPayload;
     use serde_json::Value;
 
-    use super::{deserialize_progress_payload, parse_worker_response_line, RuntimeWorkerEnvelope, RuntimeWorkerInvokeError};
+    use super::{cancel_generation_changed, deserialize_progress_payload, parse_worker_response_line, RuntimeWorkerEnvelope, RuntimeWorkerInvokeError};
+
+    #[test]
+    fn cancel_generation_change_marks_active_request_cancelled() {
+        assert!(!cancel_generation_changed(7, 7));
+        assert!(cancel_generation_changed(7, 8));
+    }
 
     #[test]
     fn parse_worker_response_line_accepts_progress_envelopes() {

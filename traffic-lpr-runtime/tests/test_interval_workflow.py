@@ -687,7 +687,7 @@ class IntervalWorkflowTests(unittest.TestCase):
         self.assertIn('plate text did not remain stable across interval samples', result['review']['reasons'])
         self.assertIn('sequence evidence drifted during the interval review path', result['review']['reasons'])
 
-    def test_interval_analysis_only_applies_temporal_support_to_unstable_samples(self) -> None:
+    def test_interval_analysis_disables_temporal_support_for_interactive_samples(self) -> None:
         tracked_frames = [
             TrackedRegion(
                 id=f'track-{time_ms}',
@@ -815,10 +815,10 @@ class IntervalWorkflowTests(unittest.TestCase):
             'countryHints': ['tw'],
         })
 
-        self.assertEqual(support_retries, [(1100, 3)])
+        self.assertEqual(support_retries, [])
         self.assertEqual(result['acceptedCandidateId'], fused_candidate.id)
-        self.assertEqual(result['diagnostics']['timing']['temporalSupportSamplesUsed'], 1)
-        self.assertEqual(result['diagnostics']['timing']['temporalSupportBudget'], 4)
+        self.assertEqual(result['diagnostics']['timing']['temporalSupportSamplesUsed'], 0)
+        self.assertEqual(result['diagnostics']['timing']['temporalSupportBudget'], 0)
 
 
 if __name__ == '__main__':

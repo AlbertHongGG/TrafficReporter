@@ -75,9 +75,11 @@ import {
   type AiPanelSessionSnapshot,
 } from '../application/aiPanelWindow';
 import { buildLprJobUpdateFromProgress, shouldApplyLprProgress } from '../application/lprProgress';
+import { INTERACTIVE_RANGE_LATENCY_BUDGET_MS, resolveLprRangeAnalysisIntent } from '../application/lprAnalysisIntent';
 import {
   PLATE_ACTION_EVENT,
   PLATE_SESSION_REQUEST_EVENT,
+  resolveLprDisplayCandidate,
   type PlateWindowAction,
   type PlateWindowSessionSnapshot,
 } from '../application/plateWindow';
@@ -450,17 +452,6 @@ function isAnchorWithinInterval(anchorTimeMs: number, interval: TimelineInterval
   return anchorTimeMs >= interval.startMs && anchorTimeMs <= interval.endMs;
 }
 
-function resolveLprRangeSampling(durationMs: number, useDenseSampling: boolean) {
-  if (durationMs <= 3500) {
-    return { sampleEveryMs: 150, maxSamples: 16 };
-  }
-  const sampleDivisor = useDenseSampling ? 28 : 14;
-  return {
-    sampleEveryMs: Math.max(useDenseSampling ? 70 : 90, Math.round(durationMs / sampleDivisor) || 90),
-    maxSamples: useDenseSampling ? 24 : 14,
-  };
-}
-
 export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isActive = true }) => {
   const { state, dispatch, sessionRevision } = useEditorSessionController();
   const [workspaceFeedback, setWorkspaceFeedback] = useState<string | null>(null);
@@ -575,11 +566,10 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     [lprState.selectedTargetTrackId, lprState.targetTracks],
   );
   const lprAnalysisTrack = lprState.analysisTrack;
-  const lprAcceptedCandidate = useMemo(
-    () => lprState.candidates.find((candidate) => candidate.id === lprState.acceptedCandidateId) ?? null,
-    [lprState.acceptedCandidateId, lprState.candidates],
+  const lprTopCandidate = useMemo(
+    () => resolveLprDisplayCandidate(lprState.candidates, lprState.review, lprState.acceptedCandidateId),
+    [lprState.acceptedCandidateId, lprState.candidates, lprState.review],
   );
-  const lprTopCandidate = lprAcceptedCandidate ?? lprState.candidates[0] ?? null;
   const lprAnalysisVehicleKind = useMemo(
     () => resolveLprAnalysisTargetVehicleKind(lprSelectedTrack, lprState.targetVehicleKind),
     [lprSelectedTrack, lprState.targetVehicleKind],
@@ -1887,7 +1877,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       latestCountryHintDraftRef.current ?? (lprState.countryHints.join(', ')),
     );
     const durationMs = Math.max(0, interval.endMs - interval.startMs);
-    const { sampleEveryMs, maxSamples } = resolveLprRangeSampling(durationMs, lprState.useDenseSampling);
+    const analysisIntent = resolveLprRangeAnalysisIntent(durationMs, lprState.useDenseSampling);
 
     const requestId = beginLprRequest('Interval', 'Tracking the selected target across the chosen interval.', 0.12);
 
@@ -1900,8 +1890,8 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         selectedTargetBox: lprSelectedTargetAnchor.box,
         selectedTargetTrackId: lprSelectedTrack?.id ?? lprState.selectedTargetTrackId ?? null,
         countryHints,
-        sampleEveryMs,
-        maxSamples,
+        analysisIntent,
+        latencyBudgetMs: INTERACTIVE_RANGE_LATENCY_BUDGET_MS,
         analysisProfileId: lprState.selectedAnalysisProfileId,
         enableDeveloperDiagnostics: lprState.showDeveloperDiagnostics,
         requestId,
@@ -2003,7 +1993,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         compressionMode: activeFile.renderProfile.compressionMode,
         interval: lprState.interval,
         targetTrack: lprAnalysisTrack ?? lprSelectedTrack,
-        acceptedCandidate: lprAcceptedCandidate,
+        acceptedCandidate: lprTopCandidate,
         candidates: lprState.candidates,
         samples: lprState.samples,
         review: lprState.review,

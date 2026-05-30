@@ -24,6 +24,7 @@ import {
 import { Select } from '../../../components/Select/Select';
 import {
   PLATE_LIVE_TRANSPORT_EVENT,
+  resolveLprDisplayCandidate,
   samplePrimaryText,
   PLATE_SESSION_UPDATED_EVENT,
   resolvePlateWindowPlayheadMs,
@@ -356,17 +357,8 @@ function buildReviewBadge(review: LprReviewState | null): { label: string; tone:
 }
 
 function candidateBadgeLabel(candidate: LprPlateCandidate, acceptedCandidateId: string | null) {
-  const selection = candidateSelection(candidate);
   const confidenceLabel = formatConfidence(candidate.confidence);
-  if (selection.reviewRequired && selection.isSuggested && acceptedCandidateId === null) {
-    return `${confidenceLabel} Check`;
-  }
-  if (selection.isAccepted || candidate.id === acceptedCandidateId) {
-    return `${confidenceLabel} Accepted`;
-  }
-  if (selection.isSuggested) {
-    return `${confidenceLabel} Suggested`;
-  }
+  void acceptedCandidateId;
   return confidenceLabel;
 }
 
@@ -374,9 +366,7 @@ function heroConfidenceLabel(candidate: LprPlateCandidate | null) {
   if (!candidate) {
     return '0%';
   }
-  const selection = candidateSelection(candidate);
-  const confidenceLabel = formatConfidence(candidate.confidence);
-  return selection.reviewRequired && selection.isSuggested ? `${confidenceLabel} Check` : confidenceLabel;
+  return formatConfidence(candidate.confidence);
 }
 
 function evidenceReasonLabel(reason: string) {
@@ -423,7 +413,7 @@ export const PlateWindow: React.FC = () => {
 
   const lprState = snapshot?.lpr ?? buildDefaultLprState();
   const runtimeStatus = snapshot?.runtimeStatus ?? null;
-  const topCandidate = snapshot?.topCandidate ?? lprState.candidates[0] ?? null;
+  const topCandidate = snapshot?.topCandidate ?? resolveLprDisplayCandidate(lprState.candidates, lprState.review, lprState.acceptedCandidateId);
   const analysisProfiles = getLprAnalysisProfiles();
   const isBusy = lprState.job.status === 'queued' || lprState.job.status === 'running';
   const currentPlayheadMs = resolvePlateWindowPlayheadMs(snapshot, liveTransport);

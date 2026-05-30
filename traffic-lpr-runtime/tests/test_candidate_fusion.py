@@ -343,6 +343,116 @@ class CandidateFusionTests(unittest.TestCase):
         self.assertEqual(diagnostics['formatScore'], 1.0)
         self.assertEqual(ordered_candidates[0].diagnostics['selection']['reasons'], ['low-confidence', 'low-margin'])
 
+    def test_interval_review_does_not_suggest_format_incomplete_sample_candidate(self) -> None:
+        top_candidate = PlateCandidate(
+            id='single-char',
+            text='4',
+            confidence=0.69,
+            source='ocr:cct-xs-v2-global-model',
+            frame_time_ms=2288,
+            country_code='TW',
+            box=None,
+            quality=make_quality(0.9),
+            diagnostics={'supportFrames': [2288], 'sequenceTier': 'fragmented', 'sequenceSupportRatio': 0.1, 'sequenceCharacterConsistencyMean': 0.3},
+        )
+        plate_like_candidate = PlateCandidate(
+            id='plate-like',
+            text='RJE5752',
+            confidence=0.48,
+            source='fused',
+            frame_time_ms=1900,
+            country_code='TW',
+            box=None,
+            quality=make_quality(0.82),
+            diagnostics={'supportFrames': [1900, 2050], 'sequenceTier': 'fragmented', 'sequenceSupportRatio': 0.2, 'sequenceCharacterConsistencyMean': 0.42},
+        )
+
+        ordered_candidates, accepted_candidate_id, diagnostics = apply_reliability_selection(
+            [top_candidate, plate_like_candidate],
+            [make_sample_with_candidates('sample-2288', 2288, [top_candidate])],
+            ['tw'],
+            AnalysisOptions(min_accepted_confidence=0.72, min_candidate_margin=0.12),
+            True,
+        )
+
+        self.assertIsNone(accepted_candidate_id)
+        self.assertEqual(ordered_candidates[0].text, 'RJE5752')
+        self.assertEqual(diagnostics['suggestedText'], 'RJE5752')
+        self.assertIn('unstable-sequence', diagnostics['reasons'])
+        self.assertNotIn('format-mismatch', diagnostics['reasons'])
+
+    def test_interval_review_keeps_fused_candidate_when_sample_fallback_has_same_text(self) -> None:
+        fused_candidate = PlateCandidate(
+            id='fused-rte',
+            text='RTE5752',
+            confidence=0.50,
+            source='fused',
+            frame_time_ms=1995,
+            country_code='TW',
+            box=None,
+            quality=make_quality(0.84),
+            diagnostics={'supportFrames': [1845, 1995], 'sequenceTier': 'fragmented', 'sequenceSupportRatio': 0.18, 'sequenceCharacterConsistencyMean': 0.4},
+        )
+        sample_candidate = PlateCandidate(
+            id='baseline-rte',
+            text='RTE5752',
+            confidence=0.71,
+            source='baseline',
+            frame_time_ms=1995,
+            country_code='TW',
+            box=None,
+            quality=make_quality(0.9),
+            diagnostics=None,
+        )
+
+        ordered_candidates, accepted_candidate_id, diagnostics = apply_reliability_selection(
+            [fused_candidate],
+            [make_sample_with_candidates('sample-1995', 1995, [sample_candidate])],
+            ['tw'],
+            AnalysisOptions(min_accepted_confidence=0.72, min_candidate_margin=0.12),
+            True,
+        )
+
+        self.assertIsNone(accepted_candidate_id)
+        self.assertEqual(ordered_candidates[0].id, 'fused-rte')
+        self.assertFalse(diagnostics['usedFallback'])
+
+    def test_interval_review_keeps_format_complete_top_candidate_despite_weaker_support(self) -> None:
+        top_candidate = PlateCandidate(
+            id='rje',
+            text='RJE5752',
+            confidence=0.51,
+            source='fused',
+            frame_time_ms=2080,
+            country_code='TW',
+            box=None,
+            quality=make_quality(0.82),
+            diagnostics={'supportFrames': [2080, 2230], 'sequenceTier': 'fragmented', 'sequenceSupportRatio': 0.14, 'sequenceCharacterConsistencyMean': 0.32},
+        )
+        dominant_but_wrong = PlateCandidate(
+            id='ra',
+            text='RA5557',
+            confidence=0.52,
+            source='fused',
+            frame_time_ms=1750,
+            country_code='TW',
+            box=None,
+            quality=make_quality(0.84),
+            diagnostics={'supportFrames': [1600, 1750, 1900], 'sequenceTier': 'fragmented', 'sequenceSupportRatio': 0.21, 'sequenceCharacterConsistencyMean': 0.32},
+        )
+
+        ordered_candidates, accepted_candidate_id, diagnostics = apply_reliability_selection(
+            [top_candidate, dominant_but_wrong],
+            [make_sample_with_candidates('sample-2080', 2080, [top_candidate])],
+            ['tw'],
+            AnalysisOptions(min_accepted_confidence=0.72, min_candidate_margin=0.12),
+            True,
+        )
+
+        self.assertIsNone(accepted_candidate_id)
+        self.assertEqual(ordered_candidates[0].text, 'RJE5752')
+        self.assertEqual(diagnostics['suggestedText'], 'RJE5752')
+
     def test_aligned_fusion_caps_observations(self) -> None:
         class _Cv2Stub:
             INTER_LANCZOS4 = 1

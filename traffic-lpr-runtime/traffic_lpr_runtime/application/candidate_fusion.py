@@ -875,16 +875,33 @@ def apply_reliability_selection(
     )
     suggested_candidate = top_candidate
     used_fallback = False
+    if interval_mode and review_reasons and _plate_format_score(top_candidate.text, country_hints) < 0.65:
+        interval_candidate = _best_interval_review_candidate(ordered_candidates, country_hints, options)
+        if interval_candidate is not None and interval_candidate.id != suggested_candidate.id:
+            suggested_candidate = interval_candidate
+            review_reasons = [] if not options.enable_reliability_gates else _review_reasons(
+                suggested_candidate,
+                max(0.0, suggested_candidate.confidence - (runner_up_candidate.confidence if runner_up_candidate is not None else 0.0)),
+                country_hints,
+                options,
+                interval_mode,
+            )
     if review_reasons and fallback_candidate is not None and fallback_candidate.id != top_candidate.id:
         top_score = _candidate_reliability_score(top_candidate, country_hints)
         fallback_score = _candidate_reliability_score(fallback_candidate, country_hints)
-        format_advantage = _plate_format_score(fallback_candidate.text, country_hints) - _plate_format_score(top_candidate.text, country_hints)
+        fallback_format_score = _plate_format_score(fallback_candidate.text, country_hints)
+        format_advantage = fallback_format_score - _plate_format_score(top_candidate.text, country_hints)
         top_support_count = _candidate_support_frame_count(top_candidate)
         fallback_support_count = _candidate_support_frame_count(fallback_candidate)
         required_score_advantage = 0.05
+        fallback_text = normalize_plate_text(fallback_candidate.text)
+        suggested_text = normalize_plate_text(suggested_candidate.text)
+        fallback_allowed = True
+        if interval_mode and (fallback_format_score < 0.65 or fallback_text == suggested_text):
+            fallback_allowed = False
         if interval_mode and fallback_support_count < top_support_count and format_advantage < 0.2:
             required_score_advantage = 0.18
-        if fallback_score >= top_score + required_score_advantage or format_advantage >= 0.2:
+        if fallback_allowed and (fallback_score >= top_score + required_score_advantage or format_advantage >= 0.2):
             suggested_candidate = fallback_candidate
             used_fallback = True
             review_reasons = [] if not options.enable_reliability_gates else _review_reasons(
@@ -974,6 +991,31 @@ def _best_sample_candidate(samples: list[FrameSample], country_hints: list[str])
                 best_candidate = candidate
                 best_score = score
     return best_candidate
+
+
+def _best_interval_review_candidate(
+    candidates: list[PlateCandidate],
+    country_hints: list[str],
+    options: AnalysisOptions,
+) -> PlateCandidate | None:
+    plate_like_candidates = [
+        candidate
+        for candidate in candidates
+        if _plate_format_score(candidate.text, country_hints) >= 0.65
+    ]
+    if not plate_like_candidates:
+        return None
+
+    return max(
+        plate_like_candidates,
+        key=lambda candidate: (
+            _candidate_support_frame_count(candidate) >= options.min_interval_support_frames,
+            _plate_format_score(candidate.text, country_hints),
+            _candidate_support_frame_count(candidate),
+            candidate.confidence,
+            len(normalize_plate_text(candidate.text)),
+        ),
+    )
 
 
 def _candidate_reliability_score(candidate: PlateCandidate, country_hints: list[str]) -> float:

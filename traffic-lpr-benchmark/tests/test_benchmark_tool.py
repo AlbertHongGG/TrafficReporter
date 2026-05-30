@@ -759,6 +759,91 @@ class BenchmarkToolTests(unittest.TestCase):
         self.assertEqual(runtime_result['cases'][0]['review']['suggestedCandidateId'], 'candidate-1')
         self.assertEqual(runtime_result['cases'][0]['provenance']['analysisProfileId'], 'precision')
 
+    def test_benchmark_run_promotes_runtime_analysis_policy(self) -> None:
+        def analyze_interval(payload):
+            self.assertEqual(payload['analysisIntent'], 'benchmark-case')
+            self.assertEqual(payload['benchmarkCaseId'], 'case-interval')
+            return {
+                'targetTracks': [],
+                'analysisTrack': None,
+                'samples': [],
+                'candidates': [
+                    {
+                        'id': 'candidate-1',
+                        'text': 'ABC1234',
+                        'confidence': 0.9,
+                        'source': 'fused',
+                    }
+                ],
+                'acceptedCandidateId': 'candidate-1',
+                'review': {
+                    'status': 'accepted',
+                    'acceptedCandidateId': 'candidate-1',
+                    'suggestedCandidateId': 'candidate-1',
+                    'reasons': [],
+                },
+                'provenance': {
+                    'requestId': 'req-policy',
+                    'command': 'analyze-interval',
+                    'analysisProfileId': 'precision',
+                    'developerDiagnosticsEnabled': False,
+                    'runtimeVersion': 'runtime-1',
+                    'emittedAtMs': 3,
+                },
+                'summary': 'accepted',
+                'runtime': {'status': 'ready'},
+                'tracking': None,
+                'sequence': None,
+                'diagnostics': {
+                    'analysisPolicy': {
+                        'intent': 'benchmark-case',
+                        'durationMs': 3000,
+                        'shortInterval': True,
+                        'requestedSampleEveryMs': 150,
+                        'requestedMaxSamples': 16,
+                        'sampleEveryMs': 150,
+                        'maxSamples': 16,
+                        'latencyBudgetMs': 30000,
+                        'analysisProfileId': 'precision',
+                        'rules': ['short-interval-stable-grid'],
+                    },
+                    'timing': {
+                        'trackingMs': 10.0,
+                        'sampleAnalysisMs': 20.0,
+                        'temporalSupportMs': 0.0,
+                        'fusionMs': 2.0,
+                        'totalMs': 32.0,
+                    },
+                },
+            }
+
+        workflow = BenchmarkRunWorkflow(
+            ensure_ready=lambda: None,
+            status=lambda: {'status': 'ready'},
+            analyze_frame=lambda payload: {'candidates': [], 'summary': '', 'runtime': {'status': 'ready'}},
+            analyze_interval=analyze_interval,
+        )
+
+        runtime_result = workflow.run({
+            'cases': [
+                {
+                    'id': 'case-interval',
+                    'mode': 'interval',
+                    'sourcePath': 'clip.mp4',
+                    'interval': {'startMs': 0, 'endMs': 3000},
+                    'anchorTimeMs': 1500,
+                    'selectedTargetBox': {'x': 0.1, 'y': 0.2, 'width': 0.3, 'height': 0.2},
+                    'sampleEveryMs': 150,
+                    'maxSamples': 16,
+                    'expectedText': 'ABC1234',
+                }
+            ]
+        })
+
+        self.assertEqual(runtime_result['cases'][0]['analysisPolicy']['intent'], 'benchmark-case')
+        self.assertEqual(runtime_result['cases'][0]['analysisPolicy']['sampleEveryMs'], 150)
+        self.assertEqual(runtime_result['cases'][0]['timing']['totalMs'], 32.0)
+
     def test_benchmark_run_supports_unreadable_expectation_case(self) -> None:
         workflow = BenchmarkRunWorkflow(
             ensure_ready=lambda: None,

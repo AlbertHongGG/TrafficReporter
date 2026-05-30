@@ -16,6 +16,8 @@ pub type LprLegibilityLevel = String;
 
 pub type LprAnalysisProfileId = String;
 
+pub type LprAnalysisIntent = String;
+
 pub type LprRecognitionSource = String;
 
 pub type LprDiagnostics = Value;
@@ -316,6 +318,8 @@ pub struct LprIntervalAnalysisRequestPayload {
     pub country_hints: Vec<String>,
     pub sample_every_ms: Option<u64>,
     pub max_samples: Option<u32>,
+    pub analysis_intent: Option<LprAnalysisIntent>,
+    pub latency_budget_ms: Option<u64>,
     pub analysis_profile_id: Option<LprAnalysisProfileId>,
     pub enable_developer_diagnostics: Option<bool>,
     pub analysis_options: Option<LprAnalysisOptionsPayload>,

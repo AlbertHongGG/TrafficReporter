@@ -1,6 +1,7 @@
 import type {
   LprFrameSample,
   LprPlateCandidate,
+  LprReviewState,
   LprRuntimeStatus,
   LprSessionState,
   TimelineIntervalSelection,
@@ -55,6 +56,18 @@ export type PlateWindowAction =
 
 export function samplePrimaryText(sample: LprFrameSample) {
   return sample.candidates[0]?.text ?? '--';
+}
+
+export function resolveLprDisplayCandidate(
+  candidates: LprPlateCandidate[],
+  review: LprReviewState | null | undefined,
+  acceptedCandidateId: string | null | undefined,
+) {
+  return candidates.find((candidate) => candidate.id === acceptedCandidateId)
+    ?? candidates.find((candidate) => candidate.id === review?.acceptedCandidateId)
+    ?? candidates.find((candidate) => candidate.id === review?.suggestedCandidateId)
+    ?? candidates[0]
+    ?? null;
 }
 
 export function resolvePlateWindowPlayheadMs(

@@ -3,14 +3,14 @@ from __future__ import annotations
 import math
 from typing import Any, Callable
 
+from traffic_lpr_runtime.application.analysis_policy import (
+    SHORT_INTERVAL_MAX_MS,
+    SHORT_INTERVAL_MIN_SAMPLE_BUDGET,
+    SHORT_INTERVAL_SAMPLE_STEP_MS,
+)
 from traffic_lpr_runtime.application.pipeline_support import AnalysisOptions
 from traffic_lpr_runtime.domain.models import TargetTrack, TrackedRegion
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect, clamp
-
-
-SHORT_INTERVAL_MAX_MS = 3500
-SHORT_INTERVAL_SAMPLE_STEP_MS = 150
-SHORT_INTERVAL_MIN_SAMPLE_BUDGET = 16
 
 
 def _optional_string(value: Any) -> str | None:

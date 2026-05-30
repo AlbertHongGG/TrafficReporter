@@ -128,6 +128,7 @@ class BenchmarkRunWorkflow:
             if isinstance(diagnostics_payload, dict) and isinstance(diagnostics_payload.get('tracker'), dict):
                 tracker_diagnostics_payload = dict(diagnostics_payload['tracker'])
             timing_payload = _normalized_timing_payload(diagnostics_payload)
+            analysis_policy_payload = _normalized_analysis_policy_payload(diagnostics_payload)
             tracking_payload = dict(response.get('tracking') or {}) if isinstance(response.get('tracking'), dict) else None
             decision_payload = dict(response.get('decision') or {}) if isinstance(response.get('decision'), dict) else None
             if tracking_payload is not None:
@@ -165,6 +166,7 @@ class BenchmarkRunWorkflow:
                     'trackMetrics': track_metrics_case,
                     'tracking': tracking_payload,
                     'timing': timing_payload,
+                    'analysisPolicy': analysis_policy_payload,
                     'decision': decision_payload,
                     'sequence': sequence_payload,
                     'failureReason': failure_reason,
@@ -587,6 +589,10 @@ def _build_case_request(
     if run_id and not _resolve_optional_str(request_payload.get('requestId')):
         request_payload['requestId'] = f'{run_id}-{case_id}'
 
+    request_payload.setdefault('analysisIntent', 'benchmark-case')
+    request_payload.setdefault('benchmarkCaseId', case_id)
+    request_payload.setdefault('latencyBudgetMs', 30_000)
+
     if artifact_root is not None and not analysis_options.get('artifactDir'):
         analysis_options['artifactDir'] = str((artifact_root / 'cases' / case_id).resolve())
         analysis_options['persistArtifacts'] = True
@@ -617,6 +623,13 @@ def _normalized_timing_payload(diagnostics_payload: Any) -> dict[str, float] | N
         if value is not None:
             normalized[key] = value
     return normalized or None
+
+
+def _normalized_analysis_policy_payload(diagnostics_payload: Any) -> dict[str, Any] | None:
+    if not isinstance(diagnostics_payload, dict):
+        return None
+    policy_payload = diagnostics_payload.get('analysisPolicy')
+    return dict(policy_payload) if isinstance(policy_payload, dict) else None
 
 
 def _load_checkpoint_results(checkpoint_path: Path | None, valid_case_ids: set[str]) -> tuple[list[dict[str, Any]], str | None]:

@@ -339,8 +339,8 @@ class AiEvidenceWorkflow:
                 'countryHints': country_hints,
                 'analysisProfileId': analysis_profile_id,
                 'enableDeveloperDiagnostics': enable_developer_diagnostics,
-                'sampleEveryMs': fine_step_ms,
-                'maxSamples': max(12, len(fine_frames) + 4),
+                'analysisIntent': 'ai-evidence-range',
+                'latencyBudgetMs': 45_000,
                 'requestId': request_id,
             }),
         )

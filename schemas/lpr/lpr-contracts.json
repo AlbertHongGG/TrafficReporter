@@ -80,6 +80,11 @@
       "validatorType": "string"
     },
     {
+      "name": "LprAnalysisIntent",
+      "kind": "stringUnion",
+      "values": ["interactive-short-range", "interactive-range", "interactive-dense-range", "ai-evidence-range", "benchmark-case"]
+    },
+    {
       "name": "LprRecognitionSource",
       "kind": "alias",
       "tsType": "'baseline' | 'fused' | 'legacy-vote' | 'fused-char' | `ocr:${string}` | `fused-image:${string}`",
@@ -537,6 +542,8 @@
         { "name": "countryHints", "type": "array", "items": "string" },
         { "name": "sampleEveryMs", "type": "number", "rustType": "u64", "optional": true },
         { "name": "maxSamples", "type": "number", "rustType": "u32", "optional": true },
+        { "name": "analysisIntent", "type": "LprAnalysisIntent", "optional": true },
+        { "name": "latencyBudgetMs", "type": "number", "rustType": "u64", "optional": true },
         { "name": "analysisProfileId", "type": "LprAnalysisProfileId", "optional": true, "nullable": true },
         { "name": "enableDeveloperDiagnostics", "type": "boolean", "optional": true },
         { "name": "analysisOptions", "type": "LprAnalysisOptions", "optional": true, "nullable": true },

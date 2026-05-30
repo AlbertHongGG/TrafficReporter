@@ -158,19 +158,20 @@ class TargetTrackingTests(unittest.TestCase):
             options=AnalysisOptions(tracker_mode='botsort'),
         )
 
-        self.assertEqual(tracker.calls[0], [1000, 1100, 1200, 1300, 1400, 1500, 1600])
-        self.assertEqual(diagnostics['requestedTrackingFrameCount'], 7)
-        self.assertEqual(diagnostics['requestedEvidenceSampleCount'], 4)
-        self.assertEqual(diagnostics['trajectoryStepMs'], 100)
+        self.assertEqual(tracker.calls[0], [1000, 1080, 1150, 1160, 1200, 1240, 1300, 1320, 1400, 1450, 1480, 1560, 1600])
+        self.assertEqual(diagnostics['requestedTrackingFrameCount'], 13)
+        self.assertEqual(diagnostics['requestedEvidenceSampleCount'], 5)
+        self.assertEqual(diagnostics['trajectoryStepMs'], 80)
         self.assertEqual(diagnostics['temporalRange']['requestedStartMs'], 1000)
         self.assertEqual(diagnostics['temporalRange']['requestedEndMs'], 1600)
         self.assertTrue(diagnostics['temporalRange']['reachedRequestedStart'])
         self.assertTrue(diagnostics['temporalRange']['reachedRequestedEnd'])
         self.assertGreaterEqual(diagnostics['temporalRange']['averageMotion'], 0.0)
         evidence_times = [frame.time_ms for frame in tracked_frames if frame.diagnostics.get('isEvidenceSample') is True]
-        self.assertEqual(evidence_times, [1000, 1200, 1400, 1600])
-        self.assertEqual(tracked_frames[2].diagnostics.get('trajectoryRole'), 'anchor')
-        self.assertIn('anchor', tracked_frames[2].diagnostics.get('evidenceReasons', []))
+        self.assertEqual(evidence_times, [1000, 1150, 1300, 1450, 1600])
+        anchor_frame = next(frame for frame in tracked_frames if frame.time_ms == 1200)
+        self.assertEqual(anchor_frame.diagnostics.get('trajectoryRole'), 'anchor')
+        self.assertIn('anchor', anchor_frame.diagnostics.get('evidenceReasons', []))
 
     def test_interval_tracking_sparsifies_long_anchor_only_evidence_schedule(self) -> None:
         tracker = RecordingTracker()

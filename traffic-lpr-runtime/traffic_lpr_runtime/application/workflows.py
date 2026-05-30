@@ -4,6 +4,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any, Callable
 
+from traffic_lpr_runtime.application.analysis_policy import AnalysisPolicyResolver
 from traffic_lpr_runtime.application.pipeline_support import AnalysisOptions
 from traffic_lpr_runtime.application.preprocessing import PlateObservation
 from traffic_lpr_runtime.application.provenance import build_analysis_provenance
@@ -602,11 +603,32 @@ class IntervalAnalysisWorkflow:
         self._aggregate_candidates = aggregate_candidates
         self._apply_reliability_selection = apply_reliability_selection
         self._build_track_payload = build_track_payload
+        self._policy_resolver = AnalysisPolicyResolver()
+        from traffic_lpr_runtime.application.interval_analysis_service import IntervalAnalysisDependencies, IntervalAnalysisService
+
+        self._service = IntervalAnalysisService(
+            IntervalAnalysisDependencies(
+                ensure_ready=ensure_ready,
+                status=status,
+                runtime_root=runtime_root,
+                frame_reader=frame_reader,
+                track_target_across_interval=track_target_across_interval,
+                calibrate_interval_target_boxes=calibrate_interval_target_boxes,
+                analyze_plate_candidates=analyze_plate_candidates,
+                aggregate_candidates=aggregate_candidates,
+                apply_reliability_selection=apply_reliability_selection,
+                build_track_payload=build_track_payload,
+            ),
+            policy_resolver=self._policy_resolver,
+        )
 
     def run(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._service.run(payload)
         self._ensure_ready()
         run_started = perf_counter()
         options = AnalysisOptions.from_payload(payload)
+        analysis_policy = self._policy_resolver.resolve_interval(payload, options)
+        payload = analysis_policy.apply_to_payload(payload)
         artifact_root = options.resolve_artifact_root(self._runtime_root(), 'interval', _request_run_id(payload))
         interval = payload['interval']
         anchor_time_ms = int(payload['anchorTimeMs'])
@@ -617,7 +639,7 @@ class IntervalAnalysisWorkflow:
             raise RuntimeFailure('Range analysis requires a selected target on the anchor frame.')
         if anchor_time_ms < start_ms or anchor_time_ms > end_ms:
             raise RuntimeFailure('Range analysis requires the selected target anchor to stay inside the requested interval.')
-        requested_frame_count = max(1, _safe_int(payload.get('maxSamples'), 0))
+        requested_frame_count = max(1, analysis_policy.max_samples)
 
         _emit_progress(0.1, 'Interval', 'Validating the anchor frame and starting interval tracking.')
         tracking_started = perf_counter()
@@ -627,8 +649,8 @@ class IntervalAnalysisWorkflow:
             anchor_time_ms,
             payload.get('targetVehicleKind', 'vehicle'),
             selected_target_box,
-            payload.get('sampleEveryMs'),
-            payload.get('maxSamples'),
+            analysis_policy.sample_every_ms,
+            analysis_policy.max_samples,
             options,
             isinstance(payload.get('groundTruthFrames'), list) and len(payload.get('groundTruthFrames') or []) > 0,
         )
@@ -894,6 +916,7 @@ class IntervalAnalysisWorkflow:
             'tracking': tracking,
             'diagnostics': {
                 'analysisOptions': options.to_payload(),
+                'analysisPolicy': analysis_policy.to_payload(),
                 'artifactRoot': str(artifact_root) if artifact_root else None,
                 'tracker': track_diagnostics,
                 'trackingSummary': tracking,
