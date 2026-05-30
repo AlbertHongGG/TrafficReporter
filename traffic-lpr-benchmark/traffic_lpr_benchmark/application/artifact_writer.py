@@ -153,6 +153,9 @@ def build_report_html(bundle: dict[str, Any]) -> str:
         ('Prediction Switches', _format_number(metrics.get('meanPredictionSwitchCount'))),
         ('Char Consistency', _format_number(metrics.get('meanCharacterConsistencyMean'))),
         ('P95 Latency', _format_number((metrics.get('latencyMs') or {}).get('p95'), 1) + ' ms'),
+        ('P95 Tracking', _format_number(((metrics.get('stageTimingMs') or {}).get('trackingMs') or {}).get('p95'), 1) + ' ms'),
+        ('P95 Samples', _format_number(((metrics.get('stageTimingMs') or {}).get('sampleAnalysisMs') or {}).get('p95'), 1) + ' ms'),
+        ('P95 Temporal', _format_number(((metrics.get('stageTimingMs') or {}).get('temporalSupportMs') or {}).get('p95'), 1) + ' ms'),
     ]
 
     card_markup = ''.join(
@@ -167,6 +170,7 @@ def build_report_html(bundle: dict[str, Any]) -> str:
         provenance = case['provenance']
         tracking = case.get('tracking') if isinstance(case.get('tracking'), dict) else {}
         sequence = case.get('sequence') if isinstance(case.get('sequence'), dict) else {}
+        timing = case.get('timing') if isinstance(case.get('timing'), dict) else {}
         expected_display = format_case_expectation(str(case.get('expectationKind') or 'readable'), case.get('expectedText'))
         rows.append(
             '<tr>'
@@ -179,6 +183,8 @@ def build_report_html(bundle: dict[str, Any]) -> str:
             f'<td>{_safe_text(provenance.get("analysisProfileId"))}</td>'
             f'<td>{_format_number(case.get("acceptedConfidence"), 3)}</td>'
             f'<td>{_format_number(case.get("latencyMs"), 1)}</td>'
+            f'<td>{_format_number(timing.get("sampleAnalysisMs"), 1)}</td>'
+            f'<td>{_format_number(timing.get("temporalSupportMs"), 1)}</td>'
             f'<td>{_format_number(localization.get("plateMeanIoU"), 3)}</td>'
             f'<td>{_format_number(localization.get("targetMeanIoU"), 3)}</td>'
             f'<td>{_safe_text(tracking.get("trackingTier"))}</td>'
@@ -186,7 +192,7 @@ def build_report_html(bundle: dict[str, Any]) -> str:
             '</tr>'
         )
 
-    rows_markup = ''.join(rows) or '<tr><td colspan="13">No cases.</td></tr>'
+    rows_markup = ''.join(rows) or '<tr><td colspan="15">No cases.</td></tr>'
     failure_breakdown = ''.join(
         f'<li><strong>{_safe_text(name)}</strong>: {_safe_text(count)}</li>'
         for name, count in sorted((metrics.get('failureBreakdown') or {}).items())
@@ -272,6 +278,8 @@ def build_report_html(bundle: dict[str, Any]) -> str:
                 <th>Profile</th>
                 <th>Confidence</th>
                 <th>Latency ms</th>
+                <th>Sample ms</th>
+                <th>Temporal ms</th>
                 <th>Plate IoU</th>
                 <th>Target IoU</th>
                 <th>Tracking</th>

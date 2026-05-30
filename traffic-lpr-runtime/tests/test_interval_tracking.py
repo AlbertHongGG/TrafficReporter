@@ -13,6 +13,20 @@ from traffic_lpr_runtime.domain.value_objects import NormalizedRect
 
 
 class IntervalTrackingTests(unittest.TestCase):
+    def test_short_intervals_use_stable_evidence_grid(self) -> None:
+        service = IntervalTrackingService(
+            frame_reader=object(),
+            detect_targets=lambda *args, **kwargs: [],
+            tracker=object(),
+        )
+
+        interval = {'startMs': 0, 'endMs': 3000}
+
+        self.assertEqual(service.resolve_sample_step_ms(interval, 214, 14), 150)
+        self.assertEqual(service.resolve_sample_step_ms(interval, 107, 24), 150)
+        self.assertGreaterEqual(len(service.sample_times(interval, 214, 14)), 16)
+        self.assertIn(2250, service.sample_times(interval, 214, 14))
+
     def test_long_intervals_trim_evidence_budget_and_anchor_burst_count(self) -> None:
         selected_target_box = NormalizedRect(x=0.32, y=0.2, width=0.18, height=0.24)
 

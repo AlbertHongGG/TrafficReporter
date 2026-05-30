@@ -240,6 +240,13 @@ class BenchmarkToolTests(unittest.TestCase):
                         'trackedFrameCount': 8,
                         'reacquireFrames': 0,
                     },
+                    'timing': {
+                        'trackingMs': 20.0,
+                        'sampleAnalysisMs': 70.0,
+                        'temporalSupportMs': 0.0,
+                        'fusionMs': 5.0,
+                        'totalMs': 95.0,
+                    },
                     'review': {'status': 'accepted', 'reasons': []},
                     'metadata': {'dataset': 'UFPR', 'split': 'smoke'},
                     'tags': [],
@@ -262,6 +269,13 @@ class BenchmarkToolTests(unittest.TestCase):
                         'trackedFrameCount': 4,
                         'reacquireFrames': 2,
                     },
+                    'timing': {
+                        'trackingMs': 40.0,
+                        'sampleAnalysisMs': 90.0,
+                        'temporalSupportMs': 10.0,
+                        'fusionMs': 8.0,
+                        'totalMs': 148.0,
+                    },
                     'review': {'status': 'review-required', 'reasons': ['coverage-gap']},
                     'metadata': {'dataset': 'UFPR', 'split': 'smoke'},
                     'tags': [],
@@ -278,6 +292,8 @@ class BenchmarkToolTests(unittest.TestCase):
         self.assertAlmostEqual(summary['metrics']['detectionFallbackReviewRequiredRate'], 1.0)
         self.assertAlmostEqual(summary['metrics']['meanDetectionFallbackReacquireFrames'], 2.0)
         self.assertAlmostEqual(summary['metrics']['meanTrackedFrameCount'], 6.0)
+        self.assertAlmostEqual(summary['metrics']['stageTimingMs']['sampleAnalysisMs']['mean'], 80.0)
+        self.assertAlmostEqual(summary['metrics']['stageTimingMs']['totalMs']['p95'], 148.0)
 
     def test_build_run_analysis_includes_tracking_acceptance_focus_breakdown(self) -> None:
         analysis = build_run_analysis({
@@ -1078,6 +1094,13 @@ class BenchmarkToolTests(unittest.TestCase):
                 'temporalDecisionRate': 0.0,
                 'multiFrameDecisionRate': 0.5,
                 'latencyMs': {'p95': 850.0},
+                'stageTimingMs': {
+                    'trackingMs': {'p95': 80.0},
+                    'sampleAnalysisMs': {'p95': 350.0},
+                    'temporalSupportMs': {'p95': 150.0},
+                    'fusionMs': {'p95': 20.0},
+                    'totalMs': {'p95': 600.0},
+                },
             },
         }
 
@@ -1093,6 +1116,11 @@ class BenchmarkToolTests(unittest.TestCase):
             'minTemporalDecisionRate': 0.25,
             'minMultiFrameDecisionRate': 0.75,
             'maxP95LatencyMs': 500.0,
+            'maxP95TrackingMs': 100.0,
+            'maxP95SampleAnalysisMs': 200.0,
+            'maxP95TemporalSupportMs': 50.0,
+            'maxP95FusionMs': 30.0,
+            'maxP95RuntimeTotalMs': 500.0,
         })
 
         self.assertFalse(gate_result['passed'])
@@ -1108,6 +1136,9 @@ class BenchmarkToolTests(unittest.TestCase):
                 'temporalDecisionRate',
                 'multiFrameDecisionRate',
                 'p95LatencyMs',
+                'p95SampleAnalysisMs',
+                'p95TemporalSupportMs',
+                'p95TotalMs',
             },
         )
 

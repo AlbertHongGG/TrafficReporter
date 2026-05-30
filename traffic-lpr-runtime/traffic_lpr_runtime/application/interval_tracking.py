@@ -8,6 +8,11 @@ from traffic_lpr_runtime.domain.models import TargetTrack, TrackedRegion
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect, clamp
 
 
+SHORT_INTERVAL_MAX_MS = 3500
+SHORT_INTERVAL_SAMPLE_STEP_MS = 150
+SHORT_INTERVAL_MIN_SAMPLE_BUDGET = 16
+
+
 def _optional_string(value: Any) -> str | None:
     if not isinstance(value, str):
         return None
@@ -415,6 +420,9 @@ class IntervalTrackingService:
         if duration_ms == 0:
             return max(120, int(requested_every_ms or 120))
 
+        if duration_ms <= SHORT_INTERVAL_MAX_MS:
+            return SHORT_INTERVAL_SAMPLE_STEP_MS
+
         return requested_every_ms or max(120, int(duration_ms / max_samples))
 
     def resolve_tracking_step_ms(
@@ -466,6 +474,9 @@ class IntervalTrackingService:
         end_ms = int(interval['endMs'])
         duration_ms = max(0, end_ms - start_ms)
         max_samples = max(4, min(int(requested_max_samples or 18), 48))
+
+        if duration_ms <= SHORT_INTERVAL_MAX_MS:
+            max_samples = max(max_samples, SHORT_INTERVAL_MIN_SAMPLE_BUDGET)
 
         if duration_ms == 0:
             return [start_ms]

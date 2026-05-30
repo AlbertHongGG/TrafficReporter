@@ -370,6 +370,15 @@ function candidateBadgeLabel(candidate: LprPlateCandidate, acceptedCandidateId: 
   return confidenceLabel;
 }
 
+function heroConfidenceLabel(candidate: LprPlateCandidate | null) {
+  if (!candidate) {
+    return '0%';
+  }
+  const selection = candidateSelection(candidate);
+  const confidenceLabel = formatConfidence(candidate.confidence);
+  return selection.reviewRequired && selection.isSuggested ? `${confidenceLabel} Check` : confidenceLabel;
+}
+
 function evidenceReasonLabel(reason: string) {
   switch (reason) {
     case 'interval-start':
@@ -574,8 +583,8 @@ export const PlateWindow: React.FC = () => {
                     </motion.div>
                   </AnimatePresence>
                   <AnimatePresence mode="popLayout">
-                    <motion.div key={topCandidate ? formatConfidence(topCandidate.confidence) : '0'} initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }} className={styles.heroResultConfidence}>
-                      {topCandidate ? formatConfidence(topCandidate.confidence) : '0%'}
+                    <motion.div key={heroConfidenceLabel(topCandidate)} initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }} className={styles.heroResultConfidence}>
+                      {heroConfidenceLabel(topCandidate)}
                     </motion.div>
                   </AnimatePresence>
                 </div>

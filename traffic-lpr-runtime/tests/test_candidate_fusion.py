@@ -94,7 +94,7 @@ class _FusionRecognizerStub:
 
 
 class CandidateFusionTests(unittest.TestCase):
-    def test_best_frame_carry_through_preserves_strong_single_frame_text(self) -> None:
+    def test_best_frame_carry_through_does_not_promote_isolated_text(self) -> None:
         service = CandidateFusionService(
             dependencies=SimpleNamespace(cv2=None, numpy=None),
             primary_recognizer=_RecognizerStub(),
@@ -117,9 +117,93 @@ class CandidateFusionTests(unittest.TestCase):
 
         self.assertGreaterEqual(len(fused_candidates), 2)
         self.assertEqual(fused_candidates[0].text, 'ABC1234')
-        self.assertTrue(fused_candidates[0].diagnostics['bestFrameCarryThrough'])
-        self.assertEqual(fused_candidates[0].diagnostics['bestFrameTimeMs'], 1000)
+        self.assertLess(fused_candidates[0].confidence, 1.0)
         self.assertEqual(diagnostics['sequence']['sequenceTier'], 'drifting')
+
+    def test_long_taiwan_candidate_can_win_from_top_three_character_evidence(self) -> None:
+        service = CandidateFusionService(
+            dependencies=SimpleNamespace(cv2=None, numpy=None),
+            primary_recognizer=_RecognizerStub(),
+        )
+
+        samples = [
+            make_sample_with_candidates(
+                'sample-1',
+                1600,
+                [
+                    make_candidate('ra-1', 'RA5557', 0.91, 0.84, 1600),
+                    make_candidate('rje-1', 'RJE5752', 0.74, 0.9, 1600),
+                ],
+            ),
+            make_sample_with_candidates(
+                'sample-2',
+                1780,
+                [
+                    make_candidate('pj-2', 'PJ5557', 0.9, 0.84, 1780),
+                    make_candidate('rje-2', 'RJE5752', 0.76, 0.9, 1780),
+                ],
+            ),
+            make_sample_with_candidates(
+                'sample-3',
+                1900,
+                [
+                    make_candidate('ra-3', 'RA5557', 0.88, 0.82, 1900),
+                    make_candidate('rje-3', 'RJE5752', 0.78, 0.91, 1900),
+                ],
+            ),
+            make_sample_with_candidates(
+                'sample-4',
+                2080,
+                [
+                    make_candidate('pj-4', 'PJ5557', 0.86, 0.82, 2080),
+                    make_candidate('rje-4', 'RJE5752', 0.75, 0.9, 2080),
+                ],
+            ),
+        ]
+
+        fused_candidates, diagnostics = service.aggregate_candidates(
+            samples,
+            observations=[],
+            country_hints=['tw'],
+            options=AnalysisOptions(),
+            artifact_root=None,
+        )
+
+        self.assertEqual(fused_candidates[0].text, 'RJE5752')
+        self.assertTrue(diagnostics['charFusionApplied'])
+        self.assertIn('char-fused', fused_candidates[0].diagnostics['consensusSignals'])
+
+    def test_fragmented_interval_winner_requires_review_after_confidence_cap(self) -> None:
+        top_candidate = PlateCandidate(
+            id='candidate-fragmented',
+            text='PJ5557',
+            confidence=0.58,
+            source='fused',
+            frame_time_ms=1900,
+            country_code='TW',
+            box=None,
+            quality=make_quality(0.84),
+            diagnostics={
+                'supportFrames': [1900],
+                'sequenceTier': 'fragmented',
+                'sequenceSupportRatio': 0.25,
+                'sequenceCharacterConsistencyMean': 0.48,
+            },
+        )
+
+        ordered_candidates, accepted_candidate_id, diagnostics = apply_reliability_selection(
+            [top_candidate],
+            [make_sample_with_candidates('sample-1900', 1900, [top_candidate])],
+            ['tw'],
+            AnalysisOptions(min_accepted_confidence=0.62, min_candidate_margin=0.08),
+            True,
+        )
+
+        self.assertIsNone(accepted_candidate_id)
+        self.assertTrue(diagnostics['reviewRequired'])
+        self.assertIn('unstable-sequence', diagnostics['reasons'])
+        self.assertIn('weak-sequence-support', diagnostics['reasons'])
+        self.assertEqual(ordered_candidates[0].diagnostics['selection']['isSuggested'], True)
 
     def test_consensus_signals_are_exposed_on_interval_winner(self) -> None:
         service = CandidateFusionService(

@@ -39,6 +39,19 @@ def _support_gap_count(support_frames: list[int], ordered_sample_times: list[int
     return gap_count
 
 
+def _candidate_support_frames_payload(candidate: PlateCandidate) -> set[int]:
+    diagnostics = candidate.diagnostics or {}
+    support_frames = diagnostics.get('supportFrames')
+    frames: set[int] = set()
+    if isinstance(support_frames, list):
+        frames.update(int(frame) for frame in support_frames if isinstance(frame, (int, float)))
+    elif isinstance(support_frames, (int, float)):
+        frames.add(int(support_frames))
+    if candidate.frame_time_ms is not None:
+        frames.add(int(candidate.frame_time_ms))
+    return frames
+
+
 def _sequence_tier(
     persistence_ratio: float,
     gap_count: int,
@@ -115,13 +128,49 @@ def _consensus_weight_multiplier(
 ) -> float:
     if len(consensus_signals) < 2:
         return 1.0
+    if support_frame_count < 2:
+        return 1.0
 
-    multiplier = 1.12 + (max(0, len(consensus_signals) - 2) * 0.06)
+    multiplier = 1.06 + (max(0, len(consensus_signals) - 2) * 0.04)
     if support_frame_count >= 2:
-        multiplier += min(0.04, (support_frame_count - 1) * 0.01)
+        multiplier += min(0.03, (support_frame_count - 1) * 0.008)
     if source_count >= 2:
-        multiplier += min(0.04, (source_count - 1) * 0.01)
+        multiplier += min(0.03, (source_count - 1) * 0.008)
     return multiplier
+
+
+def _looks_like_taiwan_long_plate(text: str) -> bool:
+    normalized = normalize_plate_text(text)
+    return len(normalized) == 7 and normalized[:3].isalpha() and normalized[-4:].isdigit()
+
+
+def _looks_like_taiwan_short_plate(text: str) -> bool:
+    normalized = normalize_plate_text(text)
+    return len(normalized) == 6 and normalized[:2].isalpha() and normalized[-4:].isdigit()
+
+
+def _sequence_confidence_cap(candidate: PlateCandidate, sequence_summary: dict[str, Any], options: AnalysisOptions) -> float:
+    diagnostics = candidate.diagnostics or {}
+    sequence_tier = str(diagnostics.get('sequenceTier') or sequence_summary.get('sequenceTier') or 'fragmented')
+    support_ratio = float(diagnostics.get('sequenceSupportRatio') or 0.0)
+    support_frame_count = int(diagnostics.get('supportFrameCount') or 0)
+    character_consistency_mean = float(sequence_summary.get('characterConsistencyMean') or 0.0)
+    dominant_text = normalize_plate_text(sequence_summary.get('dominantText'))
+    candidate_text = normalize_plate_text(candidate.text)
+
+    if sequence_tier == 'stable':
+        return 1.0
+    if sequence_tier == 'drifting':
+        return min(0.86, max(options.min_accepted_confidence - 0.02, 0.62 + (support_ratio * 0.20)))
+    if sequence_tier == 'gapped':
+        return min(0.78, max(0.52, 0.56 + (support_ratio * 0.18)))
+
+    fragmented_cap = min(0.66, max(0.42, 0.45 + (support_ratio * 0.18) + (character_consistency_mean * 0.10)))
+    if support_frame_count <= 1:
+        fragmented_cap = min(fragmented_cap, 0.54)
+    if candidate_text and candidate_text != dominant_text:
+        fragmented_cap = min(fragmented_cap, 0.58)
+    return fragmented_cap
 
 
 class CandidateFusionService:
@@ -171,6 +220,7 @@ class CandidateFusionService:
             'fused': 1.08,
             'legacy-vote': 1.0,
             'fused-char': 1.12,
+            'fused-char-tw-long': 1.2,
             'fused-image': 1.16,
         }
         aggregated: dict[str, dict[str, Any]] = {}
@@ -181,9 +231,13 @@ class CandidateFusionService:
             for candidate in sample.candidates:
                 candidate_pool.append(candidate)
 
-        char_fused_candidate = self._fuse_by_character_position(samples)
+        char_fused_candidate = self._fuse_by_character_position(samples, country_hints)
         if char_fused_candidate is not None:
             candidate_pool.append(char_fused_candidate)
+
+        taiwan_long_fused_candidate = self._fuse_taiwan_long_plate(samples, country_hints)
+        if taiwan_long_fused_candidate is not None:
+            candidate_pool.append(taiwan_long_fused_candidate)
 
         legacy_candidate = self._legacy_vote_candidate(samples)
         if legacy_candidate is not None:
@@ -208,17 +262,30 @@ class CandidateFusionService:
         )
         candidate_pool.extend(fused_image_candidates)
 
+        has_long_taiwan_hypothesis = _uses_taiwan_hint(country_hints) and any(
+            _looks_like_taiwan_long_plate(candidate.text)
+            for candidate in candidate_pool
+        )
+
         for candidate in candidate_pool:
             text = normalize_plate_text(candidate.text)
             if not text:
                 continue
             weight = _candidate_weight(candidate, source_weights)
+            if has_long_taiwan_hypothesis:
+                if _looks_like_taiwan_long_plate(text):
+                    weight *= 1.12
+                elif _looks_like_taiwan_short_plate(text):
+                    weight *= 0.52
+                else:
+                    weight *= 0.34
 
             current = aggregated.get(text)
             if current is None:
+                support_frame_payload = _candidate_support_frames_payload(candidate)
                 aggregated[text] = {
                     'weight': weight,
-                    'supportFrames': {candidate.frame_time_ms} if candidate.frame_time_ms is not None else set(),
+                    'supportFrames': support_frame_payload,
                     'best_raw_confidence': candidate.confidence,
                     'candidate': PlateCandidate(
                         id=f'candidate-{len(aggregated)}',
@@ -230,7 +297,7 @@ class CandidateFusionService:
                         box=candidate.box,
                         quality=candidate.quality,
                         diagnostics={
-                            'supportFrames': [candidate.frame_time_ms] if candidate.frame_time_ms is not None else [],
+                            'supportFrames': sorted(support_frame_payload),
                             'sources': [candidate.source],
                             'sourceFamilies': [_source_family(candidate.source)],
                             'contributionCount': 1,
@@ -240,8 +307,7 @@ class CandidateFusionService:
                 continue
 
             current['weight'] += weight
-            if candidate.frame_time_ms is not None:
-                current['supportFrames'].add(candidate.frame_time_ms)
+            current['supportFrames'].update(_candidate_support_frames_payload(candidate))
             diagnostics = current['candidate'].diagnostics or {'supportFrames': [], 'sources': []}
             diagnostics['supportFrames'] = sorted(time for time in current['supportFrames'] if time is not None)
             diagnostics['sources'] = sorted({*diagnostics.get('sources', []), candidate.source})
@@ -267,14 +333,25 @@ class CandidateFusionService:
                 char_fused_text,
                 best_frame_text,
             )
-            carry_multiplier = 1.35 if support_frame_count <= 1 else 0.85
-            if len(consensus_signals) >= 2:
-                carry_multiplier += 0.25
-            if len(consensus_signals) >= 3:
-                carry_multiplier += 0.1
+            sequence_persistence = float(sequence_summary.get('persistenceRatio') or 0.0)
+            sequence_consistency = float(sequence_summary.get('characterConsistencyMean') or 0.0)
+            allow_carry = support_frame_count >= 2 or (
+                best_text == dominant_sequence_text
+                and sequence_persistence >= options.min_sequence_persistence
+                and sequence_consistency >= 0.68
+            )
+            carry_multiplier = 0.0
+            if allow_carry:
+                carry_multiplier = 0.58 if support_frame_count <= 1 else 0.72
+                if len(consensus_signals) >= 2 and support_frame_count >= 2:
+                    carry_multiplier += 0.12
+                if len(consensus_signals) >= 3 and sequence_persistence >= options.min_sequence_persistence:
+                    carry_multiplier += 0.06
             carry_weight = best_frame_weight * carry_multiplier
 
-            if current is None:
+            if carry_weight <= 0.0:
+                pass
+            elif current is None:
                 aggregated[best_text] = {
                     'weight': carry_weight,
                     'supportFrames': {best_frame_candidate.frame_time_ms} if best_frame_candidate.frame_time_ms is not None else set(),
@@ -301,7 +378,7 @@ class CandidateFusionService:
                         },
                     ),
                 }
-            else:
+            elif current is not None:
                 current['weight'] += carry_weight
                 diagnostics = current['candidate'].diagnostics or {'supportFrames': [], 'sources': []}
                 diagnostics['bestFrameCarryThrough'] = True
@@ -389,9 +466,15 @@ class CandidateFusionService:
                 ),
                 'sequencePersistenceRatio': sequence_summary['persistenceRatio'],
                 'sequenceCharacterConsistency': sequence_summary['characterConsistency'],
+                'sequenceCharacterConsistencyMean': sequence_summary.get('characterConsistencyMean'),
                 'dominantSequenceText': sequence_summary.get('dominantText'),
                 'aggregatedWeight': item['weight'],
                 'normalizedWeight': candidate.confidence,
+            }
+            candidate.confidence = min(candidate.confidence, _sequence_confidence_cap(candidate, sequence_summary, options))
+            candidate.diagnostics = {
+                **(candidate.diagnostics or {}),
+                'sequenceConfidenceCap': candidate.confidence,
             }
             if index == 0:
                 candidate.diagnostics = {
@@ -406,6 +489,7 @@ class CandidateFusionService:
             'fusionMode': options.fusion_mode,
             'candidatePoolSize': len(candidate_pool),
             'charFusionApplied': char_fused_candidate is not None,
+            'taiwanLongFusionApplied': taiwan_long_fused_candidate is not None,
             'legacyVoteApplied': legacy_candidate is not None,
             'fusedImage': fused_image_diagnostics,
             'sequence': sequence_summary,
@@ -517,20 +601,24 @@ class CandidateFusionService:
             diagnostics={'supportTexts': weighted_by_text},
         )
 
-    def _fuse_by_character_position(self, samples: list[FrameSample]) -> PlateCandidate | None:
+    def _fuse_by_character_position(self, samples: list[FrameSample], country_hints: list[str]) -> PlateCandidate | None:
         length_votes: dict[int, float] = {}
         best_candidate: PlateCandidate | None = None
         for sample in samples:
-            candidate = sample.candidates[0] if sample.candidates else None
-            if candidate is None:
-                continue
-            text = normalize_plate_text(candidate.text)
-            if not text:
-                continue
-            weight = candidate.confidence * (candidate.quality.overall_score if candidate.quality else 0.55)
-            length_votes[len(text)] = length_votes.get(len(text), 0.0) + weight
-            if best_candidate is None or candidate.confidence > best_candidate.confidence:
-                best_candidate = candidate
+            for rank, candidate in enumerate(sample.candidates[:3]):
+                text = normalize_plate_text(candidate.text)
+                if not text:
+                    continue
+                rank_penalty = max(0.55, 1.0 - (rank * 0.18))
+                format_score = _plate_format_score(text, country_hints)
+                weight = candidate.confidence * (candidate.quality.overall_score if candidate.quality else 0.55) * rank_penalty * max(format_score, 0.35)
+                if _uses_taiwan_hint(country_hints) and _looks_like_taiwan_long_plate(text):
+                    weight *= 1.22
+                elif _uses_taiwan_hint(country_hints) and _looks_like_taiwan_short_plate(text):
+                    weight *= 0.9
+                length_votes[len(text)] = length_votes.get(len(text), 0.0) + weight
+                if best_candidate is None or candidate.confidence > best_candidate.confidence:
+                    best_candidate = candidate
 
         if not length_votes or best_candidate is None:
             return None
@@ -540,19 +628,23 @@ class CandidateFusionService:
         support_frames: list[int] = []
 
         for sample in samples:
-            candidate = sample.candidates[0] if sample.candidates else None
-            if candidate is None:
-                continue
-            text = normalize_plate_text(candidate.text)
-            if not text or abs(len(text) - target_length) > 1:
-                continue
-            char_confidences = list((candidate.diagnostics or {}).get('charConfidences') or [])
-            sample_weight = candidate.confidence * (candidate.quality.overall_score if candidate.quality else 0.55)
-            for index, character in enumerate(text[:target_length]):
-                character_weight = sample_weight * (float(char_confidences[index]) if index < len(char_confidences) else 1.0)
-                position_votes[index][character] = position_votes[index].get(character, 0.0) + character_weight
-            if candidate.frame_time_ms is not None:
-                support_frames.append(candidate.frame_time_ms)
+            for rank, candidate in enumerate(sample.candidates[:3]):
+                text = normalize_plate_text(candidate.text)
+                if not text or len(text) != target_length:
+                    continue
+                char_confidences = list((candidate.diagnostics or {}).get('charConfidences') or [])
+                rank_penalty = max(0.55, 1.0 - (rank * 0.18))
+                format_score = _plate_format_score(text, country_hints)
+                sample_weight = candidate.confidence * (candidate.quality.overall_score if candidate.quality else 0.55) * rank_penalty * max(format_score, 0.35)
+                if _uses_taiwan_hint(country_hints) and _looks_like_taiwan_long_plate(text):
+                    sample_weight *= 1.22
+                elif _uses_taiwan_hint(country_hints) and _looks_like_taiwan_short_plate(text):
+                    sample_weight *= 0.9
+                for index, character in enumerate(text[:target_length]):
+                    character_weight = sample_weight * (float(char_confidences[index]) if index < len(char_confidences) else 1.0)
+                    position_votes[index][character] = position_votes[index].get(character, 0.0) + character_weight
+                if candidate.frame_time_ms is not None:
+                    support_frames.append(candidate.frame_time_ms)
 
         if any(not votes for votes in position_votes):
             return None
@@ -577,6 +669,64 @@ class CandidateFusionService:
                 'targetLength': target_length,
                 'characterConsistency': character_consistency,
                 'characterConsistencyMean': confidence,
+            },
+        )
+
+    def _fuse_taiwan_long_plate(self, samples: list[FrameSample], country_hints: list[str]) -> PlateCandidate | None:
+        if not _uses_taiwan_hint(country_hints):
+            return None
+
+        position_votes: list[dict[str, float]] = [dict() for _ in range(7)]
+        support_frames: list[int] = []
+        representative: PlateCandidate | None = None
+        contribution_count = 0
+
+        for sample in samples:
+            for rank, candidate in enumerate(sample.candidates[:4]):
+                text = normalize_plate_text(candidate.text)
+                if not _looks_like_taiwan_long_plate(text):
+                    continue
+                char_confidences = list((candidate.diagnostics or {}).get('charConfidences') or [])
+                rank_penalty = max(0.5, 1.0 - (rank * 0.16))
+                quality_score = candidate.quality.overall_score if candidate.quality else 0.55
+                sample_weight = candidate.confidence * quality_score * rank_penalty
+                for index, character in enumerate(text[:7]):
+                    character_confidence = float(char_confidences[index]) if index < len(char_confidences) else 0.65
+                    position_votes[index][character] = position_votes[index].get(character, 0.0) + (sample_weight * max(character_confidence, 0.15))
+                if candidate.frame_time_ms is not None:
+                    support_frames.append(candidate.frame_time_ms)
+                contribution_count += 1
+                if representative is None or candidate.confidence > representative.confidence:
+                    representative = candidate
+
+        if representative is None or contribution_count < 2 or len(set(support_frames)) < 2:
+            return None
+        if any(not votes for votes in position_votes):
+            return None
+
+        fused_text = ''.join(max(votes.items(), key=lambda item: item[1])[0] for votes in position_votes)
+        if not _looks_like_taiwan_long_plate(fused_text):
+            return None
+        character_consistency = [
+            max(votes.values()) / max(sum(votes.values()), 1.0)
+            for votes in position_votes
+        ]
+        confidence = sum(character_consistency) / len(character_consistency)
+        return PlateCandidate(
+            id='fused-char-tw-long-0',
+            text=fused_text,
+            confidence=confidence,
+            source='fused-char-tw-long',
+            frame_time_ms=representative.frame_time_ms,
+            country_code=representative.country_code,
+            box=representative.box,
+            quality=representative.quality,
+            diagnostics={
+                'supportFrames': sorted(set(support_frames)),
+                'targetLength': 7,
+                'characterConsistency': character_consistency,
+                'characterConsistencyMean': confidence,
+                'contributionCount': contribution_count,
             },
         )
 
@@ -729,7 +879,12 @@ def apply_reliability_selection(
         top_score = _candidate_reliability_score(top_candidate, country_hints)
         fallback_score = _candidate_reliability_score(fallback_candidate, country_hints)
         format_advantage = _plate_format_score(fallback_candidate.text, country_hints) - _plate_format_score(top_candidate.text, country_hints)
-        if fallback_score >= top_score + 0.05 or format_advantage >= 0.2:
+        top_support_count = _candidate_support_frame_count(top_candidate)
+        fallback_support_count = _candidate_support_frame_count(fallback_candidate)
+        required_score_advantage = 0.05
+        if interval_mode and fallback_support_count < top_support_count and format_advantage < 0.2:
+            required_score_advantage = 0.18
+        if fallback_score >= top_score + required_score_advantage or format_advantage >= 0.2:
             suggested_candidate = fallback_candidate
             used_fallback = True
             review_reasons = [] if not options.enable_reliability_gates else _review_reasons(
@@ -794,6 +949,16 @@ def _review_reasons(
         reasons.append('low-margin')
     if interval_mode and _candidate_support_frame_count(candidate) < options.min_interval_support_frames:
         reasons.append('insufficient-support')
+    diagnostics = candidate.diagnostics or {}
+    sequence_tier = str(diagnostics.get('sequenceTier') or '')
+    sequence_support_ratio = float(diagnostics.get('sequenceSupportRatio') or 0.0)
+    sequence_consistency = float(diagnostics.get('sequenceCharacterConsistencyMean') or 0.0)
+    if interval_mode and sequence_tier in {'fragmented', 'gapped'}:
+        reasons.append('unstable-sequence')
+    if interval_mode and sequence_support_ratio < max(0.34, options.min_sequence_persistence * 0.5):
+        reasons.append('weak-sequence-support')
+    if interval_mode and sequence_consistency < 0.55:
+        reasons.append('weak-character-consensus')
     if _uses_taiwan_hint(country_hints) and _plate_format_score(candidate.text, country_hints) < 0.65:
         reasons.append('format-mismatch')
     return reasons
@@ -842,9 +1007,9 @@ def _plate_format_score(text: str | None, country_hints: list[str]) -> float:
             return 0.2
         if any(character in {'I', 'O', 'Q'} for character in normalized):
             return 0.55
-        if normalized[:2].isalpha() and normalized[-4:].isdigit():
-            return 1.0
         if normalized[:3].isalpha() and normalized[-4:].isdigit() and len(normalized) == 7:
+            return 1.0
+        if normalized[:2].isalpha() and normalized[-4:].isdigit() and len(normalized) == 6:
             return 0.94
         if normalized[:4].isalpha() and normalized[-3:].isdigit() and len(normalized) == 7:
             return 0.9

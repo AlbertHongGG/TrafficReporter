@@ -93,6 +93,29 @@
         "characterConsistencyMean": { "type": "number" }
       }
     },
+    "timingSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "trackingMs": { "type": "number" },
+        "sampleAnalysisMs": { "type": "number" },
+        "temporalSupportMs": { "type": "number" },
+        "fusionMs": { "type": "number" },
+        "totalMs": { "type": "number" },
+        "temporalSupportBudget": { "type": "number" },
+        "temporalSupportSamplesUsed": { "type": "number" }
+      }
+    },
+    "latencySummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mean", "p50", "p95"],
+      "properties": {
+        "mean": { "type": "number" },
+        "p50": { "type": "number" },
+        "p95": { "type": "number" }
+      }
+    },
     "metricBucket": {
       "type": "object",
       "additionalProperties": false,
@@ -218,6 +241,12 @@
             { "type": "null" }
           ]
         },
+        "timing": {
+          "oneOf": [
+            { "$ref": "#/$defs/timingSummary" },
+            { "type": "null" }
+          ]
+        },
         "failureReason": { "type": "string", "minLength": 1 },
         "review": { "$ref": "#/$defs/reviewState" },
         "provenance": { "$ref": "#/$defs/provenance" },
@@ -270,14 +299,11 @@
         },
         "meanAcceptedMargin": { "type": "number" },
         "latencyMs": {
+          "$ref": "#/$defs/latencySummary"
+        },
+        "stageTimingMs": {
           "type": "object",
-          "additionalProperties": false,
-          "required": ["mean", "p50", "p95"],
-          "properties": {
-            "mean": { "type": "number" },
-            "p50": { "type": "number" },
-            "p95": { "type": "number" }
-          }
+          "additionalProperties": { "$ref": "#/$defs/latencySummary" }
         },
         "confidenceCalibration": {
           "type": "object",

@@ -450,6 +450,17 @@ function isAnchorWithinInterval(anchorTimeMs: number, interval: TimelineInterval
   return anchorTimeMs >= interval.startMs && anchorTimeMs <= interval.endMs;
 }
 
+function resolveLprRangeSampling(durationMs: number, useDenseSampling: boolean) {
+  if (durationMs <= 3500) {
+    return { sampleEveryMs: 150, maxSamples: 16 };
+  }
+  const sampleDivisor = useDenseSampling ? 28 : 14;
+  return {
+    sampleEveryMs: Math.max(useDenseSampling ? 70 : 90, Math.round(durationMs / sampleDivisor) || 90),
+    maxSamples: useDenseSampling ? 24 : 14,
+  };
+}
+
 export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isActive = true }) => {
   const { state, dispatch, sessionRevision } = useEditorSessionController();
   const [workspaceFeedback, setWorkspaceFeedback] = useState<string | null>(null);
@@ -1876,9 +1887,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       latestCountryHintDraftRef.current ?? (lprState.countryHints.join(', ')),
     );
     const durationMs = Math.max(0, interval.endMs - interval.startMs);
-    const sampleDivisor = lprState.useDenseSampling ? 28 : 14;
-    const sampleEveryMs = Math.max(lprState.useDenseSampling ? 70 : 90, Math.round(durationMs / sampleDivisor) || 90);
-    const maxSamples = lprState.useDenseSampling ? 24 : 14;
+    const { sampleEveryMs, maxSamples } = resolveLprRangeSampling(durationMs, lprState.useDenseSampling);
 
     const requestId = beginLprRequest('Interval', 'Tracking the selected target across the chosen interval.', 0.12);
 

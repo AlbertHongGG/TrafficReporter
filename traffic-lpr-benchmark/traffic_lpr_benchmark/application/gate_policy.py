@@ -22,6 +22,11 @@ def build_gate_thresholds(args: Any) -> dict[str, float | None]:
         'minTemporalDecisionRate': _coerce_optional_float(getattr(args, 'min_temporal_decision_rate', None)),
         'minMultiFrameDecisionRate': _coerce_optional_float(getattr(args, 'min_multi_frame_decision_rate', None)),
         'maxP95LatencyMs': _coerce_optional_float(getattr(args, 'max_p95_latency_ms', None)),
+        'maxP95TrackingMs': _coerce_optional_float(getattr(args, 'max_p95_tracking_ms', None)),
+        'maxP95SampleAnalysisMs': _coerce_optional_float(getattr(args, 'max_p95_sample_analysis_ms', None)),
+        'maxP95TemporalSupportMs': _coerce_optional_float(getattr(args, 'max_p95_temporal_support_ms', None)),
+        'maxP95FusionMs': _coerce_optional_float(getattr(args, 'max_p95_fusion_ms', None)),
+        'maxP95RuntimeTotalMs': _coerce_optional_float(getattr(args, 'max_p95_runtime_total_ms', None)),
     }
 
 
@@ -118,6 +123,12 @@ def evaluate_runtime_result_gate(
     )
     latency_payload = metrics.get('latencyMs') if isinstance(metrics.get('latencyMs'), dict) else {}
     _append_max_check(checks, 'p95LatencyMs', latency_payload.get('p95'), thresholds.get('maxP95LatencyMs'), sample_size=total_cases)
+    stage_timing_payload = metrics.get('stageTimingMs') if isinstance(metrics.get('stageTimingMs'), dict) else {}
+    _append_stage_p95_check(checks, stage_timing_payload, 'trackingMs', thresholds.get('maxP95TrackingMs'), total_cases)
+    _append_stage_p95_check(checks, stage_timing_payload, 'sampleAnalysisMs', thresholds.get('maxP95SampleAnalysisMs'), total_cases)
+    _append_stage_p95_check(checks, stage_timing_payload, 'temporalSupportMs', thresholds.get('maxP95TemporalSupportMs'), total_cases)
+    _append_stage_p95_check(checks, stage_timing_payload, 'fusionMs', thresholds.get('maxP95FusionMs'), total_cases)
+    _append_stage_p95_check(checks, stage_timing_payload, 'totalMs', thresholds.get('maxP95RuntimeTotalMs'), total_cases)
 
     return {
         'passed': all(check['passed'] for check in checks),
@@ -182,6 +193,21 @@ def _append_max_check(
         if sample_size < 5:
             check['advisory'] = 'low-sample-size'
     checks.append(check)
+
+
+def _append_stage_p95_check(
+    checks: list[dict[str, Any]],
+    stage_timing_payload: dict[str, Any],
+    timing_key: str,
+    maximum: float | None,
+    sample_size: int | None,
+) -> None:
+    if maximum is None:
+        return
+    timing_summary = stage_timing_payload.get(timing_key)
+    actual = timing_summary.get('p95') if isinstance(timing_summary, dict) else None
+    metric_name = f'p95{timing_key[0].upper()}{timing_key[1:]}'
+    _append_max_check(checks, metric_name, actual, maximum, sample_size=sample_size)
 
 
 def _case_metric_values(cases: list[Any], parent_key: str, value_key: str) -> list[float]:

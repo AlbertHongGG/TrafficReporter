@@ -329,28 +329,27 @@ class LprRuntimeApplication:
                 'ocrVariant': 'working',
             }
 
-        if not crop_candidates:
-            for variant_name, variant_image in [
-                ('enhanced', observation.enhanced_image),
-                ('rectified', observation.rectified_image),
-                ('original', observation.original_image),
-            ]:
-                if variant_image is None or getattr(variant_image, 'size', 0) == 0 or variant_image is observation.working_image:
-                    continue
-                variant_candidates = self._primary_recognizer.recognize_plate_crop(
-                    variant_image,
-                    time_ms,
-                    plate_box,
-                    country_hints,
-                    options.ocr_models(),
-                )
-                for candidate in variant_candidates:
-                    candidate.diagnostics = {
-                        **(candidate.diagnostics or {}),
-                        **diagnostics_extra,
-                        'ocrVariant': variant_name,
-                    }
-                crop_candidates.extend(variant_candidates)
+        for variant_name, variant_image in [
+            ('enhanced', observation.enhanced_image),
+            ('rectified', observation.rectified_image),
+            ('original', observation.original_image),
+        ]:
+            if variant_image is None or getattr(variant_image, 'size', 0) == 0 or variant_image is observation.working_image:
+                continue
+            variant_candidates = self._primary_recognizer.recognize_plate_crop(
+                variant_image,
+                time_ms,
+                plate_box,
+                country_hints,
+                options.ocr_models(),
+            )
+            for candidate in variant_candidates:
+                candidate.diagnostics = {
+                    **(candidate.diagnostics or {}),
+                    **diagnostics_extra,
+                    'ocrVariant': variant_name,
+                }
+            crop_candidates.extend(variant_candidates)
 
         crop_candidates.extend(
             self._secondary_subcrop_candidates(

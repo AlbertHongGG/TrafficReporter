@@ -137,27 +137,16 @@ class AnalysisOptions:
         )
 
     def for_interval_sample(self, sample_count_hint: int | None = None) -> 'AnalysisOptions':
-        temporal_window_ms = self.temporal_window_ms
-        temporal_neighbor_count = self.temporal_neighbor_count
-        if sample_count_hint is not None:
-            if sample_count_hint >= 60:
-                temporal_window_ms = min(temporal_window_ms, 120)
-                temporal_neighbor_count = 1
-            elif sample_count_hint >= 24:
-                temporal_window_ms = min(temporal_window_ms, 160)
-                temporal_neighbor_count = min(temporal_neighbor_count, 2)
-            elif sample_count_hint >= 16:
-                temporal_window_ms = min(temporal_window_ms, 200)
-                temporal_neighbor_count = min(temporal_neighbor_count, 3)
-
         return replace(
             self,
             enable_recognizer_comparison=False,
+            enable_secondary_subcrop_ocr=False,
             persist_artifacts=False,
             artifact_dir=None,
             debug_tag=None,
-            temporal_window_ms=temporal_window_ms,
-            temporal_neighbor_count=temporal_neighbor_count,
+            restoration_mode='off',
+            temporal_window_ms=0,
+            temporal_neighbor_count=1,
         )
 
     def to_payload(self) -> dict[str, Any]:

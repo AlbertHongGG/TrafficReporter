@@ -127,6 +127,7 @@ class BenchmarkRunWorkflow:
             diagnostics_payload = response.get('diagnostics')
             if isinstance(diagnostics_payload, dict) and isinstance(diagnostics_payload.get('tracker'), dict):
                 tracker_diagnostics_payload = dict(diagnostics_payload['tracker'])
+            timing_payload = _normalized_timing_payload(diagnostics_payload)
             tracking_payload = dict(response.get('tracking') or {}) if isinstance(response.get('tracking'), dict) else None
             decision_payload = dict(response.get('decision') or {}) if isinstance(response.get('decision'), dict) else None
             if tracking_payload is not None:
@@ -163,6 +164,7 @@ class BenchmarkRunWorkflow:
                     'localization': localization,
                     'trackMetrics': track_metrics_case,
                     'tracking': tracking_payload,
+                    'timing': timing_payload,
                     'decision': decision_payload,
                     'sequence': sequence_payload,
                     'failureReason': failure_reason,
@@ -248,6 +250,7 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
                 'meanPredictionSwitchCount': None,
                 'meanSampleExactMatchRate': None,
                 'meanCharacterConsistencyMean': None,
+                'stageTimingMs': {},
                 'tagBreakdown': {},
                 'datasetBreakdown': {},
                 'splitBreakdown': {},
@@ -295,6 +298,7 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
     prediction_switch_values: list[float] = []
     sample_exact_match_rate_values: list[float] = []
     character_consistency_mean_values: list[float] = []
+    stage_timing_values: dict[str, list[float]] = {}
     interval_sequence_cases = 0
     difficulty_category_metrics: dict[str, dict[str, float]] = {}
     difficulty_tracking_tier_metrics: dict[str, dict[str, float]] = {}
@@ -315,6 +319,7 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
         tracking_payload = dict(result.get('tracking') or {}) if isinstance(result.get('tracking'), dict) else None
         decision_payload = dict(result.get('decision') or {}) if isinstance(result.get('decision'), dict) else None
         sequence_payload = dict(result.get('sequence') or {}) if isinstance(result.get('sequence'), dict) else None
+        timing_payload = dict(result.get('timing') or {}) if isinstance(result.get('timing'), dict) else None
         metadata = dict(result.get('metadata') or {})
         review_payload = _normalized_review_payload(result)
         review_status = review_payload['status']
@@ -380,6 +385,11 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
             character_consistency_mean = _coerce_optional_float(sequence_payload.get('characterConsistencyMean'))
             if character_consistency_mean is not None:
                 character_consistency_mean_values.append(character_consistency_mean)
+        if timing_payload:
+            for timing_key, timing_value in timing_payload.items():
+                numeric_timing = _coerce_optional_float(timing_value)
+                if numeric_timing is not None:
+                    stage_timing_values.setdefault(timing_key, []).append(numeric_timing)
         prediction_switch_count = _coerce_optional_float((track_metrics_case or {}).get('predictionSwitchCount'))
         if prediction_switch_count is not None:
             prediction_switch_values.append(prediction_switch_count)
@@ -482,6 +492,15 @@ def summarize_benchmark_results(benchmark_results: list[dict[str, Any]], runtime
         'meanPredictionSwitchCount': _mean_values(prediction_switch_values),
         'meanSampleExactMatchRate': _mean_values(sample_exact_match_rate_values),
         'meanCharacterConsistencyMean': _mean_values(character_consistency_mean_values),
+        'stageTimingMs': {
+            timing_key: {
+                'mean': sum(values) / len(values),
+                'p50': _percentile(values, 0.50),
+                'p95': _percentile(values, 0.95),
+            }
+            for timing_key, values in sorted(stage_timing_values.items())
+            if values
+        },
         'tagBreakdown': {
             tag: _finalize_metric_bucket(values)
             for tag, values in sorted(tag_metrics.items())
@@ -576,6 +595,28 @@ def _build_case_request(
         request_payload['analysisOptions'] = analysis_options
 
     return request_payload
+
+
+def _normalized_timing_payload(diagnostics_payload: Any) -> dict[str, float] | None:
+    if not isinstance(diagnostics_payload, dict):
+        return None
+    timing_payload = diagnostics_payload.get('timing')
+    if not isinstance(timing_payload, dict):
+        return None
+    normalized: dict[str, float] = {}
+    for key in [
+        'trackingMs',
+        'sampleAnalysisMs',
+        'temporalSupportMs',
+        'fusionMs',
+        'totalMs',
+        'temporalSupportBudget',
+        'temporalSupportSamplesUsed',
+    ]:
+        value = _coerce_optional_float(timing_payload.get(key))
+        if value is not None:
+            normalized[key] = value
+    return normalized or None
 
 
 def _load_checkpoint_results(checkpoint_path: Path | None, valid_case_ids: set[str]) -> tuple[list[dict[str, Any]], str | None]:
