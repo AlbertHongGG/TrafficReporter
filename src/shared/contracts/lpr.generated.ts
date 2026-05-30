@@ -209,6 +209,7 @@ export interface LprJobState {
   error: string | null;
   reasonCode?: string | null;
   startedAt: string | null;
+  stageStartedAt: string | null;
   updatedAt: string | null;
   trackingTier?: LprTrackingTier | null;
   coverageRatio?: number | null;
@@ -399,6 +400,7 @@ export interface AiEvidenceJobState {
   requestId: string | null;
   error: string | null;
   startedAt: string | null;
+  stageStartedAt: string | null;
   updatedAt: string | null;
   currentToolName?: string | null;
 }

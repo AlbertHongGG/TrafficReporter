@@ -1,6 +1,7 @@
 type TimedJobLike = {
   status: string;
   startedAt: string | null;
+  stageStartedAt?: string | null;
   updatedAt: string | null;
 };
 
@@ -21,12 +22,15 @@ export function buildJobTimingSnapshot(
   stallThresholdMs = DEFAULT_JOB_STALL_THRESHOLD_MS,
 ) {
   const startedAtMs = parseTimestamp(job.startedAt);
+  const stageStartedAtMs = parseTimestamp(job.stageStartedAt) ?? startedAtMs;
   const updatedAtMs = parseTimestamp(job.updatedAt) ?? startedAtMs;
   const isActive = job.status === 'queued' || job.status === 'running';
   const totalReferenceMs = isActive ? nowMs : (updatedAtMs ?? nowMs);
+  const stageReferenceMs = isActive ? nowMs : (updatedAtMs ?? nowMs);
 
   return {
     totalElapsedMs: startedAtMs === null ? null : Math.max(0, totalReferenceMs - startedAtMs),
+    stageElapsedMs: stageStartedAtMs === null ? null : Math.max(0, stageReferenceMs - stageStartedAtMs),
     idleSinceUpdateMs: isActive && updatedAtMs !== null ? Math.max(0, nowMs - updatedAtMs) : null,
     isStalled: Boolean(isActive && updatedAtMs !== null && nowMs - updatedAtMs >= stallThresholdMs),
   };

@@ -116,6 +116,45 @@ const RULER_STEP_CANDIDATES_MS = [1, 2, 5, 10, 20, 50, 100, 250, 500, 1000, 2000
 const MIN_TIMELINE_PADDING_MS = 60000;
 const TIMELINE_LABEL_WIDTH_PX = 120;
 
+type StageTimedJobLike = {
+  status: string;
+  stage: string;
+  requestId: string | null;
+  startedAt: string | null;
+  stageStartedAt?: string | null;
+};
+
+function isActiveJobStatus(status: string | null | undefined) {
+  return status === 'queued' || status === 'running';
+}
+
+function resolveStageStartedAt<TJob extends StageTimedJobLike>(
+  currentJob: TJob,
+  nextJob: Partial<TJob>,
+  timestamp: string,
+) {
+  if (nextJob.stageStartedAt !== undefined) {
+    return nextJob.stageStartedAt;
+  }
+
+  const nextStatus = nextJob.status ?? currentJob.status;
+  const nextStage = nextJob.stage ?? currentJob.stage;
+  const nextRequestId = nextJob.requestId ?? currentJob.requestId;
+  const shouldResetStageClock = (
+    nextRequestId !== currentJob.requestId
+    || (typeof nextJob.stage === 'string' && nextStage !== currentJob.stage)
+    || (!isActiveJobStatus(currentJob.status) && isActiveJobStatus(nextStatus))
+    || currentJob.stageStartedAt === null
+    || currentJob.stageStartedAt === undefined
+  );
+
+  if (isActiveJobStatus(nextStatus)) {
+    return shouldResetStageClock ? timestamp : (currentJob.stageStartedAt ?? currentJob.startedAt ?? timestamp);
+  }
+
+  return currentJob.stageStartedAt ?? null;
+}
+
 type ClipInteraction =
   | {
     type: 'move';
@@ -557,14 +596,16 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
   }, [dispatch]);
 
   const updateLprJob = useCallback((job: Partial<LprSessionState['job']>) => {
+    const timestamp = new Date().toISOString();
     dispatch({
       type: 'set-lpr-job',
       job: {
         ...job,
-        updatedAt: new Date().toISOString(),
+        stageStartedAt: resolveStageStartedAt(lprState.job, job, timestamp),
+        updatedAt: timestamp,
       },
     });
-  }, [dispatch]);
+  }, [dispatch, lprState.job]);
 
   const beginLprRequest = useCallback((stage: string, detail: string, progress: number) => {
     const requestId = createRunFolderId();
@@ -1417,15 +1458,18 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
   }), [activeFile, aiState, currentPlayheadMs, lprRuntimeStatus, lprState, state.workspaceName]);
 
   const updateAiJob = useCallback((fileId: string, job: Partial<typeof aiState.job>) => {
+    const timestamp = new Date().toISOString();
+    const currentJob = getAiEvidenceSessionByFileId(state.analysis, fileId).job;
     dispatch({
       type: 'set-ai-job',
       fileId,
       job: {
         ...job,
-        updatedAt: new Date().toISOString(),
+        stageStartedAt: resolveStageStartedAt(currentJob, job, timestamp),
+        updatedAt: timestamp,
       },
     });
-  }, [dispatch]);
+  }, [dispatch, state.analysis]);
 
   const beginAiRequest = useCallback((fileId: string, prompt: string) => {
     const requestId = createRunFolderId();

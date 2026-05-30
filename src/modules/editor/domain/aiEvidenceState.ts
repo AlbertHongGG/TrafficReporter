@@ -15,6 +15,7 @@ export const DEFAULT_AI_EVIDENCE_JOB_STATE: AiEvidenceSessionState['job'] = {
   requestId: null,
   error: null,
   startedAt: null,
+  stageStartedAt: null,
   updatedAt: null,
   currentToolName: null,
 };

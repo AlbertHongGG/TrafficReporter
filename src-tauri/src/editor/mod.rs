@@ -8,7 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
 use tauri::Emitter;
-use runtime_broker::{invoke_lpr_runtime, terminate_lpr_runtime_process};
+use runtime_broker::{invoke_lpr_runtime, invoke_lpr_runtime_with_progress, terminate_lpr_runtime_process};
 
 use crate::contracts::{
     AiEvidenceProgressPayload, AiEvidenceRequestPayload, AiEvidenceResponsePayload,
@@ -124,6 +124,21 @@ fn emit_ai_evidence_progress(
             failed,
             request_id: request_id.map(|value| value.to_string()),
         },
+    );
+}
+
+fn emit_ai_evidence_progress_payload(
+    app_handle: &tauri::AppHandle,
+    progress: AiEvidenceProgressPayload,
+) {
+    emit_ai_evidence_progress(
+        app_handle,
+        progress.request_id.as_deref(),
+        progress.progress,
+        &progress.stage,
+        progress.detail,
+        progress.done,
+        progress.failed,
     );
 }
 
@@ -1026,20 +1041,14 @@ pub async fn analyze_ai_evidence(
                 if request.compression_mode.is_compact() { "compact" } else { "standard" },
             ),
         );
-        emit_ai_evidence_progress(
-            &app_handle_for_task,
-            request.request_id.as_deref(),
-            0.15,
-            "analyze",
-            "Running AI evidence localization and range analysis.",
-            false,
-            false,
-        );
 
-        let mut response: AiEvidenceResponsePayload = invoke_lpr_runtime(
+        let mut response: AiEvidenceResponsePayload = invoke_lpr_runtime_with_progress(
             app_handle_for_task.clone(),
             "ai-evidence",
             &request,
+            |app_handle, progress: AiEvidenceProgressPayload| {
+                emit_ai_evidence_progress_payload(app_handle, progress);
+            },
         )?;
         finalize_ai_keyframe_artifacts(&mut response, request.compression_mode)?;
 
@@ -1583,6 +1592,9 @@ mod tests {
                 quality: Some(sample_quality(0.4)),
                 candidates: vec![sample_candidate("candidate-low", "ZZZ9999", 0.99)],
                 image_path: None,
+                selection: None,
+                ocr_input: None,
+                temporal_support: None,
                 diagnostics: None,
             },
             LprFrameSamplePayload {
@@ -1593,6 +1605,9 @@ mod tests {
                 quality: Some(sample_quality(0.7)),
                 candidates: vec![sample_candidate("candidate-match", "ABC1234", 0.81)],
                 image_path: None,
+                selection: None,
+                ocr_input: None,
+                temporal_support: None,
                 diagnostics: None,
             },
         ];

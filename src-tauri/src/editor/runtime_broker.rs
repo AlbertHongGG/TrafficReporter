@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::contracts::{LprProgressPayload, LprRuntimeStatusPayload};
 use crate::platform::process::{find_lpr_runtime_root, find_python_runtime, hidden_command};
@@ -43,7 +44,7 @@ struct RuntimeWorkerResponse<TResponse> {
     request_id: u64,
     kind: Option<String>,
     ok: Option<bool>,
-    progress: Option<LprProgressPayload>,
+    progress: Option<Value>,
     result: Option<TResponse>,
     error: Option<String>,
     runtime: Option<LprRuntimeStatusPayload>,
@@ -57,9 +58,21 @@ enum RuntimeWorkerInvokeError {
 }
 
 enum RuntimeWorkerEnvelope<TResponse> {
-    Progress(LprProgressPayload),
+    Progress(Value),
     Success(TResponse),
     Error(RuntimeWorkerResponse<TResponse>),
+}
+
+fn deserialize_progress_payload<TProgress>(progress: Value) -> Result<TProgress, RuntimeWorkerInvokeError>
+where
+    TProgress: DeserializeOwned,
+{
+    serde_json::from_value(progress).map_err(|error| {
+        RuntimeWorkerInvokeError::Recoverable(format!(
+            "Failed to parse the LPR runtime worker progress payload: {}",
+            error,
+        ))
+    })
 }
 
 fn parse_worker_response_line<TResponse>(
@@ -146,6 +159,40 @@ impl RuntimeBroker {
         TRequest: Serialize,
         TResponse: DeserializeOwned,
     {
+        self.invoke_with_progress::<TRequest, TResponse, LprProgressPayload, _>(
+            app_handle,
+            subcommand,
+            payload,
+            |app_handle, progress| {
+                super::emit_lpr_progress(
+                    app_handle,
+                    progress.request_id.as_deref(),
+                    progress.progress,
+                    &progress.stage,
+                    progress.detail,
+                    progress.done,
+                    progress.failed,
+                    progress.reason_code.as_deref(),
+                    progress.tracking_tier.as_deref(),
+                    progress.coverage_ratio,
+                );
+            },
+        )
+    }
+
+    fn invoke_with_progress<TRequest, TResponse, TProgress, F>(
+        &self,
+        app_handle: tauri::AppHandle,
+        subcommand: &str,
+        payload: &TRequest,
+        mut on_progress: F,
+    ) -> Result<TResponse, String>
+    where
+        TRequest: Serialize,
+        TResponse: DeserializeOwned,
+        TProgress: DeserializeOwned,
+        F: FnMut(&tauri::AppHandle, TProgress),
+    {
         let mut worker_guard = self
             .worker
             .lock()
@@ -166,7 +213,7 @@ impl RuntimeBroker {
                 .as_mut()
                 .ok_or_else(|| "The local LPR runtime worker could not be initialized.".to_string())?;
 
-            match worker.invoke(&app_handle, subcommand, payload) {
+            match worker.invoke(&app_handle, subcommand, payload, &mut on_progress) {
                 Ok(response) => return Ok(response),
                 Err(RuntimeWorkerInvokeError::Unrecoverable(error)) => return Err(error),
                 Err(RuntimeWorkerInvokeError::Recoverable(error)) => {
@@ -287,15 +334,18 @@ impl PersistentLprRuntime {
         matches!(self.child.try_wait(), Ok(None))
     }
 
-    fn invoke<TRequest, TResponse>(
+    fn invoke<TRequest, TResponse, TProgress, F>(
         &mut self,
         app_handle: &tauri::AppHandle,
         subcommand: &str,
         payload: &TRequest,
+        on_progress: &mut F,
     ) -> Result<TResponse, RuntimeWorkerInvokeError>
     where
         TRequest: Serialize,
         TResponse: DeserializeOwned,
+        TProgress: DeserializeOwned,
+        F: FnMut(&tauri::AppHandle, TProgress),
     {
         let request = RuntimeWorkerRequest {
             protocol_version: LPR_RUNTIME_PROTOCOL_VERSION,
@@ -335,18 +385,7 @@ impl PersistentLprRuntime {
             let response_line = self.read_response_line()?;
             match parse_worker_response_line(&response_line, request.request_id, request.protocol_version)? {
                 RuntimeWorkerEnvelope::Progress(progress) => {
-                    super::emit_lpr_progress(
-                        app_handle,
-                        progress.request_id.as_deref(),
-                        progress.progress,
-                        &progress.stage,
-                        progress.detail,
-                        progress.done,
-                        progress.failed,
-                        progress.reason_code.as_deref(),
-                        progress.tracking_tier.as_deref(),
-                        progress.coverage_ratio,
-                    );
+                    on_progress(app_handle, deserialize_progress_payload(progress)?);
                     continue;
                 }
                 RuntimeWorkerEnvelope::Success(result) => return Ok(result),
@@ -483,6 +522,21 @@ where
     runtime_broker().invoke(app_handle, subcommand, payload)
 }
 
+pub(crate) fn invoke_lpr_runtime_with_progress<TRequest, TResponse, TProgress, F>(
+    app_handle: tauri::AppHandle,
+    subcommand: &str,
+    payload: &TRequest,
+    on_progress: F,
+) -> Result<TResponse, String>
+where
+    TRequest: Serialize,
+    TResponse: DeserializeOwned,
+    TProgress: DeserializeOwned,
+    F: FnMut(&tauri::AppHandle, TProgress),
+{
+    runtime_broker().invoke_with_progress(app_handle, subcommand, payload, on_progress)
+}
+
 pub(crate) fn terminate_lpr_runtime_process(
     app_handle: &tauri::AppHandle,
     reason: &str,
@@ -492,9 +546,10 @@ pub(crate) fn terminate_lpr_runtime_process(
 
 #[cfg(test)]
 mod tests {
+    use crate::contracts::AiEvidenceProgressPayload;
     use serde_json::Value;
 
-    use super::{parse_worker_response_line, RuntimeWorkerEnvelope, RuntimeWorkerInvokeError};
+    use super::{deserialize_progress_payload, parse_worker_response_line, RuntimeWorkerEnvelope, RuntimeWorkerInvokeError};
 
     #[test]
     fn parse_worker_response_line_accepts_progress_envelopes() {
@@ -507,17 +562,36 @@ mod tests {
 
         match envelope {
             RuntimeWorkerEnvelope::Progress(progress) => {
-                assert_eq!(progress.request_id.as_deref(), Some("req-7"));
-                assert_eq!(progress.stage, "Interval");
-                assert_eq!(progress.detail, "Analyzing tracked sample 2/5.");
-                assert!((progress.progress - 0.4).abs() < f64::EPSILON);
-                assert_eq!(progress.tracking_tier.as_deref(), Some("partial"));
-                assert_eq!(progress.coverage_ratio, Some(0.4));
+                assert_eq!(progress.get("requestId").and_then(Value::as_str), Some("req-7"));
+                assert_eq!(progress.get("stage").and_then(Value::as_str), Some("Interval"));
+                assert_eq!(progress.get("detail").and_then(Value::as_str), Some("Analyzing tracked sample 2/5."));
+                assert_eq!(progress.get("trackingTier").and_then(Value::as_str), Some("partial"));
+                assert_eq!(progress.get("coverageRatio").and_then(Value::as_f64), Some(0.4));
             }
             RuntimeWorkerEnvelope::Success(_) | RuntimeWorkerEnvelope::Error(_) => {
                 panic!("expected a progress envelope")
             }
         }
+    }
+
+    #[test]
+    fn deserialize_progress_payload_ignores_unknown_fields_for_ai_progress() {
+        let progress = deserialize_progress_payload::<AiEvidenceProgressPayload>(serde_json::json!({
+            "requestId": "req-11",
+            "progress": 0.6,
+            "stage": "range-analysis",
+            "detail": "Analyzing tracked sample 2/5.",
+            "done": false,
+            "failed": false,
+            "trackingTier": "partial",
+            "coverageRatio": 0.4
+        }))
+        .expect("ai progress payload should deserialize");
+
+        assert_eq!(progress.request_id.as_deref(), Some("req-11"));
+        assert_eq!(progress.stage, "range-analysis");
+        assert_eq!(progress.detail, "Analyzing tracked sample 2/5.");
+        assert!((progress.progress - 0.6).abs() < f64::EPSILON);
     }
 
     #[test]

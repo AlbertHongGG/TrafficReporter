@@ -424,7 +424,6 @@ export const PlateWindow: React.FC = () => {
   const evidenceCount = evidenceSamples.length > 0 ? evidenceSamples.length : lprState.samples.length;
   const statusDetail = lprState.job.detail || runtimeStatus?.detail || 'Ready for analysis.';
   const jobTiming = React.useMemo(() => buildJobTimingSnapshot(lprState.job, clockNowMs), [clockNowMs, lprState.job]);
-  const progressPercent = Math.round(clamp(lprState.job.progress ?? 0, 0, 1) * 100);
   const playheadEvidenceSample = React.useMemo(
     () => evidenceSamples.find((entry) => entry.sample.timeMs === currentPlayheadMs) ?? null,
     [currentPlayheadMs, evidenceSamples],
@@ -590,39 +589,6 @@ export const PlateWindow: React.FC = () => {
                     </motion.span>
                   </AnimatePresence>
                 </div>
-                {(jobTiming.totalElapsedMs !== null || (isBusy && jobTiming.idleSinceUpdateMs !== null) || lprState.job.trackingTier) && (
-                  <div className={styles.statusPillRow}>
-                    {isBusy && jobTiming.idleSinceUpdateMs !== null && (
-                      <span className={styles.counterChip}>Step {formatJobTiming(jobTiming.idleSinceUpdateMs)}</span>
-                    )}
-                    {jobTiming.totalElapsedMs !== null && (
-                      <span className={styles.counterChip}>Total {formatJobTiming(jobTiming.totalElapsedMs)}</span>
-                    )}
-                    {isBusy && (
-                      <span className={styles.counterChip}>{progressPercent}%</span>
-                    )}
-                    {jobTiming.isStalled && (
-                      <span className={`${styles.counterChip} ${styles.counterChipWarning}`}>No update</span>
-                    )}
-                    {lprState.job.trackingTier && (
-                      <span className={styles.counterChip}>
-                        {lprState.job.trackingTier}
-                        {typeof lprState.job.coverageRatio === 'number' ? ` ${Math.round(lprState.job.coverageRatio * 100)}%` : ''}
-                      </span>
-                    )}
-                  </div>
-                )}
-                {isBusy && (
-                  <div className={styles.statusProgressBlock}>
-                    <div className={styles.statusProgressMeta}>
-                      <span>{lprState.job.stage || 'LPR'}</span>
-                      <span>{progressPercent}%</span>
-                    </div>
-                    <div className={styles.statusProgressTrack}>
-                      <div className={styles.statusProgressFill} style={{ width: `${progressPercent}%` }} />
-                    </div>
-                  </div>
-                )}
                 <div className={styles.heroBadgeRow}>
                   <span className={`${styles.statusChip} ${styles[`statusChip${jobBadge.tone[0].toUpperCase()}${jobBadge.tone.slice(1)}`]}`}>
                     {isBusy ? <LoaderCircle size={12} className={styles.spinningIcon} /> : jobBadge.tone === 'success' ? <Check size={12} className={styles.successIcon} /> : <AlertCircle size={12} className={styles.idleIcon} />}
@@ -631,6 +597,18 @@ export const PlateWindow: React.FC = () => {
                   {reviewBadge && (
                     <span className={`${styles.statusChip} ${styles[`statusChip${reviewBadge.tone[0].toUpperCase()}${reviewBadge.tone.slice(1)}`]}`}>
                       {reviewBadge.label}
+                    </span>
+                  )}
+                  {isBusy && jobTiming.stageElapsedMs !== null && (
+                    <span className={styles.counterChip}>Stage {formatJobTiming(jobTiming.stageElapsedMs)}</span>
+                  )}
+                  {jobTiming.totalElapsedMs !== null && (
+                    <span className={styles.counterChip}>Total {formatJobTiming(jobTiming.totalElapsedMs)}</span>
+                  )}
+                  {lprState.job.trackingTier && (
+                    <span className={styles.counterChip}>
+                      {lprState.job.trackingTier}
+                      {typeof lprState.job.coverageRatio === 'number' ? ` ${Math.round(lprState.job.coverageRatio * 100)}%` : ''}
                     </span>
                   )}
                   {lprState.targetTracks.length > 0 && (

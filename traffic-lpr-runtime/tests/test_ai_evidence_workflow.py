@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from traffic_lpr_runtime.application.ai_evidence_workflow import AiEvidenceWorkflow, RenderedFrame, SelectedKeyframe, StoryboardSelection, _normalize_keyframes
 from traffic_lpr_runtime.domain.models import TrackedRegion
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect
+from traffic_lpr_runtime.protocol import install_runtime_progress_sink, reset_runtime_progress_sink
 
 
 class AiEvidenceWorkflowTests(unittest.TestCase):
@@ -183,6 +184,61 @@ class AiEvidenceWorkflowTests(unittest.TestCase):
             self.assertEqual(result['summary'], 'fine')
             self.assertEqual(result['primaryAnchor']['frameId'], 'fine-001')
             self.assertEqual(result['keyframes'][0]['description'], '關鍵幀')
+
+    def test_run_emits_truthful_stage_progress_events(self) -> None:
+        frame = RenderedFrame('fine-001', 1500, 1, 'fine-001', 'fine-001.jpg', 1280, 720)
+        keyframe = SelectedKeyframe(frame=frame, description='關鍵幀')
+        progress_events: list[dict[str, object]] = []
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            runtime_root = Path(temp_dir)
+            workflow = self._build_workflow(runtime_root=runtime_root)
+
+            workflow._probe_duration_ms = lambda source_path: 5000
+            workflow._render_storyboard_frames = lambda **kwargs: [frame]
+            workflow._select_coarse_interval = lambda request_id, description, frames: StoryboardSelection(
+                start_frame=frame,
+                end_frame=frame,
+                anchor_frame=frame,
+                summary='coarse',
+            )
+            workflow._select_fine_interval = lambda request_id, description, frames, max_keyframes: StoryboardSelection(
+                start_frame=frame,
+                end_frame=frame,
+                anchor_frame=frame,
+                summary='fine',
+                keyframes=(keyframe,),
+            )
+            workflow._resolve_target = lambda **kwargs: {'selectedBox': None}
+            workflow._render_keyframes = lambda **kwargs: [{
+                'frame': frame.to_payload(),
+                'description': keyframe.description,
+                'overlay': None,
+            }]
+
+            token = install_runtime_progress_sink(progress_events.append)
+            try:
+                workflow.run({
+                    'sourcePath': 'demo.mp4',
+                    'description': '機車右轉',
+                    'markerRect': {'x': 0.0, 'y': 0.0, 'width': 1.0, 'height': 1.0},
+                    'requestId': 'progress-test',
+                })
+            finally:
+                reset_runtime_progress_sink(token)
+
+        self.assertEqual(
+            [(event.get('stage'), event.get('detail')) for event in progress_events],
+            [
+                ('localize', 'Rendering coarse storyboard.'),
+                ('localize', 'Selecting the coarse interval from the storyboard.'),
+                ('localize', 'Rendering fine storyboard around the candidate interval.'),
+                ('localize', 'Selecting anchor and keyframes from the fine storyboard.'),
+                ('resolve-target', 'Resolving the described target on the anchor frame.'),
+                ('range-analysis', 'Running plate range analysis on the resolved interval.'),
+                ('render', 'Rendering evidence keyframes.'),
+            ],
+        )
 
     def test_build_projection_keeps_anchor_target_candidates_and_analysis_track(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

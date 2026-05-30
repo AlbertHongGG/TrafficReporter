@@ -356,6 +356,7 @@
         { "name": "error", "type": "string", "nullable": true },
         { "name": "reasonCode", "type": "string", "nullable": true, "optional": true },
         { "name": "startedAt", "type": "string", "nullable": true },
+        { "name": "stageStartedAt", "type": "string", "nullable": true },
         { "name": "updatedAt", "type": "string", "nullable": true },
         { "name": "trackingTier", "type": "LprTrackingTier", "nullable": true, "optional": true },
         { "name": "coverageRatio", "type": "number", "nullable": true, "optional": true }
@@ -611,6 +612,7 @@
         { "name": "requestId", "type": "string", "nullable": true },
         { "name": "error", "type": "string", "nullable": true },
         { "name": "startedAt", "type": "string", "nullable": true },
+        { "name": "stageStartedAt", "type": "string", "nullable": true },
         { "name": "updatedAt", "type": "string", "nullable": true },
         { "name": "currentToolName", "type": "string", "optional": true, "nullable": true }
       ]

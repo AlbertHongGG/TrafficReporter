@@ -23,6 +23,7 @@ export const DEFAULT_LPR_JOB_STATE: LprJobState = {
   error: null,
   reasonCode: null,
   startedAt: null,
+  stageStartedAt: null,
   updatedAt: null,
   trackingTier: null,
   coverageRatio: null,

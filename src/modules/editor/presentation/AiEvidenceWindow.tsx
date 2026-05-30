@@ -67,7 +67,7 @@ export const AiEvidenceWindow: React.FC = () => {
   const canRun = Boolean(snapshot?.hasActiveFile) && runtimeReady && !isRunning;
   const canReset = !isRunning && (Boolean(aiState.prompt.trim()) || Boolean(result));
   const jobTiming = React.useMemo(() => buildJobTimingSnapshot(aiState.job, clockNowMs), [aiState.job, clockNowMs]);
-  const stepElapsedLabel = formatElapsedDuration(jobTiming.idleSinceUpdateMs);
+  const stageElapsedLabel = formatElapsedDuration(jobTiming.stageElapsedMs);
   const totalElapsedLabel = formatElapsedDuration(jobTiming.totalElapsedMs);
 
   const statusMessage = compactLabel(
@@ -257,14 +257,15 @@ export const AiEvidenceWindow: React.FC = () => {
                     <div className={styles.progressStatusBlock}>
                       <div className={styles.progressStatusRow}>
                         <Brain size={14} className={styles.spinningIcon} />
-                        <span>{statusMessage || 'Analyzing...'}</span>
-                      </div>
-                      <div className={styles.timerRow}>
-                        <span className={styles.elapsedTimer}>Step {stepElapsedLabel}</span>
-                        <span className={styles.elapsedTimer}>Total {totalElapsedLabel}</span>
-                        {jobTiming.isStalled && (
-                          <span className={`${styles.elapsedTimer} ${styles.elapsedTimerWarning}`}>No update</span>
-                        )}
+                        <span className={styles.progressStatusText}>{statusMessage || 'Analyzing...'}</span>
+                        <div className={styles.progressTagRow}>
+                          {jobTiming.stageElapsedMs !== null && (
+                            <span className={styles.elapsedTimer}>Stage {stageElapsedLabel}</span>
+                          )}
+                          {jobTiming.totalElapsedMs !== null && (
+                            <span className={styles.elapsedTimer}>Total {totalElapsedLabel}</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <span className={styles.progressPercent}>{Math.round(progress * 100)}%</span>

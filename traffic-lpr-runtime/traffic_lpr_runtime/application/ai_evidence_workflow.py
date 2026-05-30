@@ -16,6 +16,7 @@ from traffic_lpr_runtime.domain.models import TrackedRegion
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect, crop_image
 from traffic_lpr_runtime.infrastructure.runtime_layout import build_run_id, run_child
 from traffic_lpr_runtime.infrastructure.runtime_settings import get_runtime_settings
+from traffic_lpr_runtime.protocol import emit_runtime_progress
 
 
 @dataclass(slots=True)
@@ -232,6 +233,7 @@ class AiEvidenceWorkflow:
 
         tool_calls: list[dict[str, Any]] = []
 
+        self._emit_progress(request_id=request_id, progress=0.08, stage='localize', detail='Rendering coarse storyboard.')
         coarse_frames = self._record_tool_call(
             tool_calls,
             stage='localize',
@@ -244,6 +246,7 @@ class AiEvidenceWorkflow:
                 times_ms=_sample_times(duration_ms, coarse_step_ms, max_samples=18),
             ),
         )
+        self._emit_progress(request_id=request_id, progress=0.18, stage='localize', detail='Selecting the coarse interval from the storyboard.')
         coarse_choice = self._record_tool_call(
             tool_calls,
             stage='localize',
@@ -264,6 +267,7 @@ class AiEvidenceWorkflow:
             preferred_samples=max_keyframes + 6,
             max_samples=24,
         )
+        self._emit_progress(request_id=request_id, progress=0.28, stage='localize', detail='Rendering fine storyboard around the candidate interval.')
         fine_frames = self._record_tool_call(
             tool_calls,
             stage='localize',
@@ -276,6 +280,7 @@ class AiEvidenceWorkflow:
                 times_ms=_sample_times(fine_end_ms - fine_start_ms, fine_step_ms, max_samples=24, offset_ms=fine_start_ms),
             ),
         )
+        self._emit_progress(request_id=request_id, progress=0.38, stage='localize', detail='Selecting anchor and keyframes from the fine storyboard.')
         fine_choice = self._record_tool_call(
             tool_calls,
             stage='localize',
@@ -295,6 +300,7 @@ class AiEvidenceWorkflow:
             }
 
         anchor_frame = fine_choice.anchor_frame
+        self._emit_progress(request_id=request_id, progress=0.5, stage='resolve-target', detail='Resolving the described target on the anchor frame.')
         target_resolution = self._record_tool_call(
             tool_calls,
             stage='resolve-target',
@@ -314,6 +320,7 @@ class AiEvidenceWorkflow:
             ),
         )
 
+        self._emit_progress(request_id=request_id, progress=0.66, stage='range-analysis', detail='Running plate range analysis on the resolved interval.')
         interval_result = self._record_tool_call(
             tool_calls,
             stage='range-analysis',
@@ -340,6 +347,7 @@ class AiEvidenceWorkflow:
 
         projection = self._build_projection(interval_result, planned_interval, target_resolution)
         plate_candidate = _resolve_plate_candidate(projection['candidates'], projection['acceptedCandidateId'])
+        self._emit_progress(request_id=request_id, progress=0.84, stage='render', detail='Rendering evidence keyframes.')
         keyframes = self._record_tool_call(
             tool_calls,
             stage='render',
@@ -370,6 +378,16 @@ class AiEvidenceWorkflow:
             'projection': projection,
             'runtime': runtime_status,
         }
+
+    def _emit_progress(self, *, request_id: str, progress: float, stage: str, detail: str) -> None:
+        emit_runtime_progress({
+            'progress': max(0.0, min(1.0, progress)),
+            'stage': stage,
+            'detail': detail,
+            'done': False,
+            'failed': False,
+            'requestId': request_id,
+        })
 
     def _probe_duration_ms(self, source_path: str) -> int:
         cv2 = self._dependencies.cv2
