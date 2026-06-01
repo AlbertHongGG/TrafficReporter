@@ -19,6 +19,52 @@ from traffic_lpr_runtime.infrastructure.runtime_settings import get_runtime_sett
 from traffic_lpr_runtime.protocol import emit_runtime_progress
 
 
+AI_EVIDENCE_WORKFLOW_STEP_COUNT = 11
+
+
+@dataclass(frozen=True, slots=True)
+class AiEvidenceProgressStep:
+    key: str
+    stage: str
+    detail: str
+    tool_label: str | None
+    progress_kind: str
+    step_index: int
+    stage_step_index: int
+    stage_step_count: int
+
+    @property
+    def progress(self) -> float:
+        if AI_EVIDENCE_WORKFLOW_STEP_COUNT <= 1:
+            return 1.0
+        return max(0.0, min(1.0, (self.step_index - 1) / (AI_EVIDENCE_WORKFLOW_STEP_COUNT - 1)))
+
+
+AI_EVIDENCE_PROGRESS_STEPS: OrderedDict[str, AiEvidenceProgressStep] = OrderedDict(
+    (
+        ('prepare', AiEvidenceProgressStep('prepare', 'prepare', 'Preparing AI evidence workflow.', None, 'host-step', 1, 1, 1)),
+        ('build-coarse-storyboard', AiEvidenceProgressStep('build-coarse-storyboard', 'localize', 'Rendering coarse storyboard.', 'Render coarse storyboard', 'tool-call', 2, 1, 4)),
+        ('llm-localize-coarse-interval', AiEvidenceProgressStep('llm-localize-coarse-interval', 'localize', 'Selecting coarse interval with AI.', 'AI coarse interval', 'tool-call', 3, 2, 4)),
+        ('build-fine-storyboard', AiEvidenceProgressStep('build-fine-storyboard', 'localize', 'Rendering fine storyboard around the candidate interval.', 'Render fine storyboard', 'tool-call', 4, 3, 4)),
+        ('llm-select-keyframes', AiEvidenceProgressStep('llm-select-keyframes', 'localize', 'Selecting anchor and keyframes with AI.', 'AI keyframe selection', 'tool-call', 5, 4, 4)),
+        ('scan-target-candidates', AiEvidenceProgressStep('scan-target-candidates', 'resolve-target', 'Scanning anchor targets and OCR evidence.', 'Scan target candidates', 'tool-call', 6, 1, 2)),
+        ('llm-resolve-target', AiEvidenceProgressStep('llm-resolve-target', 'resolve-target', 'Resolving the described target with AI.', 'AI target resolver', 'tool-call', 7, 2, 2)),
+        ('analyze-interval', AiEvidenceProgressStep('analyze-interval', 'range-analysis', 'Running plate range analysis on the resolved interval.', 'Range analysis', 'tool-call', 8, 1, 1)),
+        ('render-keyframes', AiEvidenceProgressStep('render-keyframes', 'render', 'Rendering evidence keyframes.', 'Render keyframes', 'tool-call', 9, 1, 1)),
+        ('export-clip', AiEvidenceProgressStep('export-clip', 'export-clip', 'Exporting resolved AI evidence clip.', None, 'host-step', 10, 1, 1)),
+        ('completed', AiEvidenceProgressStep('completed', 'completed', 'AI evidence workflow completed.', None, 'host-step', 11, 1, 1)),
+        ('failed', AiEvidenceProgressStep('failed', 'failed', 'AI evidence workflow failed.', None, 'host-step', 11, 1, 1)),
+    )
+)
+
+
+def _progress_for_step(step_key: str) -> AiEvidenceProgressStep:
+    try:
+        return AI_EVIDENCE_PROGRESS_STEPS[step_key]
+    except KeyError as error:
+        raise RuntimeFailure(f'Unknown AI evidence progress step: {step_key}') from error
+
+
 @dataclass(slots=True)
 class RenderedFrame:
     frame_id: str
@@ -58,6 +104,7 @@ class StoryboardSelection:
     anchor_frame: RenderedFrame
     summary: str
     keyframes: Sequence[SelectedKeyframe] = field(default_factory=tuple)
+    keyframe_count_reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -233,9 +280,10 @@ class AiEvidenceWorkflow:
 
         tool_calls: list[dict[str, Any]] = []
 
-        self._emit_progress(request_id=request_id, progress=0.08, stage='localize', detail='Rendering coarse storyboard.')
         coarse_frames = self._record_tool_call(
             tool_calls,
+            request_id=request_id,
+            progress_step_key='build-coarse-storyboard',
             stage='localize',
             tool_name='build-coarse-storyboard',
             input_summary=f'durationMs={duration_ms} coarseStepMs={coarse_step_ms}',
@@ -246,9 +294,10 @@ class AiEvidenceWorkflow:
                 times_ms=_sample_times(duration_ms, coarse_step_ms, max_samples=18),
             ),
         )
-        self._emit_progress(request_id=request_id, progress=0.18, stage='localize', detail='Selecting the coarse interval from the storyboard.')
         coarse_choice = self._record_tool_call(
             tool_calls,
+            request_id=request_id,
+            progress_step_key='llm-localize-coarse-interval',
             stage='localize',
             tool_name='llm-localize-coarse-interval',
             input_summary=f'frames={len(coarse_frames)} description={description[:96]}',
@@ -267,9 +316,10 @@ class AiEvidenceWorkflow:
             preferred_samples=max_keyframes + 6,
             max_samples=24,
         )
-        self._emit_progress(request_id=request_id, progress=0.28, stage='localize', detail='Rendering fine storyboard around the candidate interval.')
         fine_frames = self._record_tool_call(
             tool_calls,
+            request_id=request_id,
+            progress_step_key='build-fine-storyboard',
             stage='localize',
             tool_name='build-fine-storyboard',
             input_summary=f'interval={fine_start_ms}-{fine_end_ms} fineStepMs={fine_step_ms}',
@@ -280,9 +330,10 @@ class AiEvidenceWorkflow:
                 times_ms=_sample_times(fine_end_ms - fine_start_ms, fine_step_ms, max_samples=24, offset_ms=fine_start_ms),
             ),
         )
-        self._emit_progress(request_id=request_id, progress=0.38, stage='localize', detail='Selecting anchor and keyframes from the fine storyboard.')
         fine_choice = self._record_tool_call(
             tool_calls,
+            request_id=request_id,
+            progress_step_key='llm-select-keyframes',
             stage='localize',
             tool_name='llm-select-keyframes',
             input_summary=f'frames={len(fine_frames)} maxKeyframes={max_keyframes}',
@@ -300,29 +351,24 @@ class AiEvidenceWorkflow:
             }
 
         anchor_frame = fine_choice.anchor_frame
-        self._emit_progress(request_id=request_id, progress=0.5, stage='resolve-target', detail='Resolving the described target on the anchor frame.')
-        target_resolution = self._record_tool_call(
-            tool_calls,
-            stage='resolve-target',
-            tool_name='llm-resolve-target',
-            input_summary=f'anchor={anchor_frame.frame_id} timeMs={anchor_frame.time_ms}',
-            func=lambda: self._resolve_target(
-                request_id=request_id,
-                description=description,
-                source_path=source_path,
-                marker_rect=marker_rect,
-                target_vehicle_kind=target_vehicle_kind,
-                country_hints=country_hints,
-                analysis_profile_id=analysis_profile_id,
-                enable_developer_diagnostics=enable_developer_diagnostics,
-                anchor_frame=anchor_frame,
-                output_dir=artifact_root / 'target-resolution',
-            ),
+        target_resolution = self._resolve_target(
+            tool_calls=tool_calls,
+            request_id=request_id,
+            description=description,
+            source_path=source_path,
+            marker_rect=marker_rect,
+            target_vehicle_kind=target_vehicle_kind,
+            country_hints=country_hints,
+            analysis_profile_id=analysis_profile_id,
+            enable_developer_diagnostics=enable_developer_diagnostics,
+            anchor_frame=anchor_frame,
+            output_dir=artifact_root / 'target-resolution',
         )
 
-        self._emit_progress(request_id=request_id, progress=0.66, stage='range-analysis', detail='Running plate range analysis on the resolved interval.')
         interval_result = self._record_tool_call(
             tool_calls,
+            request_id=request_id,
+            progress_step_key='analyze-interval',
             stage='range-analysis',
             tool_name='analyze-interval',
             input_summary=(
@@ -347,9 +393,10 @@ class AiEvidenceWorkflow:
 
         projection = self._build_projection(interval_result, planned_interval, target_resolution)
         plate_candidate = _resolve_plate_candidate(projection['candidates'], projection['acceptedCandidateId'])
-        self._emit_progress(request_id=request_id, progress=0.84, stage='render', detail='Rendering evidence keyframes.')
         keyframes = self._record_tool_call(
             tool_calls,
+            request_id=request_id,
+            progress_step_key='render-keyframes',
             stage='render',
             tool_name='render-keyframes',
             input_summary=f'keyframes={len(fine_choice.keyframes)}',
@@ -362,6 +409,12 @@ class AiEvidenceWorkflow:
         )
 
         summary = fine_choice.summary or _build_summary(description, planned_interval, plate_candidate)
+        keyframe_count_reason = _resolve_keyframe_count_reason(
+            rendered_count=len(keyframes),
+            desired_count=max_keyframes,
+            available_frame_count=len(fine_frames),
+            provider_reason=fine_choice.keyframe_count_reason,
+        )
         runtime_status = self._status()
         return {
             'requestId': request_id,
@@ -374,20 +427,58 @@ class AiEvidenceWorkflow:
             'primaryAnchor': anchor_frame.to_payload(),
             'targetSelection': target_resolution,
             'keyframes': keyframes,
+            'keyframeCountReason': keyframe_count_reason,
             'toolCalls': tool_calls,
             'projection': projection,
             'runtime': runtime_status,
         }
 
-    def _emit_progress(self, *, request_id: str, progress: float, stage: str, detail: str) -> None:
+    def _emit_progress(
+        self,
+        *,
+        request_id: str,
+        progress: float,
+        stage: str,
+        detail: str,
+        progress_kind: str | None = None,
+        tool_name: str | None = None,
+        tool_label: str | None = None,
+        step_index: int | None = None,
+        step_count: int | None = None,
+        stage_step_index: int | None = None,
+        stage_step_count: int | None = None,
+    ) -> None:
         emit_runtime_progress({
             'progress': max(0.0, min(1.0, progress)),
             'stage': stage,
             'detail': detail,
+            'progressKind': progress_kind,
+            'toolName': tool_name,
+            'toolLabel': tool_label,
+            'stepIndex': step_index,
+            'stepCount': step_count,
+            'stageStepIndex': stage_step_index,
+            'stageStepCount': stage_step_count,
             'done': False,
             'failed': False,
             'requestId': request_id,
         })
+
+    def _emit_progress_step(self, *, request_id: str, step_key: str) -> None:
+        step = _progress_for_step(step_key)
+        self._emit_progress(
+            request_id=request_id,
+            progress=step.progress,
+            stage=step.stage,
+            detail=step.detail,
+            progress_kind=step.progress_kind,
+            tool_name=step.key if step.progress_kind == 'tool-call' else None,
+            tool_label=step.tool_label,
+            step_index=step.step_index,
+            step_count=AI_EVIDENCE_WORKFLOW_STEP_COUNT,
+            stage_step_index=step.stage_step_index,
+            stage_step_count=step.stage_step_count,
+        )
 
     def _probe_duration_ms(self, source_path: str) -> int:
         cv2 = self._dependencies.cv2
@@ -505,11 +596,13 @@ class AiEvidenceWorkflow:
             anchor_frame=anchor_frame,
             summary=str(response.get('summary') or '').strip(),
             keyframes=tuple(keyframe_refs),
+            keyframe_count_reason=_optional_string(response.get('keyframeCountReason')),
         )
 
     def _resolve_target(
         self,
         *,
+        tool_calls: list[dict[str, Any]],
         request_id: str,
         description: str,
         source_path: str,
@@ -521,35 +614,69 @@ class AiEvidenceWorkflow:
         anchor_frame: RenderedFrame,
         output_dir: Path,
     ) -> dict[str, Any]:
-        output_dir.mkdir(parents=True, exist_ok=True)
-        frame = self._frame_reader.read_frame(source_path, anchor_frame.time_ms)
-        detections = self._runtime_bridge.detect_targets(frame, anchor_frame.time_ms, target_vehicle_kind, marker_rect)
-        if not detections:
-            raise RuntimeFailure('AI evidence target resolution found no detectable targets on the selected anchor frame.')
+        def collect_evidence() -> tuple[TargetResolutionEvidence, list[VisionChatImage]]:
+            output_dir.mkdir(parents=True, exist_ok=True)
+            frame = self._frame_reader.read_frame(source_path, anchor_frame.time_ms)
+            detections = self._runtime_bridge.detect_targets(frame, anchor_frame.time_ms, target_vehicle_kind, marker_rect)
+            if not detections:
+                raise RuntimeFailure('AI evidence target resolution found no detectable targets on the selected anchor frame.')
 
-        detections = _dedupe_anchor_target_detections(detections)
-        detections = sorted(detections, key=lambda detection: detection.confidence, reverse=True)[:6]
-        annotated_path, frame_width, frame_height = self._render_detection_reference(frame, detections, output_dir)
-        resolution_evidence, chat_images = self._collect_target_resolution_evidence(
+            deduped_detections = _dedupe_anchor_target_detections(detections)
+            deduped_detections = sorted(deduped_detections, key=lambda detection: detection.confidence, reverse=True)[:6]
+            annotated_path, frame_width, frame_height = self._render_detection_reference(frame, deduped_detections, output_dir)
+            return self._collect_target_resolution_evidence(
+                request_id=request_id,
+                description=description,
+                source_path=source_path,
+                marker_rect=marker_rect,
+                target_vehicle_kind=target_vehicle_kind,
+                country_hints=country_hints,
+                analysis_profile_id=analysis_profile_id,
+                enable_developer_diagnostics=enable_developer_diagnostics,
+                anchor_frame=anchor_frame,
+                frame=frame,
+                detections=deduped_detections,
+                output_dir=output_dir,
+                annotated_path=annotated_path,
+                frame_width=frame_width,
+                frame_height=frame_height,
+            )
+
+        resolution_evidence, chat_images = self._record_tool_call(
+            tool_calls,
             request_id=request_id,
-            description=description,
-            source_path=source_path,
-            marker_rect=marker_rect,
-            target_vehicle_kind=target_vehicle_kind,
-            country_hints=country_hints,
-            analysis_profile_id=analysis_profile_id,
-            enable_developer_diagnostics=enable_developer_diagnostics,
-            anchor_frame=anchor_frame,
-            frame=frame,
-            detections=detections,
-            output_dir=output_dir,
-            annotated_path=annotated_path,
-            frame_width=frame_width,
-            frame_height=frame_height,
+            progress_step_key='scan-target-candidates',
+            stage='resolve-target',
+            tool_name='scan-target-candidates',
+            input_summary=f'anchor={anchor_frame.frame_id} timeMs={anchor_frame.time_ms}',
+            func=collect_evidence,
         )
+        response = self._record_tool_call(
+            tool_calls,
+            request_id=request_id,
+            progress_step_key='llm-resolve-target',
+            stage='resolve-target',
+            tool_name='llm-resolve-target',
+            input_summary=f'anchor={anchor_frame.frame_id} candidates={len(resolution_evidence.candidates)}',
+            func=lambda: self._resolve_target_with_ai(request_id, anchor_frame, resolution_evidence, chat_images),
+        )
+
+        return self._finalize_target_resolution(
+            anchor_frame=anchor_frame,
+            response=response,
+            resolution_evidence=resolution_evidence,
+        )
+
+    def _resolve_target_with_ai(
+        self,
+        request_id: str,
+        anchor_frame: RenderedFrame,
+        resolution_evidence: TargetResolutionEvidence,
+        chat_images: list[VisionChatImage],
+    ) -> dict[str, Any] | None:
         system_prompt, user_prompt = self._build_target_resolution_prompt(resolution_evidence)
         try:
-            response = self._provider.generate_json(
+            return self._provider.generate_json(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 images=chat_images,
@@ -574,13 +701,7 @@ class AiEvidenceWorkflow:
         except Exception:
             if resolution_evidence.primary_exact_plate_hint_match is None:
                 raise
-            response = None
-
-        return self._finalize_target_resolution(
-            anchor_frame=anchor_frame,
-            response=response,
-            resolution_evidence=resolution_evidence,
-        )
+            return None
 
     def _collect_target_resolution_evidence(
         self,
@@ -855,13 +976,11 @@ class AiEvidenceWorkflow:
             rendered_frame = keyframe.frame
             frame = self._frame_reader.read_frame(source_path, rendered_frame.time_ms)
             box, box_source, box_time_delta_ms = _find_closest_track_box(analysis_track, rendered_frame.time_ms)
-            if not isinstance(box, dict):
-                continue
             annotated, frame_width, frame_height = self._prepare_frame_image(
                 frame,
                 title=rendered_frame.frame_id,
                 subtitle=f'T+{_format_time_label(rendered_frame.time_ms)}',
-                box=box,
+                box=box if isinstance(box, dict) else None,
                 show_header=False,
             )
             output_path = output_dir / f'{rendered_frame.frame_id}.png'
@@ -940,6 +1059,16 @@ class AiEvidenceWorkflow:
                 (int(round(width * scale)), int(round(height * scale))),
                 interpolation=cv2.INTER_AREA,
             )
+            height, width = image.shape[:2]
+
+        shortest_side = min(width, height)
+        if 0 < shortest_side < 64:
+            scale = 64.0 / float(shortest_side)
+            image = cv2.resize(
+                image,
+                (max(64, int(round(width * scale))), max(64, int(round(height * scale)))),
+                interpolation=cv2.INTER_CUBIC,
+            )
 
         ok, encoded = cv2.imencode('.jpg', image, [int(cv2.IMWRITE_JPEG_QUALITY), 82])
         if not ok:
@@ -1009,11 +1138,14 @@ class AiEvidenceWorkflow:
         self,
         tool_calls: list[dict[str, Any]],
         *,
+        request_id: str,
+        progress_step_key: str,
         stage: str,
         tool_name: str,
         input_summary: str,
         func: Callable[[], Any],
     ) -> Any:
+        self._emit_progress_step(request_id=request_id, step_key=progress_step_key)
         started_at_ms = time.time_ns() // 1_000_000
         success = False
         output_summary = ''
@@ -1175,7 +1307,6 @@ def _normalize_keyframes(value: Any, frames: list[RenderedFrame], *, desired_cou
                 frame=frame,
                 description=_fallback_keyframe_description(frame=frame, frames=frames),
                 description_source='fallback',
-                is_user_facing=False,
                 supplement_reason='missing-description',
             ))
     deduped: list[SelectedKeyframe] = []
@@ -1185,7 +1316,37 @@ def _normalize_keyframes(value: Any, frames: list[RenderedFrame], *, desired_cou
             continue
         seen_frame_ids.add(entry.frame.frame_id)
         deduped.append(entry)
+    if len(deduped) < desired_count:
+        for frame in sorted(frames, key=lambda item: item.time_ms):
+            if frame.frame_id in seen_frame_ids:
+                continue
+            seen_frame_ids.add(frame.frame_id)
+            deduped.append(SelectedKeyframe(
+                frame=frame,
+                description=_fallback_keyframe_description(frame=frame, frames=frames),
+                keyframe_source='runtime-supplemented',
+                description_source='fallback',
+                supplement_reason='under-target-backfill',
+            ))
+            if len(deduped) >= desired_count:
+                break
     return sorted(deduped, key=lambda entry: entry.frame.time_ms)[:desired_count]
+
+
+def _resolve_keyframe_count_reason(
+    *,
+    rendered_count: int,
+    desired_count: int,
+    available_frame_count: int,
+    provider_reason: str | None,
+) -> str | None:
+    if rendered_count >= 8:
+        return None
+    if available_frame_count < 8:
+        return f'Only {available_frame_count} distinct fine storyboard frame(s) were available, so 8 keyframes could not be produced.'
+    if rendered_count < desired_count and provider_reason:
+        return provider_reason
+    return f'Only {rendered_count} user-facing keyframe(s) survived runtime rendering after validation.'
 
 
 def _fallback_keyframe_description(*, frame: RenderedFrame, frames: list[RenderedFrame]) -> str:

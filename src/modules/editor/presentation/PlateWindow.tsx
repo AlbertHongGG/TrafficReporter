@@ -34,7 +34,7 @@ import {
 } from '../application/plateWindow';
 import { buildJobTimingSnapshot, formatElapsedDuration } from '../application/jobTiming';
 import { requestPlateWindowSession, sendPlateWindowAction } from '../infrastructure/plateWindowApi';
-import { clamp, formatRulerLabel, formatTransportTime } from '../domain/model';
+import { clamp, formatRulerLabel, formatRulerLabelWithMilliseconds } from '../domain/model';
 import { buildDefaultLprState } from '../domain/lprState';
 import type { LprFrameSample, LprJobState, LprPlateCandidate, LprReviewState, LprTargetTrack, TimelineIntervalSelection } from '../../../shared/contracts';
 import { getLprAnalysisProfileLabel, getLprAnalysisProfiles } from '../../../shared/lprAnalysisProfiles';
@@ -52,7 +52,7 @@ function formatIntervalLabel(interval: TimelineIntervalSelection | null) {
   if (!interval) {
     return '--';
   }
-  return `${formatTransportTime(interval.startMs)} - ${formatTransportTime(interval.endMs)}`;
+  return `${formatRulerLabelWithMilliseconds(interval.startMs)} - ${formatRulerLabelWithMilliseconds(interval.endMs)}`;
 }
 
 function formatSampleTimestamp(milliseconds: number) {

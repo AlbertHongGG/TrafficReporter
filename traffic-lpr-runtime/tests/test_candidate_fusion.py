@@ -94,6 +94,25 @@ class _FusionRecognizerStub:
 
 
 class CandidateFusionTests(unittest.TestCase):
+    def test_interval_review_prefers_taiwan_long_format_over_mixed_noise(self) -> None:
+        mixed_noise = make_candidate('mixed-noise', 'AJFM40', 0.48, 0.74, 2700)
+        mixed_noise.diagnostics = {'supportFrames': [2700]}
+        taiwan_long = make_candidate('taiwan-long', 'XJE5752', 0.46, 0.76, 2700)
+        taiwan_long.diagnostics = {'supportFrames': [2550, 2700, 2850]}
+
+        ordered, accepted_id, diagnostics = apply_reliability_selection(
+            [mixed_noise, taiwan_long],
+            [make_sample_with_candidates('sample-1', 2700, [mixed_noise, taiwan_long])],
+            ['tw'],
+            AnalysisOptions(min_accepted_confidence=0.72, min_candidate_margin=0.12),
+            interval_mode=True,
+        )
+
+        self.assertIsNone(accepted_id)
+        self.assertEqual(ordered[0].id, 'taiwan-long')
+        self.assertEqual(diagnostics['suggestedCandidateId'], 'taiwan-long')
+        self.assertGreater(diagnostics['formatScore'], 0.95)
+
     def test_best_frame_carry_through_does_not_promote_isolated_text(self) -> None:
         service = CandidateFusionService(
             dependencies=SimpleNamespace(cv2=None, numpy=None),

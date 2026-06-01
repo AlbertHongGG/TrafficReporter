@@ -9,7 +9,14 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from traffic_lpr_runtime.application.ai_evidence_workflow import AiEvidenceWorkflow, RenderedFrame, SelectedKeyframe, StoryboardSelection, _normalize_keyframes
+from traffic_lpr_runtime.application.ai_evidence_workflow import (
+    AiEvidenceWorkflow,
+    RenderedFrame,
+    SelectedKeyframe,
+    StoryboardSelection,
+    _normalize_keyframes,
+    _resolve_keyframe_count_reason,
+)
 from traffic_lpr_runtime.domain.models import TrackedRegion
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect
 from traffic_lpr_runtime.protocol import install_runtime_progress_sink, reset_runtime_progress_sink
@@ -55,7 +62,7 @@ class AiEvidenceWorkflowTests(unittest.TestCase):
             provider=provider or ProviderStub(),
         )
 
-    def test_normalize_keyframes_keeps_real_llm_keyframes_without_padding(self) -> None:
+    def test_normalize_keyframes_backfills_to_available_unique_frames(self) -> None:
         frames = [
             RenderedFrame('fine-000', 1000, 0, 'fine-000', 'fine-000.jpg', 1280, 720),
             RenderedFrame('fine-001', 1500, 1, 'fine-001', 'fine-001.jpg', 1280, 720),
@@ -71,14 +78,16 @@ class AiEvidenceWorkflowTests(unittest.TestCase):
             desired_count=8,
         )
 
-        self.assertEqual(len(result), 1)
+        self.assertEqual(len(result), 3)
         self.assertTrue(all(isinstance(item, SelectedKeyframe) for item in result))
-        self.assertEqual(result[0].frame.frame_id, 'fine-001')
-        self.assertEqual(result[0].description, '關鍵幀')
-        self.assertEqual(result[0].description_source, 'llm')
-        self.assertTrue(result[0].is_user_facing)
+        selected_by_id = {item.frame.frame_id: item for item in result}
+        self.assertEqual(selected_by_id['fine-001'].description, '關鍵幀')
+        self.assertEqual(selected_by_id['fine-001'].description_source, 'llm')
+        self.assertEqual(selected_by_id['fine-000'].keyframe_source, 'runtime-supplemented')
+        self.assertEqual(selected_by_id['fine-002'].keyframe_source, 'runtime-supplemented')
+        self.assertTrue(all(item.is_user_facing for item in result))
 
-    def test_normalize_keyframes_marks_missing_description_as_non_user_facing(self) -> None:
+    def test_normalize_keyframes_uses_fallback_for_missing_description(self) -> None:
         frames = [
             RenderedFrame('fine-000', 1000, 0, 'fine-000', 'fine-000.jpg', 1280, 720),
             RenderedFrame('fine-001', 1500, 1, 'fine-001', 'fine-001.jpg', 1280, 720),
@@ -94,12 +103,73 @@ class AiEvidenceWorkflowTests(unittest.TestCase):
         )
 
         self.assertEqual(len(result), 2)
-        self.assertFalse(result[0].is_user_facing)
+        self.assertTrue(result[0].is_user_facing)
         self.assertEqual(result[0].description_source, 'fallback')
         self.assertEqual(result[0].supplement_reason, 'missing-description')
         self.assertTrue(result[1].is_user_facing)
 
-    def test_render_keyframes_skips_stale_or_invalid_user_facing_frames(self) -> None:
+    def test_keyframe_count_reason_is_only_returned_below_required_minimum(self) -> None:
+        self.assertIsNone(_resolve_keyframe_count_reason(
+            rendered_count=8,
+            desired_count=8,
+            available_frame_count=8,
+            provider_reason='provider said fewer were enough',
+        ))
+        self.assertEqual(
+            _resolve_keyframe_count_reason(
+                rendered_count=5,
+                desired_count=8,
+                available_frame_count=5,
+                provider_reason=None,
+            ),
+            'Only 5 distinct fine storyboard frame(s) were available, so 8 keyframes could not be produced.',
+        )
+
+    def test_encode_chat_image_upscales_tiny_vision_payloads(self) -> None:
+        class Cv2Stub:
+            IMWRITE_JPEG_QUALITY = 1
+            INTER_AREA = 2
+            INTER_CUBIC = 3
+
+            def __init__(self) -> None:
+                self.resize_sizes: list[tuple[int, int]] = []
+                self.encoded_shape: tuple[int, int] | None = None
+
+            def imread(self, path: str):
+                del path
+                return np.zeros((23, 36, 3), dtype=np.uint8)
+
+            def resize(self, image, size: tuple[int, int], interpolation: int):
+                del image, interpolation
+                self.resize_sizes.append(size)
+                return np.zeros((size[1], size[0], 3), dtype=np.uint8)
+
+            def imencode(self, extension: str, image, params: list[int]):
+                del extension, params
+                height, width = image.shape[:2]
+                self.encoded_shape = (height, width)
+                return True, np.array([1, 2, 3], dtype=np.uint8)
+
+        class DependenciesStub:
+            def __init__(self, cv2) -> None:
+                self.cv2 = cv2
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cv2 = Cv2Stub()
+            workflow = self._build_workflow(
+                runtime_root=Path(temp_dir),
+                dependencies=DependenciesStub(cv2),
+            )
+            image_path = Path(temp_dir) / 'tiny.jpg'
+            image_path.write_bytes(b'not-used-by-stub')
+
+            encoded = workflow._encode_chat_image(image_path)
+
+        self.assertEqual(encoded, 'AQID')
+        self.assertEqual(cv2.resize_sizes, [(100, 64)])
+        self.assertEqual(cv2.encoded_shape, (64, 100))
+
+    def test_render_keyframes_keeps_valid_frames_without_overlay_box(self) -> None:
         class FrameReaderStub:
             def read_frame(self, source_path: str, time_ms: int):
                 del source_path, time_ms
@@ -142,7 +212,10 @@ class AiEvidenceWorkflowTests(unittest.TestCase):
                 output_dir=Path(temp_dir) / 'keyframes',
             )
 
-            self.assertEqual(rendered, [])
+            self.assertEqual(len(rendered), 1)
+            self.assertEqual(rendered[0]['frame']['frameId'], 'fine-001')
+            self.assertIsNone(rendered[0]['overlay'])
+            self.assertIsNone(rendered[0]['boxSource'])
 
     def test_run_accepts_typed_storyboard_selections(self) -> None:
         frame = RenderedFrame('fine-001', 1500, 1, 'fine-001', 'fine-001.jpg', 1280, 720)
@@ -231,14 +304,17 @@ class AiEvidenceWorkflowTests(unittest.TestCase):
             [(event.get('stage'), event.get('detail')) for event in progress_events],
             [
                 ('localize', 'Rendering coarse storyboard.'),
-                ('localize', 'Selecting the coarse interval from the storyboard.'),
+                ('localize', 'Selecting coarse interval with AI.'),
                 ('localize', 'Rendering fine storyboard around the candidate interval.'),
-                ('localize', 'Selecting anchor and keyframes from the fine storyboard.'),
-                ('resolve-target', 'Resolving the described target on the anchor frame.'),
+                ('localize', 'Selecting anchor and keyframes with AI.'),
                 ('range-analysis', 'Running plate range analysis on the resolved interval.'),
                 ('render', 'Rendering evidence keyframes.'),
             ],
         )
+        self.assertEqual(progress_events[0].get('progressKind'), 'tool-call')
+        self.assertEqual(progress_events[0].get('toolName'), 'build-coarse-storyboard')
+        self.assertEqual(progress_events[0].get('stepIndex'), 2)
+        self.assertEqual(progress_events[0].get('stepCount'), 11)
 
     def test_build_projection_keeps_anchor_target_candidates_and_analysis_track(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -428,6 +504,7 @@ class AiEvidenceWorkflowTests(unittest.TestCase):
             workflow._write_image = lambda image_path, image: None
 
             result = workflow._resolve_target(
+                tool_calls=[],
                 request_id='ai-dedupe-test',
                 description='找出這台車',
                 source_path='demo.mp4',
@@ -494,6 +571,7 @@ class AiEvidenceWorkflowTests(unittest.TestCase):
             workflow._write_image = lambda image_path, image: None
 
             result = workflow._resolve_target(
+                tool_calls=[],
                 request_id='ai-log-target-test',
                 description='請找出車牌 ABC1234 的車輛',
                 source_path='demo.mp4',
@@ -577,6 +655,7 @@ class AiEvidenceWorkflowTests(unittest.TestCase):
             workflow._write_image = lambda image_path, image: None
 
             result = workflow._resolve_target(
+                tool_calls=[],
                 request_id='ai-log-target-contradicted-test',
                 description='請找出車牌 ABC1234 的車輛',
                 source_path='demo.mp4',

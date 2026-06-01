@@ -374,12 +374,21 @@ pub struct LprEvidenceExportResponsePayload {
 
 pub type AiEvidenceProviderKind = String;
 
+pub type AiEvidenceProgressKind = String;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiEvidenceProgressPayload {
     pub progress: f64,
     pub stage: String,
     pub detail: String,
+    pub progress_kind: Option<AiEvidenceProgressKind>,
+    pub tool_name: Option<String>,
+    pub tool_label: Option<String>,
+    pub step_index: Option<u32>,
+    pub step_count: Option<u32>,
+    pub stage_step_index: Option<u32>,
+    pub stage_step_count: Option<u32>,
     pub done: bool,
     pub failed: bool,
     pub request_id: Option<String>,
@@ -479,6 +488,7 @@ pub struct AiEvidenceResponsePayload {
     pub primary_anchor: Option<AiEvidenceTimelineFrameRefPayload>,
     pub target_selection: Option<AiEvidenceTargetSelectionPayload>,
     pub keyframes: Vec<AiEvidenceKeyframePayload>,
+    pub keyframe_count_reason: Option<String>,
     pub tool_calls: Vec<AiEvidenceToolCallPayload>,
     pub projection: AiEvidenceSharedProjectionPayload,
     pub clip_path: Option<String>,

@@ -32,6 +32,7 @@ use crate::platform::process::{find_bundled, find_lpr_runtime_root, hidden_comma
 const APP_LOG_EVENT: &str = "app/log";
 const LPR_PROGRESS_EVENT: &str = "editor/lpr-progress";
 const AI_EVIDENCE_PROGRESS_EVENT: &str = "editor/ai-evidence-progress";
+const AI_EVIDENCE_WORKFLOW_STEP_COUNT: u32 = 11;
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -113,6 +114,13 @@ fn emit_ai_evidence_progress(
     detail: impl Into<String>,
     done: bool,
     failed: bool,
+    progress_kind: Option<&str>,
+    tool_name: Option<&str>,
+    tool_label: Option<&str>,
+    step_index: Option<u32>,
+    step_count: Option<u32>,
+    stage_step_index: Option<u32>,
+    stage_step_count: Option<u32>,
 ) {
     let _ = app_handle.emit(
         AI_EVIDENCE_PROGRESS_EVENT,
@@ -120,6 +128,13 @@ fn emit_ai_evidence_progress(
             progress,
             stage: stage.to_string(),
             detail: detail.into(),
+            progress_kind: progress_kind.map(|value| value.to_string()),
+            tool_name: tool_name.map(|value| value.to_string()),
+            tool_label: tool_label.map(|value| value.to_string()),
+            step_index,
+            step_count,
+            stage_step_index,
+            stage_step_count,
             done,
             failed,
             request_id: request_id.map(|value| value.to_string()),
@@ -139,6 +154,13 @@ fn emit_ai_evidence_progress_payload(
         progress.detail,
         progress.done,
         progress.failed,
+        progress.progress_kind.as_deref(),
+        progress.tool_name.as_deref(),
+        progress.tool_label.as_deref(),
+        progress.step_index,
+        progress.step_count,
+        progress.stage_step_index,
+        progress.stage_step_count,
     );
 }
 
@@ -1025,6 +1047,13 @@ pub async fn analyze_ai_evidence(
         "Preparing AI evidence workflow.",
         false,
         false,
+        Some("host-step"),
+        None,
+        None,
+        Some(1),
+        Some(AI_EVIDENCE_WORKFLOW_STEP_COUNT),
+        Some(1),
+        Some(1),
     );
 
     let app_handle_for_task = app_handle.clone();
@@ -1070,6 +1099,13 @@ pub async fn analyze_ai_evidence(
                 "Exporting resolved AI evidence clip.",
                 false,
                 false,
+                Some("host-step"),
+                None,
+                None,
+                Some(10),
+                Some(AI_EVIDENCE_WORKFLOW_STEP_COUNT),
+                Some(1),
+                Some(1),
             );
             export_ai_evidence_clip(
                 &request.source_path,
@@ -1097,6 +1133,13 @@ pub async fn analyze_ai_evidence(
                 "AI evidence workflow completed.",
                 true,
                 false,
+                Some("host-step"),
+                None,
+                None,
+                Some(11),
+                Some(AI_EVIDENCE_WORKFLOW_STEP_COUNT),
+                Some(1),
+                Some(1),
             );
             emit_app_log(
                 &app_handle,
@@ -1121,6 +1164,13 @@ pub async fn analyze_ai_evidence(
                 error.clone(),
                 true,
                 true,
+                Some("host-step"),
+                None,
+                None,
+                Some(11),
+                Some(AI_EVIDENCE_WORKFLOW_STEP_COUNT),
+                Some(1),
+                Some(1),
             );
             Err(error)
         }
@@ -1132,6 +1182,12 @@ pub fn cancel_lpr_runtime_job(
     app_handle: tauri::AppHandle,
 ) -> Result<bool, String> {
     terminate_lpr_runtime_process(&app_handle, "ui-request")
+}
+
+pub(crate) fn terminate_runtime_for_app_exit(
+    app_handle: &tauri::AppHandle,
+) -> Result<bool, String> {
+    terminate_lpr_runtime_process(app_handle, "app-exit")
 }
 
 #[tauri::command]

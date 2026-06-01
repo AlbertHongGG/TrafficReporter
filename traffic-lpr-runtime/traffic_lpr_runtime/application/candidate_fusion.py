@@ -1058,7 +1058,7 @@ def _plate_format_score(text: str | None, country_hints: list[str]) -> float:
         if normalized[:3].isdigit() and normalized[-4:].isalpha() and len(normalized) == 7:
             return 0.82
         if any(character.isalpha() for character in normalized) and any(character.isdigit() for character in normalized):
-            return 0.68
+            return 0.58
         return 0.35
     return 1.0 if 5 <= len(normalized) <= 8 else 0.5
 

@@ -274,12 +274,18 @@ impl RuntimeBroker {
             "LprRuntimeWorker",
             format!("Terminating persistent Python runtime worker pid={} reason={}", pid, reason),
         );
-        kill_process_tree(pid)?;
+        if let Ok(mut guard) = self.worker.try_lock() {
+            if let Some(worker) = guard.as_mut() {
+                worker.terminate()?;
+            } else {
+                kill_process_tree(pid)?;
+            }
+            *guard = None;
+        } else {
+            kill_process_tree(pid)?;
+        }
         self.cancel_generation.fetch_add(1, Ordering::SeqCst);
         self.set_worker_pid(None);
-        if let Ok(mut guard) = self.worker.try_lock() {
-            *guard = None;
-        }
         Ok(true)
     }
 }
@@ -352,6 +358,17 @@ impl PersistentLprRuntime {
             stdout: Some(BufReader::new(stdout)),
             next_request_id: 1,
         })
+    }
+
+    fn terminate(&mut self) -> Result<(), String> {
+        if !matches!(self.child.try_wait(), Ok(None)) {
+            return Ok(());
+        }
+
+        let child_pid = self.child.id();
+        kill_process_tree(child_pid)?;
+        let _ = self.child.wait();
+        Ok(())
     }
 
     fn is_alive(&mut self) -> bool {
@@ -467,6 +484,18 @@ impl PersistentLprRuntime {
                 "The local LPR runtime worker response reader disconnected unexpectedly.".to_string(),
             )),
         }
+    }
+}
+
+impl Drop for PersistentLprRuntime {
+    fn drop(&mut self) {
+        if !matches!(self.child.try_wait(), Ok(None)) {
+            return;
+        }
+
+        let child_pid = self.child.id();
+        let _ = kill_process_tree(child_pid);
+        let _ = self.child.wait();
     }
 }
 

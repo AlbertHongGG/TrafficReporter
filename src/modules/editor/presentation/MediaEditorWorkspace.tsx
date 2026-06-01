@@ -1485,7 +1485,13 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       requestId,
       error: null,
       startedAt: new Date().toISOString(),
-      currentToolName: null,
+      progressKind: 'host-step',
+      toolName: null,
+      toolLabel: null,
+      stepIndex: 1,
+      stepCount: 11,
+      stageStepIndex: 1,
+      stageStepCount: 1,
     });
     return requestId;
   }, [dispatch, updateAiJob]);
@@ -1635,7 +1641,13 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         detail: response.summary,
         error: null,
         requestId,
-        currentToolName: null,
+        progressKind: 'host-step',
+        toolName: null,
+        toolLabel: null,
+        stepIndex: 11,
+        stepCount: 11,
+        stageStepIndex: 1,
+        stageStepCount: 1,
       });
       applyAiEvidenceProjection(fileId, response);
     } catch (error) {
@@ -1651,6 +1663,13 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         detail: 'AI evidence analysis failed.',
         error: summary,
         requestId,
+        progressKind: 'host-step',
+        toolName: null,
+        toolLabel: null,
+        stepIndex: 11,
+        stepCount: 11,
+        stageStepIndex: 1,
+        stageStepCount: 1,
       });
       setWorkspaceFeedback(summary);
     } finally {
@@ -2172,7 +2191,13 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         detail: event.payload.detail,
         requestId: activeRequest.requestId,
         error: event.payload.failed ? event.payload.detail : null,
-        currentToolName: event.payload.stage,
+        progressKind: event.payload.progressKind ?? null,
+        toolName: event.payload.toolName ?? null,
+        toolLabel: event.payload.toolLabel ?? null,
+        stepIndex: event.payload.stepIndex ?? null,
+        stepCount: event.payload.stepCount ?? null,
+        stageStepIndex: event.payload.stageStepIndex ?? null,
+        stageStepCount: event.payload.stageStepCount ?? null,
       });
     }).then((unlisten) => {
       progressCleanup = unlisten;

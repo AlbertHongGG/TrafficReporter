@@ -17,7 +17,13 @@ export const DEFAULT_AI_EVIDENCE_JOB_STATE: AiEvidenceSessionState['job'] = {
   startedAt: null,
   stageStartedAt: null,
   updatedAt: null,
-  currentToolName: null,
+  progressKind: null,
+  toolName: null,
+  toolLabel: null,
+  stepIndex: null,
+  stepCount: null,
+  stageStepIndex: null,
+  stageStepCount: null,
 };
 
 function cloneAiEvidenceResult(result: AiEvidenceResponse | null) {

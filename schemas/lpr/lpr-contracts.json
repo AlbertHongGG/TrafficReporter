@@ -608,6 +608,11 @@
       "values": ["ollama"]
     },
     {
+      "name": "AiEvidenceProgressKind",
+      "kind": "stringUnion",
+      "values": ["host-step", "tool-call"]
+    },
+    {
       "name": "AiEvidenceJobState",
       "kind": "object",
       "targets": ["ts"],
@@ -621,7 +626,13 @@
         { "name": "startedAt", "type": "string", "nullable": true },
         { "name": "stageStartedAt", "type": "string", "nullable": true },
         { "name": "updatedAt", "type": "string", "nullable": true },
-        { "name": "currentToolName", "type": "string", "optional": true, "nullable": true }
+        { "name": "progressKind", "type": "AiEvidenceProgressKind", "optional": true, "nullable": true },
+        { "name": "toolName", "type": "string", "optional": true, "nullable": true },
+        { "name": "toolLabel", "type": "string", "optional": true, "nullable": true },
+        { "name": "stepIndex", "type": "number", "optional": true, "nullable": true },
+        { "name": "stepCount", "type": "number", "optional": true, "nullable": true },
+        { "name": "stageStepIndex", "type": "number", "optional": true, "nullable": true },
+        { "name": "stageStepCount", "type": "number", "optional": true, "nullable": true }
       ]
     },
     {
@@ -633,6 +644,13 @@
         { "name": "progress", "type": "number" },
         { "name": "stage", "type": "string" },
         { "name": "detail", "type": "string" },
+        { "name": "progressKind", "type": "AiEvidenceProgressKind", "optional": true, "nullable": true },
+        { "name": "toolName", "type": "string", "optional": true, "nullable": true },
+        { "name": "toolLabel", "type": "string", "optional": true, "nullable": true },
+        { "name": "stepIndex", "type": "number", "rustType": "u32", "optional": true, "nullable": true },
+        { "name": "stepCount", "type": "number", "rustType": "u32", "optional": true, "nullable": true },
+        { "name": "stageStepIndex", "type": "number", "rustType": "u32", "optional": true, "nullable": true },
+        { "name": "stageStepCount", "type": "number", "rustType": "u32", "optional": true, "nullable": true },
         { "name": "done", "type": "boolean" },
         { "name": "failed", "type": "boolean" },
         { "name": "requestId", "type": "string", "nullable": true }
@@ -748,6 +766,7 @@
         { "name": "primaryAnchor", "type": "AiEvidenceTimelineFrameRef", "nullable": true },
         { "name": "targetSelection", "type": "AiEvidenceTargetSelection", "nullable": true },
         { "name": "keyframes", "type": "array", "items": "AiEvidenceKeyframe" },
+        { "name": "keyframeCountReason", "type": "string", "optional": true, "nullable": true },
         { "name": "toolCalls", "type": "array", "items": "AiEvidenceToolCall" },
         { "name": "projection", "type": "AiEvidenceSharedProjection" },
         { "name": "clipPath", "type": "string", "optional": true, "nullable": true },

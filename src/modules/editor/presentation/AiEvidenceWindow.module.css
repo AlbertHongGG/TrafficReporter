@@ -243,33 +243,41 @@
 .progressHeader {
   display: flex;
   justify-content: space-between;
-  align-items: flex-end;
+  align-items: flex-start;
+  gap: 12px;
 }
 .progressStatusBlock {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
   min-width: 0;
+  flex: 1 1 auto;
 }
 .progressStatusRow {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
+  row-gap: 8px;
   font-size: 13px;
   color: var(--accent-primary);
+  min-width: 0;
 }
 .progressStatusText {
   min-width: 0;
-  flex: 1 1 240px;
+  flex: 0 1 auto;
+  font-weight: 700;
 }
 
-.progressTagRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+.progressMetaPill {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  padding: 2px 8px;
 }
 .elapsedTimer {
+  flex: 0 0 auto;
   font-size: 11px;
   font-family: var(--font-mono, monospace);
   color: var(--text-muted);

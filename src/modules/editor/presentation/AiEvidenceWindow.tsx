@@ -49,6 +49,13 @@ function compactLabel(value: string | null | undefined, fallback: string) {
   return trimmed ? trimmed : fallback;
 }
 
+function formatProgressCounter(prefix: string, index: number | null | undefined, count: number | null | undefined) {
+  if (index === null || index === undefined || count === null || count === undefined || count <= 0) {
+    return null;
+  }
+  return `${prefix} ${index}/${count}`;
+}
+
 export const AiEvidenceWindow: React.FC = () => {
   const [snapshot, setSnapshot] = React.useState<AiPanelSessionSnapshot | null>(null);
   const [promptDraft, setPromptDraft] = React.useState('');
@@ -69,6 +76,11 @@ export const AiEvidenceWindow: React.FC = () => {
   const jobTiming = React.useMemo(() => buildJobTimingSnapshot(aiState.job, clockNowMs), [aiState.job, clockNowMs]);
   const stageElapsedLabel = formatElapsedDuration(jobTiming.stageElapsedMs);
   const totalElapsedLabel = formatElapsedDuration(jobTiming.totalElapsedMs);
+  const workflowStepLabel = formatProgressCounter('Step', aiState.job.stepIndex, aiState.job.stepCount);
+  const stageStepLabel = aiState.job.stageStepCount && aiState.job.stageStepCount > 1
+    ? formatProgressCounter('Stage', aiState.job.stageStepIndex, aiState.job.stageStepCount)
+    : null;
+  const currentToolLabel = compactLabel(aiState.job.toolLabel ?? aiState.job.toolName, '');
 
   const statusMessage = compactLabel(
     aiState.job.error || errorMessage || result?.summary || aiState.job.detail,
@@ -258,14 +270,15 @@ export const AiEvidenceWindow: React.FC = () => {
                       <div className={styles.progressStatusRow}>
                         <Brain size={14} className={styles.spinningIcon} />
                         <span className={styles.progressStatusText}>{statusMessage || 'Analyzing...'}</span>
-                        <div className={styles.progressTagRow}>
-                          {jobTiming.stageElapsedMs !== null && (
-                            <span className={styles.elapsedTimer}>Stage {stageElapsedLabel}</span>
-                          )}
-                          {jobTiming.totalElapsedMs !== null && (
-                            <span className={styles.elapsedTimer}>Total {totalElapsedLabel}</span>
-                          )}
-                        </div>
+                        {workflowStepLabel && <span className={styles.progressMetaPill}>{workflowStepLabel}</span>}
+                        {stageStepLabel && <span className={styles.progressMetaPill}>{stageStepLabel}</span>}
+                        {currentToolLabel && <span className={styles.progressMetaPill}>{currentToolLabel}</span>}
+                        {jobTiming.stageElapsedMs !== null && (
+                          <span className={styles.elapsedTimer}>Stage {stageElapsedLabel}</span>
+                        )}
+                        {jobTiming.totalElapsedMs !== null && (
+                          <span className={styles.elapsedTimer}>Total {totalElapsedLabel}</span>
+                        )}
                       </div>
                     </div>
                     <span className={styles.progressPercent}>{Math.round(progress * 100)}%</span>

@@ -396,6 +396,8 @@ export interface LprEvidenceExportResponse {
 
 export type AiEvidenceProviderKind = 'ollama';
 
+export type AiEvidenceProgressKind = 'host-step' | 'tool-call';
+
 export interface AiEvidenceJobState {
   status: LprJobStatus;
   progress: number;
@@ -406,13 +408,26 @@ export interface AiEvidenceJobState {
   startedAt: string | null;
   stageStartedAt: string | null;
   updatedAt: string | null;
-  currentToolName?: string | null;
+  progressKind?: AiEvidenceProgressKind | null;
+  toolName?: string | null;
+  toolLabel?: string | null;
+  stepIndex?: number | null;
+  stepCount?: number | null;
+  stageStepIndex?: number | null;
+  stageStepCount?: number | null;
 }
 
 export interface AiEvidenceProgress {
   progress: number;
   stage: string;
   detail: string;
+  progressKind?: AiEvidenceProgressKind | null;
+  toolName?: string | null;
+  toolLabel?: string | null;
+  stepIndex?: number | null;
+  stepCount?: number | null;
+  stageStepIndex?: number | null;
+  stageStepCount?: number | null;
   done: boolean;
   failed: boolean;
   requestId: string | null;
@@ -496,6 +511,7 @@ export interface AiEvidenceResponse {
   primaryAnchor: AiEvidenceTimelineFrameRef | null;
   targetSelection: AiEvidenceTargetSelection | null;
   keyframes: AiEvidenceKeyframe[];
+  keyframeCountReason?: string | null;
   toolCalls: AiEvidenceToolCall[];
   projection: AiEvidenceSharedProjection;
   clipPath?: string | null;

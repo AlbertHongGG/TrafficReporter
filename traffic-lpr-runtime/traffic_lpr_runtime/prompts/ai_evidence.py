@@ -45,6 +45,8 @@ FINE_SYSTEM_PROMPT = _prompt(
     """
     你是交通事件關鍵幀規劃器。你只能引用提供的 frameId，不能自由編造新的時間。
     請選出完整事件區段的起點、終點、一個 target anchor，以及足以描述完整過程的關鍵幀。
+    keyframes 必須一次選出 8 到 10 張，除非可用 frame 不足或畫面重複到無法形成 8 張有效關鍵幀。
+    若 keyframes 少於 8 張，必須在 keyframeCountReason 寫出具體原因；若有 8 到 10 張，keyframeCountReason 必須為 null。
     summary 必須使用 3 到 5 句中文完整描述整段畫面變化，不要只寫一句摘要，也不要超過 5 句。
     每個關鍵幀 description 必須使用 1 到 2 句中文完整描述畫面中的主體、位置、動作與上下文，不要只寫短標籤或片語。
     只輸出 JSON 物件。
@@ -59,7 +61,8 @@ FINE_USER_PROMPT_TEMPLATE = _prompt(
     可用 frame 參考:
     $frameList
 
-    最多可選 $maxKeyframes 個關鍵幀。summary 必須為 3 到 5 句中文完整描述，關鍵幀 description 則需為完整描述句。
+    必須選出 8 到 $maxKeyframes 個關鍵幀，目標是 8 到 10 張。summary 必須為 3 到 5 句中文完整描述，關鍵幀 description 則需為完整描述句。
+    不要使用 retry 或要求第二次輸入；請在這一次輸出中一次到位。
 
     請只輸出一個 JSON 物件，不要輸出額外說明文字。
 
@@ -68,9 +71,10 @@ FINE_USER_PROMPT_TEMPLATE = _prompt(
     - endFrameId: 從上方 frame 清單中挑出整段事件結束的 frameId。
     - anchorFrameId: 從上方 frame 清單中挑出最能代表事件主軸的 frameId。
     - summary: 使用 3 到 5 句中文完整描述整段畫面變化、車輛互動、關鍵轉折與結果，不要只寫一句摘要。
-    - keyframes: 請列出足以還原事件過程的關鍵幀陣列。
+    - keyframes: 請列出足以還原事件過程的關鍵幀陣列，必須為 8 到 $maxKeyframes 張。
     - keyframes[].frameId: 必須從上方 frame 清單中挑選。
     - keyframes[].description: 使用 1 到 2 句中文完整描述該幀畫面中的主體、位置、動作、與它在事件中的意義。
+    - keyframeCountReason: 當 keyframes 少於 8 張時必填，說明可用 frame 不足、重複畫面太多、或缺少可判讀畫面等具體原因；若 keyframes 為 8 到 $maxKeyframes 張，填 null。
 
     輸出格式:
     {
@@ -78,6 +82,7 @@ FINE_USER_PROMPT_TEMPLATE = _prompt(
         "endFrameId": "...",
         "anchorFrameId": "...",
         "summary": "...",
+        "keyframeCountReason": null,
         "keyframes": [
             {
                 "frameId": "...",

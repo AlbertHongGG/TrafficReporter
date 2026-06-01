@@ -12,7 +12,7 @@ use export::process_timeline_export;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-	tauri::Builder::default()
+	let app = tauri::Builder::default()
 		.plugin(tauri_plugin_shell::init())
 		.plugin(tauri_plugin_dialog::init())
 		.invoke_handler(tauri::generate_handler![
@@ -38,6 +38,12 @@ pub fn run() {
 			}
 			Ok(())
 		})
-		.run(tauri::generate_context!())
-		.expect("error while running tauri application");
+		.build(tauri::generate_context!())
+		.expect("error while building tauri application");
+
+	app.run(|app_handle, event| {
+		if let tauri::RunEvent::Exit = event {
+			let _ = editor::terminate_runtime_for_app_exit(app_handle);
+		}
+	});
 }
