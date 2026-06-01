@@ -16,6 +16,7 @@ from traffic_lpr_runtime.application.ai_evidence_workflow import (
     StoryboardSelection,
     _normalize_keyframes,
     _resolve_keyframe_count_reason,
+    _sample_times,
 )
 from traffic_lpr_runtime.domain.models import TrackedRegion
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect
@@ -107,6 +108,67 @@ class AiEvidenceWorkflowTests(unittest.TestCase):
         self.assertEqual(result[0].description_source, 'fallback')
         self.assertEqual(result[0].supplement_reason, 'missing-description')
         self.assertTrue(result[1].is_user_facing)
+
+    def test_normalize_keyframes_rebalances_temporal_coverage_and_collapses_near_duplicates(self) -> None:
+        frames = [
+            RenderedFrame('fine-000', 6000, 0, 'fine-000', 'fine-000.jpg', 1280, 720),
+            RenderedFrame('fine-001', 6869, 1, 'fine-001', 'fine-001.jpg', 1280, 720),
+            RenderedFrame('fine-002', 7738, 2, 'fine-002', 'fine-002.jpg', 1280, 720),
+            RenderedFrame('fine-003', 8607, 3, 'fine-003', 'fine-003.jpg', 1280, 720),
+            RenderedFrame('fine-004', 9476, 4, 'fine-004', 'fine-004.jpg', 1280, 720),
+            RenderedFrame('fine-005', 10345, 5, 'fine-005', 'fine-005.jpg', 1280, 720),
+            RenderedFrame('fine-006', 11214, 6, 'fine-006', 'fine-006.jpg', 1280, 720),
+            RenderedFrame('fine-007', 12083, 7, 'fine-007', 'fine-007.jpg', 1280, 720),
+            RenderedFrame('fine-008', 12952, 8, 'fine-008', 'fine-008.jpg', 1280, 720),
+            RenderedFrame('fine-009', 13821, 9, 'fine-009', 'fine-009.jpg', 1280, 720),
+            RenderedFrame('fine-010', 14690, 10, 'fine-010', 'fine-010.jpg', 1280, 720),
+            RenderedFrame('fine-011', 15559, 11, 'fine-011', 'fine-011.jpg', 1280, 720),
+            RenderedFrame('fine-012', 17297, 12, 'fine-012', 'fine-012.jpg', 1280, 720),
+            RenderedFrame('fine-013', 18166, 13, 'fine-013', 'fine-013.jpg', 1280, 720),
+            RenderedFrame('fine-014', 19035, 14, 'fine-014', 'fine-014.jpg', 1280, 720),
+            RenderedFrame('fine-015', 19904, 15, 'fine-015', 'fine-015.jpg', 1280, 720),
+            RenderedFrame('fine-016', 20773, 16, 'fine-016', 'fine-016.jpg', 1280, 720),
+            RenderedFrame('fine-017', 21642, 17, 'fine-017', 'fine-017.jpg', 1280, 720),
+            RenderedFrame('fine-018', 22511, 18, 'fine-018', 'fine-018.jpg', 1280, 720),
+            RenderedFrame('fine-019', 23380, 19, 'fine-019', 'fine-019.jpg', 1280, 720),
+            RenderedFrame('fine-020', 24249, 20, 'fine-020', 'fine-020.jpg', 1280, 720),
+            RenderedFrame('fine-021', 25118, 21, 'fine-021', 'fine-021.jpg', 1280, 720),
+            RenderedFrame('fine-022', 25987, 22, 'fine-022', 'fine-022.jpg', 1280, 720),
+            RenderedFrame('fine-023', 26000, 23, 'fine-023', 'fine-023.jpg', 1280, 720),
+        ]
+
+        result = _normalize_keyframes(
+            [
+                {'frameId': 'fine-000', 'description': '起點'},
+                {'frameId': 'fine-005', 'description': '接近路口'},
+                {'frameId': 'fine-010', 'description': '開始轉向'},
+                {'frameId': 'fine-013', 'description': '進彎'},
+                {'frameId': 'fine-016', 'description': '彎中'},
+                {'frameId': 'fine-019', 'description': '出彎'},
+                {'frameId': 'fine-022', 'description': '完成後尾段'},
+                {'frameId': 'fine-023', 'description': '幾乎相同的尾端畫面'},
+            ],
+            frames,
+            desired_count=8,
+        )
+
+        frame_ids = [item.frame.frame_id for item in result]
+        self.assertEqual(len(frame_ids), 8)
+        self.assertEqual(frame_ids[0], 'fine-000')
+        self.assertIn(frame_ids[2], {'fine-006', 'fine-007', 'fine-008'})
+        self.assertIn('fine-023', frame_ids)
+        self.assertNotIn('fine-022', frame_ids)
+        self.assertTrue(all(
+            later.frame.time_ms - earlier.frame.time_ms >= 80
+            for earlier, later in zip(result, result[1:])
+        ))
+        self.assertEqual(result[-1].description, '幾乎相同的尾端畫面')
+        supplemented = [item for item in result if item.keyframe_source == 'runtime-supplemented']
+        self.assertEqual(len(supplemented), 1)
+        self.assertEqual(supplemented[0].supplement_reason, 'temporal-coverage')
+
+    def test_sample_times_replaces_near_duplicate_endpoint(self) -> None:
+        self.assertEqual(_sample_times(1000, 333, max_samples=10), [0, 333, 666, 1000])
 
     def test_keyframe_count_reason_is_only_returned_below_required_minimum(self) -> None:
         self.assertIsNone(_resolve_keyframe_count_reason(

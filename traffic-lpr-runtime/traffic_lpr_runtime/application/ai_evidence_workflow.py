@@ -20,6 +20,7 @@ from traffic_lpr_runtime.protocol import emit_runtime_progress
 
 
 AI_EVIDENCE_WORKFLOW_STEP_COUNT = 11
+MIN_DISTINCT_STORYBOARD_GAP_MS = 80
 
 
 @dataclass(frozen=True, slots=True)
@@ -1188,7 +1189,10 @@ def _sample_times(duration_ms: int, step_ms: int, *, max_samples: int, offset_ms
         times.append(current)
         current += step_ms
     if times[-1] != end_ms:
-        times.append(end_ms)
+        if end_ms - times[-1] < MIN_DISTINCT_STORYBOARD_GAP_MS:
+            times[-1] = end_ms
+        else:
+            times.append(end_ms)
     if len(times) <= max_samples:
         return times
     indices = [round(index * (len(times) - 1) / max(1, max_samples - 1)) for index in range(max_samples)]
@@ -1300,7 +1304,8 @@ def _resolve_frame_ref(value: Any, frames: list[RenderedFrame]) -> RenderedFrame
 
 
 def _normalize_keyframes(value: Any, frames: list[RenderedFrame], *, desired_count: int) -> list[SelectedKeyframe]:
-    by_id = {frame.frame_id: frame for frame in frames}
+    ordered_frames = sorted(frames, key=lambda item: item.time_ms)
+    by_id = {frame.frame_id: frame for frame in ordered_frames}
     selected: list[SelectedKeyframe] = []
     for item in value if isinstance(value, list) else []:
         frame_id = item.get('frameId') if isinstance(item, dict) else item if isinstance(item, str) else None
@@ -1317,7 +1322,7 @@ def _normalize_keyframes(value: Any, frames: list[RenderedFrame], *, desired_cou
                 continue
             selected.append(SelectedKeyframe(
                 frame=frame,
-                description=_fallback_keyframe_description(frame=frame, frames=frames),
+                description=_fallback_keyframe_description(frame=frame, frames=ordered_frames),
                 description_source='fallback',
                 supplement_reason='missing-description',
             ))
@@ -1328,21 +1333,190 @@ def _normalize_keyframes(value: Any, frames: list[RenderedFrame], *, desired_cou
             continue
         seen_frame_ids.add(entry.frame.frame_id)
         deduped.append(entry)
+    deduped = _collapse_temporally_dense_keyframes(deduped)
+    deduped = _rebalance_keyframes_for_temporal_coverage(
+        deduped,
+        ordered_frames,
+        desired_count=desired_count,
+    )
+    seen_frame_ids = {entry.frame.frame_id for entry in deduped}
     if len(deduped) < desired_count:
-        for frame in sorted(frames, key=lambda item: item.time_ms):
+        for frame in ordered_frames:
             if frame.frame_id in seen_frame_ids:
                 continue
             seen_frame_ids.add(frame.frame_id)
-            deduped.append(SelectedKeyframe(
+            deduped.append(_build_runtime_supplemented_keyframe(
                 frame=frame,
-                description=_fallback_keyframe_description(frame=frame, frames=frames),
-                keyframe_source='runtime-supplemented',
-                description_source='fallback',
+                frames=ordered_frames,
                 supplement_reason='under-target-backfill',
             ))
             if len(deduped) >= desired_count:
                 break
     return sorted(deduped, key=lambda entry: entry.frame.time_ms)[:desired_count]
+
+
+def _build_runtime_supplemented_keyframe(
+    *,
+    frame: RenderedFrame,
+    frames: list[RenderedFrame],
+    supplement_reason: str,
+) -> SelectedKeyframe:
+    return SelectedKeyframe(
+        frame=frame,
+        description=_fallback_keyframe_description(frame=frame, frames=frames),
+        keyframe_source='runtime-supplemented',
+        description_source='fallback',
+        supplement_reason=supplement_reason,
+    )
+
+
+def _collapse_temporally_dense_keyframes(
+    keyframes: list[SelectedKeyframe],
+    *,
+    minimum_gap_ms: int = MIN_DISTINCT_STORYBOARD_GAP_MS,
+) -> list[SelectedKeyframe]:
+    collapsed: list[SelectedKeyframe] = []
+    for entry in sorted(keyframes, key=lambda item: item.frame.time_ms):
+        if not collapsed:
+            collapsed.append(entry)
+            continue
+        previous = collapsed[-1]
+        if entry.frame.time_ms - previous.frame.time_ms >= minimum_gap_ms:
+            collapsed.append(entry)
+            continue
+        if _selected_keyframe_priority(entry) >= _selected_keyframe_priority(previous):
+            collapsed[-1] = entry
+    return collapsed
+
+
+def _selected_keyframe_priority(entry: SelectedKeyframe) -> tuple[int, int, int]:
+    return (
+        1 if entry.description_source == 'llm' else 0,
+        1 if entry.keyframe_source == 'llm-selected' else 0,
+        entry.frame.time_ms,
+    )
+
+
+def _rebalance_keyframes_for_temporal_coverage(
+    keyframes: list[SelectedKeyframe],
+    frames: list[RenderedFrame],
+    *,
+    desired_count: int,
+) -> list[SelectedKeyframe]:
+    if not keyframes or not frames or desired_count <= 0:
+        return sorted(keyframes, key=lambda item: item.frame.time_ms)
+
+    bucket_count = _temporal_bucket_count(len(frames), desired_count)
+    if bucket_count <= 1:
+        return sorted(keyframes, key=lambda item: item.frame.time_ms)
+
+    buckets = _split_frames_into_temporal_buckets(frames, bucket_count)
+    frame_bucket_indices = {
+        frame.frame_id: bucket_index
+        for bucket_index, bucket in enumerate(buckets)
+        for frame in bucket
+    }
+    per_bucket_cap = max(1, (desired_count + bucket_count - 1) // bucket_count)
+    selected_by_id = {
+        entry.frame.frame_id: entry
+        for entry in sorted(keyframes, key=lambda item: item.frame.time_ms)
+    }
+    result: list[SelectedKeyframe] = []
+    seen_frame_ids: set[str] = set()
+    bucket_counts = [0] * len(buckets)
+
+    def add_entry(entry: SelectedKeyframe, *, respect_cap: bool) -> bool:
+        frame_id = entry.frame.frame_id
+        if frame_id in seen_frame_ids:
+            return False
+        bucket_index = frame_bucket_indices.get(frame_id)
+        if bucket_index is None:
+            return False
+        if respect_cap and bucket_counts[bucket_index] >= per_bucket_cap:
+            return False
+        seen_frame_ids.add(frame_id)
+        bucket_counts[bucket_index] += 1
+        result.append(entry)
+        return True
+
+    for bucket in buckets:
+        bucket_selected = [selected_by_id[frame.frame_id] for frame in bucket if frame.frame_id in selected_by_id]
+        if bucket_selected:
+            add_entry(bucket_selected[0], respect_cap=False)
+            continue
+        fallback_frame = _pick_bucket_frame(bucket, seen_frame_ids)
+        if fallback_frame is None:
+            continue
+        add_entry(_build_runtime_supplemented_keyframe(
+            frame=fallback_frame,
+            frames=frames,
+            supplement_reason='temporal-coverage',
+        ), respect_cap=False)
+
+    for entry in sorted(keyframes, key=lambda item: item.frame.time_ms):
+        if len(result) >= desired_count:
+            break
+        add_entry(entry, respect_cap=True)
+
+    while len(result) < desired_count:
+        progress = False
+        for bucket_index in _bucket_fill_order(bucket_counts):
+            if len(result) >= desired_count:
+                break
+            if bucket_counts[bucket_index] >= per_bucket_cap:
+                continue
+            fallback_frame = _pick_bucket_frame(buckets[bucket_index], seen_frame_ids)
+            if fallback_frame is None:
+                continue
+            if add_entry(_build_runtime_supplemented_keyframe(
+                frame=fallback_frame,
+                frames=frames,
+                supplement_reason='temporal-coverage',
+            ), respect_cap=True):
+                progress = True
+        if not progress:
+            break
+
+    return sorted(result, key=lambda item: item.frame.time_ms)
+
+
+def _temporal_bucket_count(frame_count: int, desired_count: int) -> int:
+    if frame_count <= 0 or desired_count <= 0:
+        return 0
+    if desired_count >= 8 and frame_count >= 5:
+        return 5
+    if desired_count >= 6 and frame_count >= 4:
+        return 4
+    return min(frame_count, desired_count)
+
+
+def _split_frames_into_temporal_buckets(frames: list[RenderedFrame], bucket_count: int) -> list[list[RenderedFrame]]:
+    buckets: list[list[RenderedFrame]] = []
+    for bucket_index in range(bucket_count):
+        start = (bucket_index * len(frames)) // bucket_count
+        end = max(start + 1, ((bucket_index + 1) * len(frames)) // bucket_count)
+        bucket = frames[start:end]
+        if bucket:
+            buckets.append(bucket)
+    return buckets
+
+
+def _pick_bucket_frame(bucket: list[RenderedFrame], seen_frame_ids: set[str]) -> RenderedFrame | None:
+    candidates = [frame for frame in bucket if frame.frame_id not in seen_frame_ids]
+    if not candidates:
+        return None
+    center_frame = bucket[len(bucket) // 2]
+    return min(candidates, key=lambda frame: (abs(frame.time_ms - center_frame.time_ms), frame.time_ms))
+
+
+def _bucket_fill_order(bucket_counts: list[int]) -> list[int]:
+    if not bucket_counts:
+        return []
+    center_index = (len(bucket_counts) - 1) / 2
+    return sorted(
+        range(len(bucket_counts)),
+        key=lambda index: (bucket_counts[index], abs(index - center_index), index),
+    )
 
 
 def _resolve_keyframe_count_reason(

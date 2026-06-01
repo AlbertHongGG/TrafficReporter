@@ -77,9 +77,7 @@ export const AiEvidenceWindow: React.FC = () => {
   const stageElapsedLabel = formatElapsedDuration(jobTiming.stageElapsedMs);
   const totalElapsedLabel = formatElapsedDuration(jobTiming.totalElapsedMs);
   const workflowStepLabel = formatProgressCounter('Step', aiState.job.stepIndex, aiState.job.stepCount);
-  const stageStepLabel = aiState.job.stageStepCount && aiState.job.stageStepCount > 1
-    ? formatProgressCounter('Stage', aiState.job.stageStepIndex, aiState.job.stageStepCount)
-    : null;
+  const stageStepLabel = formatProgressCounter('Stage', aiState.job.stageStepIndex, aiState.job.stageStepCount);
   const currentToolLabel = compactLabel(aiState.job.toolLabel ?? aiState.job.toolName, '');
 
   const statusMessage = compactLabel(
