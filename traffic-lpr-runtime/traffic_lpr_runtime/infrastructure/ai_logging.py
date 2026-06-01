@@ -6,7 +6,7 @@ import re
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from uuid import uuid4
 
 from traffic_lpr_runtime.application.ai_provider import VisionChatImage, VisionLlmProvider
@@ -63,6 +63,7 @@ class LoggingVisionLlmProvider:
         images: list[VisionChatImage],
         timeout_s: int = 1200,
         request_metadata: dict[str, Any] | None = None,
+        progress_callback: Callable[[], None] | None = None,
     ) -> dict[str, object]:
         started_at_ms = _now_ms()
         call_id = uuid4().hex
@@ -84,6 +85,7 @@ class LoggingVisionLlmProvider:
                 images=images,
                 timeout_s=timeout_s,
                 request_metadata=request_metadata,
+                progress_callback=progress_callback,
             )
         except Exception as error:
             completed_at_ms = _now_ms()

@@ -149,8 +149,9 @@ def serve(runtime_script: Path) -> int:
 
 
 def _write_progress(progress_payload: dict[str, Any], request_context: RuntimeRequestContext) -> None:
-    sys.stdout.write(json.dumps(build_runtime_progress(progress_payload, request_context=request_context)) + '\n')
-    sys.stdout.flush()
+    stream = getattr(sys, '__stdout__', None) or sys.stdout
+    stream.write(json.dumps(build_runtime_progress(progress_payload, request_context=request_context)) + '\n')
+    stream.flush()
 
 def _flush_stdout_noise(stdout_noise: io.StringIO) -> None:
     noise = stdout_noise.getvalue().strip()

@@ -87,6 +87,26 @@ class RuntimeProtocolTests(unittest.TestCase):
         self.assertEqual(payload['progress']['requestId'], 'req-004')
         self.assertEqual(payload['progress']['trackingTier'], 'partial')
 
+    def test_build_runtime_progress_stringifies_numeric_request_id_for_payload(self) -> None:
+        payload = build_runtime_progress(
+            {
+                'progress': 0.1,
+                'stage': 'Interval',
+                'detail': 'Validating the anchor frame and starting interval tracking.',
+                'done': False,
+                'failed': False,
+            },
+            request_context=RuntimeRequestContext(
+                protocol_mode=True,
+                protocol_version=LEGACY_RUNTIME_PROTOCOL_VERSION,
+                request_id=1,
+                idempotency_key=None,
+            ),
+        )
+
+        self.assertEqual(payload['requestId'], 1)
+        self.assertEqual(payload['progress']['requestId'], '1')
+
 
 if __name__ == '__main__':
     unittest.main()

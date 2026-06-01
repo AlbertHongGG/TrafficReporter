@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,4 +24,5 @@ class VisionLlmProvider(Protocol):
         images: list[VisionChatImage],
         timeout_s: int = 1200,
         request_metadata: dict[str, Any] | None = None,
+        progress_callback: Callable[[], None] | None = None,
     ) -> dict[str, object]: ...

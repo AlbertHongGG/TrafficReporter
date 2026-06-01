@@ -159,13 +159,16 @@ def build_runtime_progress(
     *,
     request_context: RuntimeRequestContext,
 ) -> dict[str, Any]:
+    progress_request_id = _normalize_progress_request_id(
+        progress_payload.get('requestId', request_context.request_id),
+    )
     payload = {
         'protocolVersion': request_context.protocol_version or DEFAULT_RUNTIME_PROTOCOL_VERSION,
         'requestId': request_context.request_id,
         'kind': 'progress',
         'progress': {
             **progress_payload,
-            'requestId': progress_payload.get('requestId', request_context.request_id),
+            'requestId': progress_request_id,
         },
     }
     if request_context.idempotency_key is not None:
@@ -217,3 +220,11 @@ def emit_runtime_progress(progress_payload: dict[str, Any]) -> None:
 
 def _optional_string(value: Any) -> str | None:
     return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _normalize_progress_request_id(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value.strip() or None
+    return str(value)

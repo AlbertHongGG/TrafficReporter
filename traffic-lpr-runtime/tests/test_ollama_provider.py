@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import sys
+import time
 import unittest
 import urllib.error
 from pathlib import Path
@@ -85,6 +86,36 @@ class OllamaVisionProviderTests(unittest.TestCase):
         self.assertIn('HTTP 400', str(context.exception))
         self.assertEqual(urlopen_mock.call_count, 1)
         sleep_mock.assert_not_called()
+
+    def test_generate_json_emits_heartbeat_while_waiting_for_slow_response(self) -> None:
+        provider = OllamaVisionProvider(base_url='https://example.test', model='unit-test-model')
+        heartbeat_count = 0
+
+        def slow_urlopen(request, timeout):
+            del request, timeout
+            time.sleep(0.035)
+            return _ResponseStub(
+                json.dumps({'message': {'content': json.dumps({'decision': 'accept'})}}).encode('utf-8'),
+            )
+
+        with patch('traffic_lpr_runtime.infrastructure.ollama_provider.OLLAMA_PROGRESS_HEARTBEAT_S', 0.01):
+            with patch(
+                'traffic_lpr_runtime.infrastructure.ollama_provider.urllib.request.urlopen',
+                side_effect=slow_urlopen,
+            ):
+                def on_heartbeat() -> None:
+                    nonlocal heartbeat_count
+                    heartbeat_count += 1
+
+                result = provider.generate_json(
+                    system_prompt='sys',
+                    user_prompt='user',
+                    images=[VisionChatImage(frame_id='fine-001', label='fine', image_base64='YWJj')],
+                    progress_callback=on_heartbeat,
+                )
+
+        self.assertEqual(result, {'decision': 'accept'})
+        self.assertGreaterEqual(heartbeat_count, 1)
 
 
 if __name__ == '__main__':

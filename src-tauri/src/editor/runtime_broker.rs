@@ -15,7 +15,10 @@ use crate::platform::process::{find_lpr_runtime_root, find_python_runtime, hidde
 
 const LPR_RUNTIME_RETRY_LIMIT: usize = 1;
 const LPR_RUNTIME_PROTOCOL_VERSION: u8 = 1;
-const LPR_RUNTIME_REQUEST_TIMEOUT: Duration = Duration::from_secs(300);
+const DEFAULT_LPR_RUNTIME_REQUEST_TIMEOUT: Duration = Duration::from_secs(300);
+const DEFAULT_AI_EVIDENCE_PROVIDER_TIMEOUT_S: u64 = 1200;
+const MIN_AI_EVIDENCE_PROVIDER_TIMEOUT_S: u64 = 30;
+const AI_EVIDENCE_REQUEST_TIMEOUT_BUFFER_S: u64 = 60;
 
 static RUNTIME_BROKER: OnceLock<RuntimeBroker> = OnceLock::new();
 
@@ -77,6 +80,31 @@ where
             error,
         ))
     })
+}
+
+fn request_timeout_for_subcommand(subcommand: &str) -> Duration {
+    request_timeout_for_subcommand_with_ollama_timeout(subcommand, read_ollama_timeout_seconds_from_env())
+}
+
+fn request_timeout_for_subcommand_with_ollama_timeout(
+    subcommand: &str,
+    ollama_timeout_s: Option<u64>,
+) -> Duration {
+    if subcommand != "ai-evidence" {
+        return DEFAULT_LPR_RUNTIME_REQUEST_TIMEOUT;
+    }
+
+    let resolved_timeout_s = ollama_timeout_s
+        .unwrap_or(DEFAULT_AI_EVIDENCE_PROVIDER_TIMEOUT_S)
+        .max(MIN_AI_EVIDENCE_PROVIDER_TIMEOUT_S)
+        .saturating_add(AI_EVIDENCE_REQUEST_TIMEOUT_BUFFER_S);
+    Duration::from_secs(resolved_timeout_s)
+}
+
+fn read_ollama_timeout_seconds_from_env() -> Option<u64> {
+    std::env::var("TRAFFIC_OLLAMA_TIMEOUT_S")
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
 }
 
 fn cancel_generation_changed(invoke_generation: u64, current_generation: u64) -> bool {
@@ -423,7 +451,7 @@ impl PersistentLprRuntime {
         })?;
 
         loop {
-            let response_line = self.read_response_line()?;
+            let response_line = self.read_response_line(subcommand)?;
             match parse_worker_response_line(&response_line, request.request_id, request.protocol_version)? {
                 RuntimeWorkerEnvelope::Progress(progress) => {
                     on_progress(app_handle, deserialize_progress_payload(progress)?);
@@ -437,12 +465,13 @@ impl PersistentLprRuntime {
         }
     }
 
-    fn read_response_line(&mut self) -> Result<String, RuntimeWorkerInvokeError> {
+    fn read_response_line(&mut self, subcommand: &str) -> Result<String, RuntimeWorkerInvokeError> {
         let stdout = self.stdout.take().ok_or_else(|| {
             RuntimeWorkerInvokeError::Recoverable(
                 "The local LPR runtime worker response stream is not available.".to_string(),
             )
         })?;
+        let request_timeout = request_timeout_for_subcommand(subcommand);
 
         let (sender, receiver) = std::sync::mpsc::sync_channel(1);
         std::thread::spawn(move || {
@@ -452,7 +481,7 @@ impl PersistentLprRuntime {
             let _ = sender.send((stdout, result));
         });
 
-        match receiver.recv_timeout(LPR_RUNTIME_REQUEST_TIMEOUT) {
+        match receiver.recv_timeout(request_timeout) {
             Ok((stdout, result)) => {
                 self.stdout = Some(stdout);
                 let (bytes_read, response_line) = result.map_err(|error| {
@@ -477,7 +506,7 @@ impl PersistentLprRuntime {
                 }
                 Err(RuntimeWorkerInvokeError::Recoverable(format!(
                     "Timed out waiting for the local LPR runtime worker response after {} ms.",
-                    LPR_RUNTIME_REQUEST_TIMEOUT.as_millis()
+                    request_timeout.as_millis()
                 )))
             }
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => Err(RuntimeWorkerInvokeError::Recoverable(
@@ -602,7 +631,11 @@ mod tests {
     use crate::contracts::AiEvidenceProgressPayload;
     use serde_json::Value;
 
-    use super::{cancel_generation_changed, deserialize_progress_payload, parse_worker_response_line, RuntimeWorkerEnvelope, RuntimeWorkerInvokeError};
+    use super::{
+        cancel_generation_changed, deserialize_progress_payload, parse_worker_response_line,
+        request_timeout_for_subcommand_with_ollama_timeout, RuntimeWorkerEnvelope, RuntimeWorkerInvokeError,
+        AI_EVIDENCE_REQUEST_TIMEOUT_BUFFER_S, DEFAULT_LPR_RUNTIME_REQUEST_TIMEOUT,
+    };
 
     #[test]
     fn cancel_generation_change_marks_active_request_cancelled() {
@@ -689,5 +722,17 @@ mod tests {
                 panic!("expected a recoverable progress payload error")
             }
         }
+    }
+
+    #[test]
+    fn request_timeout_for_ai_evidence_uses_provider_timeout_and_buffer() {
+        let timeout = request_timeout_for_subcommand_with_ollama_timeout("ai-evidence", Some(900));
+        assert_eq!(timeout.as_secs(), 900 + AI_EVIDENCE_REQUEST_TIMEOUT_BUFFER_S);
+    }
+
+    #[test]
+    fn request_timeout_for_non_ai_evidence_keeps_default_timeout() {
+        let timeout = request_timeout_for_subcommand_with_ollama_timeout("analyze-interval", Some(900));
+        assert_eq!(timeout, DEFAULT_LPR_RUNTIME_REQUEST_TIMEOUT);
     }
 }

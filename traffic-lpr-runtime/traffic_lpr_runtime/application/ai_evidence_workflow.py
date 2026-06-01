@@ -550,6 +550,10 @@ class AiEvidenceWorkflow:
                 'operation': 'localize-coarse-interval',
                 'frameCount': len(frames),
             },
+            progress_callback=lambda: self._emit_progress_step(
+                request_id=request_id,
+                step_key='llm-localize-coarse-interval',
+            ),
         )
         return StoryboardSelection(
             start_frame=_resolve_frame_ref(response.get('startFrameId'), frames),
@@ -585,6 +589,10 @@ class AiEvidenceWorkflow:
                 'frameCount': len(frames),
                 'maxKeyframes': max_keyframes,
             },
+            progress_callback=lambda: self._emit_progress_step(
+                request_id=request_id,
+                step_key='llm-select-keyframes',
+            ),
         )
         start_frame = _resolve_frame_ref(response.get('startFrameId'), frames)
         end_frame = _resolve_frame_ref(response.get('endFrameId'), frames)
@@ -697,6 +705,10 @@ class AiEvidenceWorkflow:
                         if resolution_evidence.primary_exact_plate_hint_match is not None else None
                     ),
                 },
+                progress_callback=lambda: self._emit_progress_step(
+                    request_id=request_id,
+                    step_key='llm-resolve-target',
+                ),
             )
         except Exception:
             if resolution_evidence.primary_exact_plate_hint_match is None:

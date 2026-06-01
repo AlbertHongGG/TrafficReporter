@@ -19,6 +19,7 @@ class ProviderStub:
     def __init__(self, *, response: dict[str, object] | None = None, error: Exception | None = None) -> None:
         self._response = response or {'ok': True}
         self._error = error
+        self.progress_callback_invocations = 0
 
     def describe(self) -> dict[str, object]:
         return {
@@ -34,8 +35,12 @@ class ProviderStub:
         images: list[VisionChatImage],
         timeout_s: int = 1200,
         request_metadata: dict[str, object] | None = None,
+        progress_callback=None,
     ) -> dict[str, object]:
         del system_prompt, user_prompt, images, timeout_s, request_metadata
+        if progress_callback is not None:
+            progress_callback()
+            self.progress_callback_invocations += 1
         if self._error is not None:
             raise self._error
         return dict(self._response)
@@ -92,6 +97,30 @@ class AiLoggingTests(unittest.TestCase):
             self.assertEqual(payload['error']['type'], 'RuntimeFailure')
             self.assertEqual(payload['error']['message'], 'boom')
             self.assertIsNone(payload['response'])
+
+    def test_logging_provider_forwards_progress_callback_to_inner_provider(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            inner = ProviderStub(response={'decision': 'accept'})
+            provider = LoggingVisionLlmProvider(
+                inner=inner,
+                logger=JsonFileAiCallLogger(Path(temp_dir)),
+            )
+            callback_invocations = 0
+
+            def on_progress() -> None:
+                nonlocal callback_invocations
+                callback_invocations += 1
+
+            provider.generate_json(
+                system_prompt='sys',
+                user_prompt='user',
+                images=[VisionChatImage(frame_id='fine-001', label='fine', image_base64='YWJj')],
+                request_metadata={'workflow': 'ai-evidence', 'stage': 'coarse'},
+                progress_callback=on_progress,
+            )
+
+            self.assertEqual(callback_invocations, 1)
+            self.assertEqual(inner.progress_callback_invocations, 1)
 
 
 if __name__ == '__main__':

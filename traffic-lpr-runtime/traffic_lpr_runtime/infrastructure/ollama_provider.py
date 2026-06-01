@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import queue
 import socket
+import threading
 import time
 import urllib.error
 import urllib.request
-from typing import Any
+from typing import Any, Callable
 
 from traffic_lpr_runtime.application.ai_provider import VisionChatImage
 from traffic_lpr_runtime.domain.errors import RuntimeFailure
@@ -13,6 +15,7 @@ from traffic_lpr_runtime.infrastructure.runtime_settings import DEFAULT_OLLAMA_T
 
 
 MIN_OLLAMA_TIMEOUT_S = 30
+OLLAMA_PROGRESS_HEARTBEAT_S = 45.0
 RETRYABLE_OLLAMA_HTTP_STATUS_CODES = frozenset({502, 503, 504})
 
 
@@ -64,6 +67,7 @@ class OllamaVisionProvider:
         images: list[VisionChatImage],
         timeout_s: int = DEFAULT_OLLAMA_TIMEOUT_S,
         request_metadata: dict[str, Any] | None = None,
+        progress_callback: Callable[[], None] | None = None,
     ) -> dict[str, object]:
         del request_metadata
         resolved_timeout_s = _resolve_timeout_seconds(timeout_s or self._timeout_s)
@@ -95,8 +99,11 @@ class OllamaVisionProvider:
 
         for attempt in range(self._retry_attempts + 1):
             try:
-                with urllib.request.urlopen(request, timeout=resolved_timeout_s) as response:
-                    raw_response = response.read().decode('utf-8')
+                raw_response = _urlopen_with_heartbeat(
+                    request,
+                    resolved_timeout_s=resolved_timeout_s,
+                    progress_callback=progress_callback,
+                )
                 break
             except urllib.error.HTTPError as error:
                 detail = error.read().decode('utf-8', errors='replace').strip()
@@ -151,6 +158,44 @@ def _parse_json_object(content: str) -> dict[str, object]:
     if not isinstance(parsed, dict):
         raise RuntimeFailure('Ollama JSON result must be an object.')
     return parsed
+
+
+def _urlopen_with_heartbeat(
+    request: urllib.request.Request,
+    *,
+    resolved_timeout_s: int,
+    progress_callback: Callable[[], None] | None,
+) -> str:
+    result_queue: queue.Queue[tuple[str, Any]] = queue.Queue(maxsize=1)
+
+    def perform_request() -> None:
+        try:
+            with urllib.request.urlopen(request, timeout=resolved_timeout_s) as response:
+                result_queue.put(('response', response.read().decode('utf-8')))
+        except Exception as error:  # pragma: no cover - exercised through public generate_json paths
+            result_queue.put(('error', error))
+
+    worker = threading.Thread(target=perform_request, daemon=True)
+    worker.start()
+
+    deadline = time.monotonic() + float(max(MIN_OLLAMA_TIMEOUT_S, resolved_timeout_s))
+    heartbeat_interval_s = max(0.01, min(float(OLLAMA_PROGRESS_HEARTBEAT_S), float(resolved_timeout_s)))
+
+    while True:
+        remaining_s = deadline - time.monotonic()
+        if remaining_s <= 0:
+            raise TimeoutError(f'Ollama request timed out after {resolved_timeout_s}s.')
+
+        try:
+            kind, payload = result_queue.get(timeout=min(heartbeat_interval_s, remaining_s))
+        except queue.Empty:
+            if progress_callback is not None:
+                progress_callback()
+            continue
+
+        if kind == 'response':
+            return str(payload)
+        raise payload
 
 
 def _repair_json_object(content: str) -> dict[str, Any]:
