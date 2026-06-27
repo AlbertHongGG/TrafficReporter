@@ -15,7 +15,7 @@ export const Header: React.FC = () => {
           <div className={styles.logoIcon}>
             <Clapperboard size={12} />
           </div>
-          <span className={styles.logoText}>Traffic Editor</span>
+          <span className={styles.logoText}>TrafficReporter</span>
         </div>
       </div>
 

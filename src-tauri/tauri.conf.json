@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Traffic Editor",
+  "productName": "TrafficReporter",
   "version": "0.1.0",
-  "identifier": "com.jasonhong.traffic-editor",
+  "identifier": "com.jasonhong.trafficreporter",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Traffic Editor",
+        "title": "TrafficReporter",
         "width": 1280,
         "height": 820,
         "minWidth": 1024,

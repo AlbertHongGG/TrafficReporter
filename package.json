@@ -1,5 +1,5 @@
 {
-  "name": "traffic-editor",
+  "name": "traffic-reporter",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -21,7 +21,7 @@
     "tauri": "tauri",
     "build:exe": "tauri build --no-bundle",
     "build:installer": "tauri build",
-    "build:portable": "tauri build --no-bundle && powershell -Command \"Remove-Item -Recurse -Force dist-portable -ErrorAction SilentlyContinue; New-Item -ItemType Directory dist-portable | Out-Null; Copy-Item src-tauri/target/release/traffic-editor.exe dist-portable/; Copy-Item -Recurse src-tauri/bin dist-portable/bin\""
+    "build:portable": "tauri build --no-bundle && powershell -Command \"Remove-Item -Recurse -Force dist-portable -ErrorAction SilentlyContinue; New-Item -ItemType Directory dist-portable | Out-Null; Copy-Item src-tauri/target/release/traffic-reporter.exe dist-portable/; Copy-Item -Recurse src-tauri/bin dist-portable/bin\""
   },
   "dependencies": {
     "@tauri-apps/api": "^2.10.1",

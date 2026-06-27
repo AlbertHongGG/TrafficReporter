@@ -1,4 +1,4 @@
-# Traffic Editor
+# TrafficReporter
 
 A Tauri-based desktop application for traffic video review, LPR analysis, and AI evidence workflows. Built with React, TypeScript, Rust, and a Python analysis runtime.
 
@@ -123,8 +123,8 @@ The editor toolbar now includes a `Compact` toggle. It controls current-frame ex
 
 | Command | Description | Output |
 |---------|-------------|--------|
-| `npm run build:exe` | Build standalone exe only (fast, no installer) | `src-tauri/target/release/traffic-editor.exe` |
-| `npm run build:installer` | Build NSIS installer (includes bundled binaries) | `src-tauri/target/release/bundle/nsis/traffic-editor_*_x64-setup.exe` |
+| `npm run build:exe` | Build standalone exe only (fast, no installer) | `src-tauri/target/release/traffic-reporter.exe` |
+| `npm run build:installer` | Build NSIS installer (includes bundled binaries) | `src-tauri/target/release/bundle/nsis/traffic-reporter_*_x64-setup.exe` |
 | `npm run build:portable` | Build exe + copy binaries into portable folder | `dist-portable/` |
 
 ### Standalone EXE (Portable)
@@ -133,7 +133,7 @@ The portable distribution requires the exe and `bin/` folder together:
 
 ```
 dist-portable/
-├── traffic-editor.exe
+├── traffic-reporter.exe
 └── bin/
     ├── ffmpeg.exe
     └── ffprobe.exe
@@ -155,4 +155,4 @@ For a full installer that bundles everything including WebView2:
 npm run build:installer
 ```
 
-The installer will be at `src-tauri/target/release/bundle/nsis/traffic-editor_0.1.0_x64-setup.exe`.
+The installer will be at `src-tauri/target/release/bundle/nsis/traffic-reporter_0.1.0_x64-setup.exe`.

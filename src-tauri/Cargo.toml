@@ -1,5 +1,5 @@
 [package]
-name = "traffic-editor"
+name = "traffic-reporter"
 version = "0.1.0"
 description = "A Tauri App"
 authors = ["you"]
