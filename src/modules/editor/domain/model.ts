@@ -44,12 +44,15 @@ export interface EditorAsset extends MediaAssetRecord {
   thumbnailUrl: string | null;
 }
 
-export interface EditorFileState {
+export interface EditorFilePayload {
   id: string;
   asset: EditorAsset;
   track: TimelineTrack;
   clips: TimelineClip[];
   renderProfile: RenderProfile;
+}
+
+export interface EditorFileState extends EditorFilePayload {
   selectedClipIds: string[];
   playheadMs: number;
   zoom: number;
@@ -57,6 +60,13 @@ export interface EditorFileState {
   previewMuted: boolean;
   isPlaying: boolean;
   markerRect: VideoMarkerRect | null;
+}
+
+export interface EditorWorkspacePayload {
+  workspaceName: string;
+  activeFileId: string | null;
+  files: EditorFilePayload[];
+  analysis: EditorAnalysisState;
 }
 
 export interface EditorWorkspaceState {
@@ -435,14 +445,14 @@ export function findClipAtPlayhead(clips: TimelineClip[], playheadMs: number) {
   return clips.find((clip) => playheadMs >= clip.startMs && playheadMs < clipEndMs(clip)) ?? null;
 }
 
-export function getSourceTimeAtPlayhead(file: EditorFileState) {
-  const clip = findClipAtPlayhead(file.clips, file.playheadMs);
+export function getSourceTimeAtPlayhead(file: EditorFileState, playheadMs: number) {
+  const clip = findClipAtPlayhead(file.clips, playheadMs);
   if (!clip) {
     return null;
   }
 
   return clamp(
-    clip.inPointMs + (file.playheadMs - clip.startMs),
+    clip.inPointMs + (playheadMs - clip.startMs),
     0,
     file.asset.durationMs,
   );

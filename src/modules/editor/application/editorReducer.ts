@@ -3,6 +3,7 @@ import type {
   EditorAsset,
   LprSessionState,
   EditorWorkspaceState,
+  EditorWorkspacePayload,
   VideoMarkerRect,
 } from '../domain/model';
 import type { LprRuntimeStatus } from '../../../shared/contracts';
@@ -61,7 +62,8 @@ export type EditorAction =
   | { type: 'set-lpr-runtime-status'; runtimeStatus: LprRuntimeStatus | null }
   | { type: 'replace-lpr-session'; fileId: string; session: LprSessionState }
   | AiEvidenceSessionAction
-  | LprSessionAction;
+  | LprSessionAction
+  | { type: 'sync-workspace-state'; workspace: EditorWorkspacePayload };
 
 export function createInitialEditorState() {
   return buildDefaultWorkspaceState();
@@ -141,6 +143,43 @@ export function editorReducer(state: EditorWorkspaceState, action: EditorAction)
   switch (action.type) {
     case 'reset-workspace':
       return buildDefaultWorkspaceState();
+
+    case 'sync-workspace-state': {
+      const nextFiles = action.workspace.files.map((remoteFile) => {
+        const localFile = state.files.find((f) => f.id === remoteFile.id);
+        if (!localFile) {
+           return {
+             ...remoteFile,
+             playheadMs: 0,
+             zoom: DEFAULT_ZOOM,
+             previewVolume: 0.85,
+             previewMuted: false,
+             isPlaying: false,
+             markerRect: null,
+             selectedClipIds: [],
+           };
+        }
+        return {
+           ...remoteFile,
+           playheadMs: localFile.playheadMs,
+           zoom: localFile.zoom,
+           previewVolume: localFile.previewVolume,
+           previewMuted: localFile.previewMuted,
+           isPlaying: localFile.isPlaying,
+           markerRect: localFile.markerRect,
+           selectedClipIds: localFile.selectedClipIds,
+        };
+      });
+      return {
+        ...action.workspace,
+        files: nextFiles,
+        // We preserve the local LPR runtime status since it's locally polled.
+        analysis: {
+          ...action.workspace.analysis,
+          lprRuntimeStatus: state.analysis.lprRuntimeStatus,
+        },
+      };
+    }
 
     case 'add-files': {
       const existingPaths = new Set(state.files.map((fileState) => fileState.asset.path));

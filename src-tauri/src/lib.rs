@@ -3,10 +3,26 @@ mod editor;
 mod export;
 mod media;
 mod platform;
+
+mod domain;
+mod infrastructure;
+mod application;
+mod commands;
+
+use tauri::Manager;
 use editor::{
-	analyze_ai_evidence, analyze_lpr_frame, analyze_lpr_interval, cancel_lpr_runtime_job, export_frame_image,
-	export_lpr_evidence, get_lpr_runtime_status, probe_media_source, save_generated_media_asset,
-	scan_lpr_targets,
+    export_frame_image,
+    export_lpr_evidence, probe_media_source, save_generated_media_asset,
+};
+use commands::lpr_commands::{
+    get_lpr_runtime_status, cancel_lpr_runtime_job,
+    scan_lpr_targets, analyze_lpr_frame, analyze_lpr_interval, analyze_ai_evidence
+};
+use commands::workspace_commands::{
+    get_app_state, workspace_add_files, workspace_remove_file, workspace_set_active_file,
+    workspace_move_clip, workspace_trim_clip_start, workspace_trim_clip_end,
+    workspace_split_clip, workspace_delete_clips, workspace_set_clips_muted,
+    workspace_set_render_profile
 };
 use export::process_timeline_export;
 
@@ -26,7 +42,18 @@ pub fn run() {
 			scan_lpr_targets,
 			analyze_lpr_frame,
 			analyze_lpr_interval,
-			process_timeline_export
+			process_timeline_export,
+			get_app_state,
+            workspace_add_files,
+            workspace_remove_file,
+            workspace_set_active_file,
+            workspace_move_clip,
+            workspace_trim_clip_start,
+            workspace_trim_clip_end,
+            workspace_split_clip,
+            workspace_delete_clips,
+            workspace_set_clips_muted,
+            workspace_set_render_profile
 		])
 		.setup(|app| {
 			if cfg!(debug_assertions) {
@@ -36,6 +63,7 @@ pub fn run() {
 						.build(),
 				)?;
 			}
+			app.manage(infrastructure::state::AppState::new());
 			Ok(())
 		})
 		.build(tauri::generate_context!())

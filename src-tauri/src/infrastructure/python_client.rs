@@ -12,6 +12,7 @@ use serde_json::Value;
 
 use crate::contracts::{LprProgressPayload, LprRuntimeStatusPayload};
 use crate::platform::process::{find_lpr_runtime_root, find_python_runtime, hidden_command};
+use crate::editor::{emit_app_log, emit_lpr_progress};
 
 const LPR_RUNTIME_RETRY_LIMIT: usize = 1;
 const LPR_RUNTIME_PROTOCOL_VERSION: u8 = 1;
@@ -205,7 +206,7 @@ impl RuntimeBroker {
             subcommand,
             payload,
             |app_handle, progress| {
-                super::emit_lpr_progress(
+                emit_lpr_progress(
                     app_handle,
                     progress.request_id.as_deref(),
                     progress.progress,
@@ -262,7 +263,7 @@ impl RuntimeBroker {
                     self.set_worker_pid(None);
                     *worker_guard = None;
                     if cancel_generation_changed(invoke_cancel_generation, self.cancel_generation()) {
-                        super::emit_app_log(
+                        emit_app_log(
                             &app_handle,
                             "info",
                             "LprRuntimeWorker",
@@ -270,7 +271,7 @@ impl RuntimeBroker {
                         );
                         return Err("The local LPR runtime request was cancelled.".to_string());
                     }
-                    super::emit_app_log(
+                    emit_app_log(
                         &app_handle,
                         "warn",
                         "LprRuntimeWorker",
@@ -287,7 +288,7 @@ impl RuntimeBroker {
 
     fn terminate(&self, app_handle: &tauri::AppHandle, reason: &str) -> Result<bool, String> {
         let Some(pid) = self.active_worker_pid()? else {
-            super::emit_app_log(
+            emit_app_log(
                 app_handle,
                 "debug",
                 "LprRuntimeWorker",
@@ -296,7 +297,7 @@ impl RuntimeBroker {
             return Ok(false);
         };
 
-        super::emit_app_log(
+        emit_app_log(
             app_handle,
             "warn",
             "LprRuntimeWorker",
@@ -322,7 +323,7 @@ impl PersistentLprRuntime {
     fn start(app_handle: tauri::AppHandle) -> Result<Self, String> {
         let python = find_python_runtime()?;
         let runtime_root = find_lpr_runtime_root()?;
-        super::emit_app_log(&app_handle, "info", "LprRuntimeWorker", "Starting persistent Python runtime worker.");
+        emit_app_log(&app_handle, "info", "LprRuntimeWorker", "Starting persistent Python runtime worker.");
         let mut command = hidden_command(&python.program);
         for arg in &python.args {
             command.arg(arg);
@@ -352,11 +353,11 @@ impl PersistentLprRuntime {
                         Ok(_) => {
                             let message = line.trim();
                             if !message.is_empty() {
-                                super::emit_app_log(&stderr_app_handle, "warn", "LprRuntimeWorker", message.to_string());
+                                emit_app_log(&stderr_app_handle, "warn", "LprRuntimeWorker", message.to_string());
                             }
                         }
                         Err(error) => {
-                            super::emit_app_log(
+                            emit_app_log(
                                 &stderr_app_handle,
                                 "warn",
                                 "LprRuntimeWorker",

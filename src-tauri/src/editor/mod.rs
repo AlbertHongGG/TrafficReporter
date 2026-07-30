@@ -1,5 +1,3 @@
-mod runtime_broker;
-
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -8,7 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
 use tauri::Emitter;
-use runtime_broker::{invoke_lpr_runtime, invoke_lpr_runtime_with_progress, terminate_lpr_runtime_process};
+use crate::infrastructure::python_client::{invoke_lpr_runtime, invoke_lpr_runtime_with_progress, terminate_lpr_runtime_process};
 
 use crate::contracts::{
     AiEvidenceProgressPayload, AiEvidenceRequestPayload, AiEvidenceResponsePayload,
@@ -18,7 +16,7 @@ use crate::contracts::{
     LprIntervalAnalysisRequestPayload, LprIntervalAnalysisResponsePayload,
     LprProgressPayload,
     OutputCompressionModePayload,
-    LprReviewStatePayload, LprRuntimeStatusPayload,
+    LprReviewStatePayload,
     LprTargetScanRequestPayload, LprTargetScanResponsePayload, MediaProbePayload,
     VideoMarkerRectPayload,
 };
@@ -32,7 +30,7 @@ use crate::platform::process::{find_bundled, find_lpr_runtime_root, hidden_comma
 const APP_LOG_EVENT: &str = "app/log";
 const LPR_PROGRESS_EVENT: &str = "editor/lpr-progress";
 const AI_EVIDENCE_PROGRESS_EVENT: &str = "editor/ai-evidence-progress";
-const AI_EVIDENCE_WORKFLOW_STEP_COUNT: u32 = 11;
+pub const AI_EVIDENCE_WORKFLOW_STEP_COUNT: u32 = 11;
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -42,7 +40,7 @@ struct AppLogPayload {
     message: String,
 }
 
-fn emit_app_log(app_handle: &tauri::AppHandle, level: &str, scope: &str, message: impl Into<String>) {
+pub fn emit_app_log(app_handle: &tauri::AppHandle, level: &str, scope: &str, message: impl Into<String>) {
     let message = message.into();
     match level {
         "debug" => log::debug!(target: scope, "{}", message),
@@ -61,7 +59,7 @@ fn emit_app_log(app_handle: &tauri::AppHandle, level: &str, scope: &str, message
     );
 }
 
-fn emit_lpr_request_log(
+pub fn emit_lpr_request_log(
     app_handle: &tauri::AppHandle,
     command: &str,
     request_id: Option<&str>,
@@ -82,7 +80,7 @@ fn emit_lpr_request_log(
     );
 }
 
-fn emit_lpr_result_log(
+pub fn emit_lpr_result_log(
     app_handle: &tauri::AppHandle,
     provenance: &LprAnalysisProvenancePayload,
     review: &LprReviewStatePayload,
@@ -106,7 +104,7 @@ fn emit_lpr_result_log(
     );
 }
 
-fn emit_ai_evidence_progress(
+pub fn emit_ai_evidence_progress(
     app_handle: &tauri::AppHandle,
     request_id: Option<&str>,
     progress: f64,
@@ -142,7 +140,7 @@ fn emit_ai_evidence_progress(
     );
 }
 
-fn emit_ai_evidence_progress_payload(
+pub fn emit_ai_evidence_progress_payload(
     app_handle: &tauri::AppHandle,
     progress: AiEvidenceProgressPayload,
 ) {
@@ -164,7 +162,7 @@ fn emit_ai_evidence_progress_payload(
     );
 }
 
-fn emit_lpr_progress(
+pub fn emit_lpr_progress(
     app_handle: &tauri::AppHandle,
     request_id: Option<&str>,
     progress: f64,
@@ -281,7 +279,7 @@ fn runtime_data_root() -> Result<PathBuf, String> {
     Ok(repo_root.join(".runtime"))
 }
 
-fn runtime_run_root(run_id: &str) -> Result<PathBuf, String> {
+pub fn runtime_run_root(run_id: &str) -> Result<PathBuf, String> {
     Ok(runtime_data_root()?.join("runs").join(run_id))
 }
 
@@ -414,7 +412,7 @@ fn build_ai_evidence_clip_args(
     args
 }
 
-fn export_ai_evidence_clip(
+pub fn export_ai_evidence_clip(
     source_path: &str,
     start_ms: u64,
     end_ms: u64,
@@ -776,7 +774,7 @@ fn copy_png_asset_with_compression(
     finalize_png_export(ffmpeg, source_path, output_path, compression_mode, output_target)
 }
 
-fn finalize_ai_keyframe_artifacts(
+pub fn finalize_ai_keyframe_artifacts(
     response: &mut AiEvidenceResponsePayload,
     compression_mode: OutputCompressionModePayload,
 ) -> Result<(), String> {
@@ -922,267 +920,11 @@ pub fn export_frame_image(request: FrameExportRequest) -> Result<(), String> {
     export_frame_image_internal(&request, StillImageOutputTarget::FrameExport)
 }
 
-#[tauri::command]
-pub async fn get_lpr_runtime_status(
-    app_handle: tauri::AppHandle,
-) -> Result<LprRuntimeStatusPayload, String> {
-    tauri::async_runtime::spawn_blocking(move || invoke_lpr_runtime(app_handle, "status", &serde_json::json!({})))
-        .await
-        .map_err(|error| format!("Failed to join runtime status task: {}", error))?
-}
 
-#[tauri::command]
-pub async fn scan_lpr_targets(
-    app_handle: tauri::AppHandle,
-    request: LprTargetScanRequestPayload,
-) -> Result<LprTargetScanResponsePayload, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        emit_lpr_request_log(
-            &app_handle,
-            "scan-targets",
-            request.request_id.as_deref(),
-            None,
-            false,
-        );
-        let response: LprTargetScanResponsePayload = invoke_lpr_runtime(app_handle.clone(), "scan-targets", &request)?;
-        emit_app_log(
-            &app_handle,
-            "info",
-            "LprRuntimeResult",
-            format!(
-                "command=scan-targets requestId={} detections={}",
-                request.request_id.as_deref().unwrap_or("-"),
-                response.detections.len(),
-            ),
-        );
-        Ok(response)
-    })
-        .await
-        .map_err(|error| format!("Failed to join target scan task: {}", error))?
-}
 
-#[tauri::command]
-pub async fn analyze_lpr_frame(
-    app_handle: tauri::AppHandle,
-    request: LprFrameAnalysisRequestPayload,
-) -> Result<LprFrameAnalysisResponsePayload, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        emit_lpr_request_log(
-            &app_handle,
-            "analyze-frame",
-            request.request_id.as_deref(),
-            request.analysis_profile_id.as_deref(),
-            request.enable_developer_diagnostics.unwrap_or(false),
-        );
-        let response: LprFrameAnalysisResponsePayload =
-            invoke_lpr_runtime(app_handle.clone(), "analyze-frame", &request)
-                .inspect_err(|error| {
-                    emit_lpr_progress(
-                        &app_handle,
-                        request.request_id.as_deref(),
-                        1.0,
-                        "Frame",
-                        error.clone(),
-                        true,
-                        true,
-                        Some("runtime-error"),
-                        None,
-                        None,
-                    );
-                })?;
-        emit_lpr_result_log(&app_handle, &response.provenance, &response.review, response.candidates.len());
-        Ok(response)
-    })
-        .await
-        .map_err(|error| format!("Failed to join frame analysis task: {}", error))?
-}
 
-#[tauri::command]
-pub async fn analyze_lpr_interval(
-    app_handle: tauri::AppHandle,
-    request: LprIntervalAnalysisRequestPayload,
-) -> Result<LprIntervalAnalysisResponsePayload, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        emit_lpr_request_log(
-            &app_handle,
-            "analyze-interval",
-            request.request_id.as_deref(),
-            request.analysis_profile_id.as_deref(),
-            request.enable_developer_diagnostics.unwrap_or(false),
-        );
-        let response: LprIntervalAnalysisResponsePayload =
-            invoke_lpr_runtime(app_handle.clone(), "analyze-interval", &request)
-                .inspect_err(|error| {
-                    emit_lpr_progress(
-                        &app_handle,
-                        request.request_id.as_deref(),
-                        1.0,
-                        "Interval",
-                        error.clone(),
-                        true,
-                        true,
-                        Some("runtime-error"),
-                        None,
-                        None,
-                    );
-                })?;
-        emit_lpr_result_log(&app_handle, &response.provenance, &response.review, response.candidates.len());
-        Ok(response)
-    })
-        .await
-        .map_err(|error| format!("Failed to join interval analysis task: {}", error))?
-}
 
-#[tauri::command]
-pub async fn analyze_ai_evidence(
-    app_handle: tauri::AppHandle,
-    request: AiEvidenceRequestPayload,
-) -> Result<AiEvidenceResponsePayload, String> {
-    let request_id = request.request_id.clone();
-    emit_ai_evidence_progress(
-        &app_handle,
-        request_id.as_deref(),
-        0.05,
-        "prepare",
-        "Preparing AI evidence workflow.",
-        false,
-        false,
-        Some("host-step"),
-        None,
-        None,
-        Some(1),
-        Some(AI_EVIDENCE_WORKFLOW_STEP_COUNT),
-        Some(1),
-        Some(1),
-    );
 
-    let app_handle_for_task = app_handle.clone();
-    let response = tauri::async_runtime::spawn_blocking(move || -> Result<AiEvidenceResponsePayload, String> {
-        emit_app_log(
-            &app_handle_for_task,
-            "info",
-            "AiEvidenceRequest",
-            format!(
-                "requestId={} description={} vehicleKind={} compressionMode={}",
-                request.request_id.as_deref().unwrap_or("-"),
-                request.description.as_str(),
-                request.target_vehicle_kind.as_str(),
-                if request.compression_mode.is_compact() { "compact" } else { "standard" },
-            ),
-        );
-
-        let mut response: AiEvidenceResponsePayload = invoke_lpr_runtime_with_progress(
-            app_handle_for_task.clone(),
-            "ai-evidence",
-            &request,
-            |app_handle, progress: AiEvidenceProgressPayload| {
-                emit_ai_evidence_progress_payload(app_handle, progress);
-            },
-        )?;
-        finalize_ai_keyframe_artifacts(&mut response, request.compression_mode)?;
-
-        if let Some(interval) = response.interval.clone() {
-            let request_folder = response
-                .request_id
-                .clone()
-                .or_else(|| request.request_id.clone())
-                .unwrap_or_else(|| format!("ai-evidence-{}", SystemTime::now().duration_since(UNIX_EPOCH).map(|value| value.as_millis()).unwrap_or(0)));
-            let clip_path = runtime_run_root(&request_folder)?
-                .join("ai-evidence")
-                .join("clip.mp4");
-
-            emit_ai_evidence_progress(
-                &app_handle_for_task,
-                response.request_id.as_deref(),
-                0.8,
-                "export-clip",
-                "Exporting resolved AI evidence clip.",
-                false,
-                false,
-                Some("host-step"),
-                None,
-                None,
-                Some(10),
-                Some(AI_EVIDENCE_WORKFLOW_STEP_COUNT),
-                Some(1),
-                Some(1),
-            );
-            export_ai_evidence_clip(
-                &request.source_path,
-                interval.start_ms,
-                interval.end_ms,
-                &clip_path,
-                request.compression_mode,
-                request.audio_bitrate_kbps,
-            )?;
-            response.clip_path = Some(clip_path.to_string_lossy().to_string());
-        }
-
-        Ok(response)
-    })
-    .await
-    .map_err(|error| format!("Failed to join AI evidence task: {}", error))?;
-
-    match response {
-        Ok(payload) => {
-            emit_ai_evidence_progress(
-                &app_handle,
-                payload.request_id.as_deref(),
-                1.0,
-                "completed",
-                "AI evidence workflow completed.",
-                true,
-                false,
-                Some("host-step"),
-                None,
-                None,
-                Some(11),
-                Some(AI_EVIDENCE_WORKFLOW_STEP_COUNT),
-                Some(1),
-                Some(1),
-            );
-            emit_app_log(
-                &app_handle,
-                "info",
-                "AiEvidenceResult",
-                format!(
-                    "requestId={} plate={} clip={} keyframes={}",
-                    payload.request_id.as_deref().unwrap_or("-"),
-                    payload.plate_number.as_deref().unwrap_or("-"),
-                    payload.clip_path.as_deref().unwrap_or("-"),
-                    payload.keyframes.len(),
-                ),
-            );
-            Ok(payload)
-        }
-        Err(error) => {
-            emit_ai_evidence_progress(
-                &app_handle,
-                request_id.as_deref(),
-                1.0,
-                "failed",
-                error.clone(),
-                true,
-                true,
-                Some("host-step"),
-                None,
-                None,
-                Some(11),
-                Some(AI_EVIDENCE_WORKFLOW_STEP_COUNT),
-                Some(1),
-                Some(1),
-            );
-            Err(error)
-        }
-    }
-}
-
-#[tauri::command]
-pub fn cancel_lpr_runtime_job(
-    app_handle: tauri::AppHandle,
-) -> Result<bool, String> {
-    terminate_lpr_runtime_process(&app_handle, "ui-request")
-}
 
 pub(crate) fn terminate_runtime_for_app_exit(
     app_handle: &tauri::AppHandle,
