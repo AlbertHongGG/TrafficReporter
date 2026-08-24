@@ -1,7 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { AppErrorBoundary } from '../../components/AppErrorBoundary';
-import { ExportWindow } from '../../modules/export/presentation/ExportWindow';
+import { AppErrorBoundary } from '../../components/common/AppErrorBoundary';
+import { ExportWindow } from '../../components/settings-panel/ExportWindow';
 import '../../index.css';
 import { installGlobalLogger } from '../../utils/logger';
 

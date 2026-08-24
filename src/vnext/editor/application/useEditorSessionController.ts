@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
-import type { EditorWorkspaceState, EditorWorkspacePayload } from '../../../modules/editor/domain/model';
+import type { EditorWorkspacePayload } from '../../../modules/editor/domain/model';
 import type { EditorAction } from '../../../modules/editor/application/editorReducer';
 import { createEditorSessionStoreState, reduceEditorSessionStoreState } from './sessionStore';
 

@@ -1,5 +1,5 @@
-import { Header } from '../../components/Header/Header';
-import { MediaEditorWorkspace } from '../../modules/editor/presentation/MediaEditorWorkspace';
+import { Header } from '../../components/common/Header/Header';
+import { MediaEditorWorkspace } from '../../components/workspace/MainWorkspace';
 import styles from './AppShell.module.css';
 
 export function AppShell() {

@@ -18,17 +18,17 @@ import {
   X,
   Crosshair,
 } from 'lucide-react';
-import { requestAiPanelWindowSession, saveGeneratedMediaAsset, sendAiPanelAction } from '../infrastructure/aiPanelApi';
+import { requestAiPanelWindowSession, saveGeneratedMediaAsset, sendAiPanelAction } from '../../modules/editor/infrastructure/aiPanelApi';
 import {
   AI_PANEL_SESSION_UPDATED_EVENT,
   type RevisionedAiPanelSessionSnapshot,
   type AiPanelAction,
   type AiPanelSessionSnapshot,
-} from '../application/aiPanelWindow';
-import { buildJobTimingSnapshot, formatElapsedDuration } from '../application/jobTiming';
-import { buildDefaultAiEvidenceState } from '../domain/aiEvidenceState';
-import { formatRulerLabel, formatTransportTime } from '../domain/model';
-import { shouldApplyRevisionedWindowSnapshot, unwrapRevisionedWindowSnapshot } from '../../../vnext/windowing/revisionedSnapshot';
+} from '../../modules/editor/application/aiPanelWindow';
+import { buildJobTimingSnapshot, formatElapsedDuration } from '../../modules/editor/application/jobTiming';
+import { buildDefaultAiEvidenceState } from '../../modules/editor/domain/aiEvidenceState';
+import { formatRulerLabel, formatTransportTime } from '../../modules/editor/domain/model';
+import { shouldApplyRevisionedWindowSnapshot, unwrapRevisionedWindowSnapshot } from '../../vnext/windowing/revisionedSnapshot';
 import styles from './AiEvidenceWindow.module.css';
 
 function clamp01(value: number | null | undefined) {

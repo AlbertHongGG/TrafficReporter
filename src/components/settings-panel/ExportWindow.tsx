@@ -15,24 +15,24 @@ import {
   Settings2,
   AlertTriangle,
 } from 'lucide-react';
-import { createLogger, getErrorMessage, serializeError } from '../../../utils/logger';
-import { processTimelineExport, requestExportWindowSession } from '../infrastructure/exportApi';
+import { createLogger, getErrorMessage, serializeError } from '../../utils/logger';
+import { processTimelineExport, requestExportWindowSession } from '../../modules/export/infrastructure/exportApi';
 import type {
   AudioBitrateKbps,
   ExportSnapshot,
   ExportFormat,
   ExportProgressPayload,
   VideoQuality,
-} from '../application/exportTypes';
-import { formatTransportTime } from '../../editor/domain/model';
+} from '../../modules/export/application/exportTypes';
+import { formatTransportTime } from '../../modules/editor/domain/model';
 import {
   shouldApplyRevisionedWindowSnapshot,
   unwrapRevisionedWindowSnapshot,
   type RevisionedWindowSnapshot,
-} from '../../../vnext/windowing/revisionedSnapshot';
-import { EXPORT_SESSION_UPDATED_EVENT } from '../application/exportWindow';
+} from '../../vnext/windowing/revisionedSnapshot';
+import { EXPORT_SESSION_UPDATED_EVENT } from '../../modules/export/application/exportWindow';
 import styles from './ExportWindow.module.css';
-import { Select } from '../../../components/Select/Select';
+import { Select } from '../common/Select/Select';
 
 type ExportStatus = 'loading' | 'idle' | 'running' | 'done' | 'error';
 const log = createLogger('ExportWindow');
@@ -212,7 +212,7 @@ export const ExportWindow: React.FC = () => {
       removeSessionListener = unlisten;
     });
 
-    void requestExportWindowSession().catch((error) => {
+    void requestExportWindowSession().catch((error: any) => {
       if (disposed) {
         return;
       }
@@ -420,7 +420,7 @@ export const ExportWindow: React.FC = () => {
                   <div className={styles.selectWrapper}>
                     <Select
                       value={videoQuality}
-                      onChange={(value) => setVideoQuality(normalizeVideoQuality(snapshot, value as VideoQuality))}
+                      onChange={(value: any) => setVideoQuality(normalizeVideoQuality(snapshot, value as VideoQuality))}
                       options={videoQualityOptions.map((option) => ({
                         value: option.value,
                         label: option.label,
@@ -434,7 +434,7 @@ export const ExportWindow: React.FC = () => {
                   <div className={styles.selectWrapper}>
                     <Select
                       value={audioBitrateKbps.toString()}
-                      onChange={(val) => setAudioBitrateKbps(Number(val) as AudioBitrateKbps)}
+                      onChange={(val: any) => setAudioBitrateKbps(Number(val) as AudioBitrateKbps)}
                       disabled={!usesAudioBitrate}
                       options={AUDIO_BITRATE_OPTIONS.map((opt) => ({
                         value: opt.toString(),

@@ -47,15 +47,15 @@ import {
   type EditorFileState,
   type TimelineClip,
   type VideoMarkerRect,
-} from '../domain/model';
-import { getAiEvidenceSessionByFileId, getLprSessionByFileId } from '../domain/analysisState';
-import { buildDefaultLprState, buildLprTargetAnchor, resolveLprAnalysisTargetVehicleKind } from '../domain/lprState';
+} from '../../modules/editor/domain/model';
+import { getAiEvidenceSessionByFileId, getLprSessionByFileId } from '../../modules/editor/domain/analysisState';
+import { buildDefaultLprState, buildLprTargetAnchor, resolveLprAnalysisTargetVehicleKind } from '../../modules/editor/domain/lprState';
 import {
   buildEditorAsset,
   exportFrameImage,
   isSupportedMediaPath,
-} from '../infrastructure/mediaApi';
-import { analyzeAiEvidence } from '../infrastructure/aiEvidenceApi';
+} from '../../modules/editor/infrastructure/mediaApi';
+import { analyzeAiEvidence } from '../../modules/editor/infrastructure/aiEvidenceApi';
 import {
   analyzeLprFrame,
   analyzeLprInterval,
@@ -63,28 +63,28 @@ import {
   exportLprEvidence,
   getLprRuntimeStatus,
   scanLprTargets,
-} from '../infrastructure/lprApi';
-import { createLogger, getErrorMessage, getErrorSummary, serializeError } from '../../../utils/logger';
-import { openExportWindow, syncExportWindowSession } from '../../export/infrastructure/exportApi';
-import { preparePendingExportSession } from '../../export/application/exportSession';
-import { EXPORT_SESSION_REQUEST_EVENT } from '../../export/application/exportWindow';
+} from '../../modules/editor/infrastructure/lprApi';
+import { createLogger, getErrorMessage, getErrorSummary, serializeError } from '../../utils/logger';
+import { openExportWindow, syncExportWindowSession } from '../../modules/export/infrastructure/exportApi';
+import { preparePendingExportSession } from '../../modules/export/application/exportSession';
+import { EXPORT_SESSION_REQUEST_EVENT } from '../../modules/export/application/exportWindow';
 import {
   AI_PANEL_ACTION_EVENT,
   AI_PANEL_SESSION_REQUEST_EVENT,
   type AiPanelAction,
   type AiPanelSessionSnapshot,
-} from '../application/aiPanelWindow';
-import { buildLprJobUpdateFromProgress, shouldApplyLprProgress } from '../application/lprProgress';
-import { INTERACTIVE_RANGE_LATENCY_BUDGET_MS, resolveLprRangeAnalysisIntent } from '../application/lprAnalysisIntent';
+} from '../../modules/editor/application/aiPanelWindow';
+import { buildLprJobUpdateFromProgress, shouldApplyLprProgress } from '../../modules/editor/application/lprProgress';
+import { INTERACTIVE_RANGE_LATENCY_BUDGET_MS, resolveLprRangeAnalysisIntent } from '../../modules/editor/application/lprAnalysisIntent';
 import {
   PLATE_ACTION_EVENT,
   PLATE_SESSION_REQUEST_EVENT,
   resolveLprDisplayCandidate,
   type PlateWindowAction,
   type PlateWindowSessionSnapshot,
-} from '../application/plateWindow';
-import { emitAiPanelWindowSession, openAiPanelWindow } from '../infrastructure/aiPanelApi';
-import { emitPlateWindowLiveTransport, emitPlateWindowSession, openPlateWindow } from '../infrastructure/plateWindowApi';
+} from '../../modules/editor/application/plateWindow';
+import { emitAiPanelWindowSession, openAiPanelWindow } from '../../modules/editor/infrastructure/aiPanelApi';
+import { emitPlateWindowLiveTransport, emitPlateWindowSession, openPlateWindow } from '../../modules/editor/infrastructure/plateWindowApi';
 import type {
   AiEvidenceProgress,
   AiEvidenceResponse,
@@ -95,22 +95,22 @@ import type {
   LprTargetTrack,
   LprTrackedRegion,
   TimelineIntervalSelection,
-} from '../../../shared/contracts';
+} from '../../shared/contracts';
 import {
   getPlaybackPreviewState,
   type PlaybackPreviewState,
   type PlaybackTimelineEntry,
   usePlaybackController,
-} from '../application/usePlaybackController';
+} from '../../modules/editor/application/usePlaybackController';
 import {
   buildLiveTransportSnapshot,
   createLiveTransportStore,
   type LiveTransportSnapshot,
   type LiveTransportStore,
-} from '../application/liveTransport';
-import { EDITOR_ENV } from '../../../shared/config/editorEnv';
-import { useEditorSessionController } from '../../../vnext/editor/application/useEditorSessionController';
-import styles from './MediaEditorWorkspace.module.css';
+} from '../../modules/editor/application/liveTransport';
+import { EDITOR_ENV } from '../../shared/config/editorEnv';
+import { useEditorSessionController } from '../../vnext/editor/application/useEditorSessionController';
+import styles from './MainWorkspace.module.css';
 
 const log = createLogger('MediaEditorWorkspace');
 
@@ -265,11 +265,11 @@ const LprPreviewOverlayLayer = React.memo(function LprPreviewOverlayLayer({
   );
 
   const overlayEntries = useMemo<LprOverlayTargetEntry[]>(() => {
-    const targetLabels = new Map(targetTracks.map((track) => [track.id, track.label]));
+    const targetLabels = new Map(targetTracks.map((track: any) => [track.id, track.label]));
     return [
       ...targetTracks
-        .filter((track) => track.id !== analysisTrack?.id)
-        .flatMap((track) => {
+        .filter((track: any) => track.id !== analysisTrack?.id)
+        .flatMap((track: any) => {
           const frame = findClosestTrackFrame(track, liveTransport.playheadMs, EDITOR_ENV.lprTargetOverlayToleranceMs);
           if (!frame) {
             return [];
@@ -562,7 +562,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
   const lprBusy = lprJob.status === 'queued' || lprJob.status === 'running';
   const lprSelectedTargetAnchor = lprState.selectedTargetAnchor;
   const lprSelectedTrack = useMemo(
-    () => lprState.targetTracks.find((track) => track.id === lprState.selectedTargetTrackId) ?? null,
+    () => lprState.targetTracks.find((track: any) => track.id === lprState.selectedTargetTrackId) ?? null,
     [lprState.selectedTargetTrackId, lprState.targetTracks],
   );
   const lprAnalysisTrack = lprState.analysisTrack;
@@ -1510,7 +1510,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
       ?? response.targetSelection?.selectedTrackId
       ?? response.projection.analysisTrack?.id
       ?? currentLprState.selectedTargetTrackId;
-    const projectedSelectedTrack = projectedTargetTracks.find((track) => track.id === selectedTargetTrackId) ?? null;
+    const projectedSelectedTrack = projectedTargetTracks.find((track: any) => track.id === selectedTargetTrackId) ?? null;
     const selectedTargetAnchor = projectedSelectedTrack
       ? buildLprTargetAnchor(projectedSelectedTrack, response.primaryAnchor?.timeMs ?? currentLprState.selectedTargetAnchor?.timeMs ?? null)
       : response.projection.analysisTrack
@@ -1975,7 +1975,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
   };
 
   const handleSelectTargetTrack = useCallback((targetTrackId: string, preferredTimeMs?: number | null) => {
-    const targetTrack = lprState.targetTracks.find((track) => track.id === targetTrackId) ?? null;
+    const targetTrack = lprState.targetTracks.find((track: any) => track.id === targetTrackId) ?? null;
     const targetTimeMs = Math.max(0, Math.round(preferredTimeMs ?? livePlayheadMsRef.current));
     const anchor = buildLprTargetAnchor(targetTrack, targetTimeMs);
 

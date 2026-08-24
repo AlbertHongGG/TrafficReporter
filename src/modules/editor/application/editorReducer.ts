@@ -151,7 +151,7 @@ export function editorReducer(state: EditorWorkspaceState, action: EditorAction)
            return {
              ...remoteFile,
              playheadMs: 0,
-             zoom: DEFAULT_ZOOM,
+             zoom: 1,
              previewVolume: 0.85,
              previewMuted: false,
              isPlaying: false,

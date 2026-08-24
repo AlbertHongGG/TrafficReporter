@@ -1,6 +1,6 @@
 import React from 'react';
 import { AlertCircle } from 'lucide-react';
-import { createLogger, serializeError } from '../utils/logger';
+import { createLogger, serializeError } from '../../utils/logger';
 
 const log = createLogger('AppErrorBoundary');
 

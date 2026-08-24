@@ -21,7 +21,7 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { Select } from '../../../components/Select/Select';
+import { Select } from '../common/Select/Select';
 import {
   PLATE_LIVE_TRANSPORT_EVENT,
   resolveLprDisplayCandidate,
@@ -31,16 +31,16 @@ import {
   type PlateWindowLiveTransport,
   type RevisionedPlateWindowSessionSnapshot,
   type PlateWindowSessionSnapshot,
-} from '../application/plateWindow';
-import { buildJobTimingSnapshot, formatElapsedDuration } from '../application/jobTiming';
-import { requestPlateWindowSession, sendPlateWindowAction } from '../infrastructure/plateWindowApi';
-import { clamp, formatRulerLabel, formatRulerLabelWithMilliseconds } from '../domain/model';
-import { buildDefaultLprState } from '../domain/lprState';
-import type { LprFrameSample, LprJobState, LprPlateCandidate, LprReviewState, LprTargetTrack, TimelineIntervalSelection } from '../../../shared/contracts';
-import { getLprAnalysisProfileLabel, getLprAnalysisProfiles } from '../../../shared/lprAnalysisProfiles';
-import { createLogger, getErrorSummary, serializeError } from '../../../utils/logger';
-import { shouldApplyRevisionedWindowSnapshot, unwrapRevisionedWindowSnapshot } from '../../../vnext/windowing/revisionedSnapshot';
-import styles from './PlateWindow.module.css';
+} from '../../modules/editor/application/plateWindow';
+import { buildJobTimingSnapshot, formatElapsedDuration } from '../../modules/editor/application/jobTiming';
+import { requestPlateWindowSession, sendPlateWindowAction } from '../../modules/editor/infrastructure/plateWindowApi';
+import { clamp, formatRulerLabel, formatRulerLabelWithMilliseconds } from '../../modules/editor/domain/model';
+import { buildDefaultLprState } from '../../modules/editor/domain/lprState';
+import type { LprFrameSample, LprJobState, LprPlateCandidate, LprReviewState, LprTargetTrack, TimelineIntervalSelection } from '../../shared/contracts';
+import { getLprAnalysisProfileLabel, getLprAnalysisProfiles } from '../../shared/lprAnalysisProfiles';
+import { createLogger, getErrorSummary, serializeError } from '../../utils/logger';
+import { shouldApplyRevisionedWindowSnapshot, unwrapRevisionedWindowSnapshot } from '../../vnext/windowing/revisionedSnapshot';
+import styles from './LprWindow.module.css';
 
 const log = createLogger('PlateWindow');
 
@@ -689,8 +689,8 @@ export const PlateWindow: React.FC = () => {
                   size="compact"
                   ariaLabel="Analysis profile"
                   value={lprState.selectedAnalysisProfileId}
-                  onChange={(analysisProfileId) => void sendAction({ type: 'set-analysis-profile', analysisProfileId })}
-                  options={analysisProfiles.map((profile) => ({
+                  onChange={(analysisProfileId: string) => void sendAction({ type: 'set-analysis-profile', analysisProfileId })}
+                  options={analysisProfiles.map((profile: any) => ({
                     value: profile.id,
                     label: profile.label,
                     description: compactProfileDescription(profile.id, profile.description),
@@ -836,7 +836,7 @@ export const PlateWindow: React.FC = () => {
                                 </div>
                                 {reasonTokens.length > 0 && (
                                   <div className={styles.evidenceReasonRow}>
-                                    {reasonTokens.map((reason) => (
+                                    {reasonTokens.map((reason: any) => (
                                       <span key={`${entry.sample.id}-${reason}`} className={styles.evidenceReasonChip}>{reason}</span>
                                     ))}
                                   </div>
@@ -898,7 +898,7 @@ export const PlateWindow: React.FC = () => {
                                         <span className={styles.evidenceMetaTitle}>Candidates</span>
                                       </div>
                                       <div className={styles.evidenceCandidateList}>
-                                        {evidenceCandidates(entry.sample).map((candidate, idx) => {
+                                        {evidenceCandidates(entry.sample).map((candidate: any, idx: number) => {
                                           const isTop = idx === 0;
                                           const percent = formatConfidence(candidate.confidence);
                                           return (
