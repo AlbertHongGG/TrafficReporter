@@ -112,6 +112,12 @@ import {
 import { EDITOR_ENV } from '../../shared/config/editorEnv';
 import { useEditorSessionController } from '../../vnext/editor/application/useEditorSessionController';
 import styles from './MainWorkspace.module.css';
+import { EditorProvider } from './EditorContext';
+import { Toolbar } from './toolbar/Toolbar';
+import { MediaBinPanel } from './media-bin/MediaBinPanel';
+import { TransportRow } from './transport-row/TransportRow';
+import { VideoPlayerPanel } from './video-player/VideoPlayerPanel';
+import { Timeline } from './timeline/Timeline';
 
 const log = createLogger('MediaEditorWorkspace');
 
@@ -462,6 +468,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
   const [timelineScrollLeft, setTimelineScrollLeft] = useState(0);
   const [interaction, setInteraction] = useState<ClipInteraction | null>(null);
   const [timelineScrub, setTimelineScrub] = useState<TimelineScrubState | null>(null);
+  const [isScrubbing, setIsScrubbing] = useState(false);
   const [markerInteraction, setMarkerInteraction] = useState<MarkerInteraction | null>(null);
   const [previewViewport, setPreviewViewport] = useState<PreviewViewport>({ left: 0, top: 0, width: 0, height: 0 });
   const [livePreviewState, setLivePreviewState] = useState<PlaybackPreviewState>({
@@ -2381,7 +2388,8 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
   } as React.CSSProperties;
 
   return (
-    <div className={styles.editor}>
+    <EditorProvider value={{ state, dispatch, activeFile: activeFile ?? undefined }}>
+      <div className={styles.editor}>
       <Toolbar
         activeFile={activeFile ?? null}
         onExportCurrentFrame={handleExportCurrentFrame}
@@ -2420,60 +2428,20 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
         />
 
         <main className={styles.mainPanel}>
-          <section className={styles.previewPanel}>
-            <div ref={previewContainerRef} className={styles.previewContainer}>
-              <video
-                ref={previewVideoRef}
-                className={`${styles.previewVideo} ${!previewState.hasActiveVideo ? styles.previewVideoHidden : ''}`}
-                playsInline
-                preload="auto"
-              />
-
-              {!previewState.hasActiveVideo && (
-                <div className={styles.previewPlaceholder}>
-                  <Film size={32} />
-                </div>
-              )}
-
-              {activeFile && previewViewport.width > 0 && (
-                <div className={styles.previewMarkerLayer}>
-                  <LprPreviewOverlayLayer
-                    previewViewport={previewViewport}
-                    targetTracks={lprState.targetTracks}
-                    analysisTrack={lprAnalysisTrack}
-                    selectedTargetTrackId={lprState.selectedTargetTrackId}
-                    liveTransportStore={liveTransportStore}
-                    onSelectTrack={handleSelectTargetTrack}
-                  />
-                  {activeFile.markerRect && markerStyle && (
-                    <div
-                      className={styles.previewMarker}
-                      style={markerStyle}
-                      onPointerDown={handleMarkerPointerDown}
-                    >
-                      <button
-                        type="button"
-                        className={styles.previewMarkerResize}
-                        onPointerDown={handleMarkerResizePointerDown}
-                        aria-label="Resize marker"
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div className={styles.previewTools}>
-                <button type="button" className={styles.previewToolButton} onClick={handleCreateMarker} disabled={!activeFile}>
-                  <Square size={14} />
-                  {activeFile?.markerRect ? 'Marker' : 'Add Marker'}
-                </button>
-                <button type="button" className={styles.previewToolButton} onClick={() => dispatch({ type: 'clear-marker' })} disabled={!activeFile?.markerRect}>
-                  <X size={14} />
-                  Clear
-                </button>
-              </div>
-            </div>
-          </section>
+          <VideoPlayerPanel
+            previewContainerRef={previewContainerRef}
+            previewVideoRef={previewVideoRef}
+            previewState={previewState}
+            previewViewport={previewViewport}
+            lprState={lprState}
+            lprAnalysisTrack={lprAnalysisTrack}
+            liveTransportStore={liveTransportStore}
+            handleSelectTargetTrack={handleSelectTargetTrack}
+            markerStyle={markerStyle}
+            handleMarkerPointerDown={handleMarkerPointerDown}
+            handleMarkerResizePointerDown={handleMarkerResizePointerDown}
+            handleCreateMarker={handleCreateMarker}
+          />
 
           <TransportRow
             currentTimecodeRef={currentTimecodeRef}
@@ -2483,76 +2451,20 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
             togglePlay={togglePlay}
           />
 
-          <section className={styles.timelinePanel}>
-            <div className={styles.timelineScroller} ref={scrollRef}>
-              <div
-                ref={timelineCanvasRef}
-                className={styles.timelineCanvas}
-                style={timelineCanvasStyle}
-              >
-                <div className={styles.rulerRow}>
-                  <div className={styles.stickyCell}>
-                    <span className={styles.rulerLabel}>Timeline</span>
-                    <span className={styles.rulerMeta}>{formatRulerLabel(rulerStepMs)}</span>
-                  </div>
-                  <button type="button" className={styles.rulerSurface} onPointerDown={handleTimelineScrubStart}>
-                    {rulerTicks.map((tickMs) => (
-                      <div key={tickMs} className={styles.rulerTick} style={{ left: `${msToPx(tickMs, currentZoom)}px` }}>
-                        <span>{formatRulerLabel(tickMs)}</span>
-                      </div>
-                    ))}
-                    <div className={styles.playhead} />
-                  </button>
-                </div>
-
-                <div className={styles.trackRow}>
-                  <div className={styles.stickyCell}>
-                    <div className={styles.trackLabelBlock}>
-                      <span>{activeClips.length} clip(s)</span>
-                    </div>
-                    <span className={styles.trackHint}>{activeFile ? formatTransportTime(activeFile.asset.durationMs) : '--:--'}</span>
-                  </div>
-                  <div
-                    className={styles.trackLane}
-                    onPointerDown={handleTimelineScrubStart}
-                    style={{ '--grid-step': `${msToPx(rulerStepMs, currentZoom)}px` } as React.CSSProperties}
-                  >
-                    <div className={styles.playhead} />
-                    {timelineClips.map(({ clip, leftPx, widthPx }) => (
-                      <div
-                        key={clip.id}
-                        className={`${styles.clip} ${activeFile?.selectedClipIds.includes(clip.id) ? styles.clipSelected : ''} ${clip.muted ? styles.clipMuted : ''}`}
-                        style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
-                        role="button"
-                        tabIndex={0}
-                        aria-pressed={activeFile?.selectedClipIds.includes(clip.id)}
-                        onPointerDown={(event) => handleClipPointerDown(event, clip)}
-                      >
-                        <button
-                          type="button"
-                          className={`${styles.trimHandle} ${styles.trimHandleStart}`}
-                          onPointerDown={(event) => handleTrimStartPointerDown(event, clip)}
-                        />
-                        <div className={styles.clipBody}>
-                          <span className={styles.clipIcon}><Film size={12} /></span>
-                          <span className={styles.clipText}>{activeFile?.asset.name ?? 'Clip'}</span>
-                          <span className={styles.clipDuration}>{formatTransportTime(clipDurationMs(clip))}</span>
-                        </div>
-                        <button
-                          type="button"
-                          className={`${styles.trimHandle} ${styles.trimHandleEnd}`}
-                          onPointerDown={(event) => handleTrimEndPointerDown(event, clip)}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
+          <Timeline
+            activeFile={activeFile ?? null}
+            activeClips={activeClips}
+            timelineDurationMs={timelineDurationMs}
+            liveTransportStore={liveTransportStore}
+            dispatch={dispatch}
+            seekTo={seekTo}
+            stopPlayback={stopPlayback}
+            onScrubStateChange={setIsScrubbing}
+          />
         </main>
       </div>
 
     </div>
+    </EditorProvider>
   );
 };

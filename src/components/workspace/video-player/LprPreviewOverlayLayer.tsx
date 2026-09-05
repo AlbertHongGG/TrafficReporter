@@ -1,10 +1,10 @@
-﻿import React, { useMemo, useSyncExternalStore } from 'react';
-import { clampNormalizedRect, findClosestTrackFrame, resolveTrackFrameAtPlayhead } from '../../modules/editor/domain/model';
-import { EDITOR_ENV } from '../../shared/config/editorEnv';
-import type { LprTargetTrack, LprTrackedRegion } from '../../shared/contracts';
-import type { LiveTransportStore } from '../../modules/editor/application/liveTransport';
+import React, { useMemo, useSyncExternalStore } from 'react';
+import { clampNormalizedRect, findClosestTrackFrame, resolveTrackFrameAtPlayhead } from '../../../modules/editor/domain/model';
+import { EDITOR_ENV } from '../../../shared/config/editorEnv';
+import type { LprTargetTrack, LprTrackedRegion } from '../../../shared/contracts';
+import type { LiveTransportStore } from '../../../modules/editor/application/liveTransport';
 import type { PreviewViewport } from './useVideoViewport';
-import styles from '../workspace/MainWorkspace.module.css';
+import styles from '../MainWorkspace.module.css';
 
 type LprOverlayTargetEntry = {
   trackId: string;

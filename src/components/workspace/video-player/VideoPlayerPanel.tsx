@@ -1,12 +1,12 @@
-﻿import React from 'react';
+import React from 'react';
 import { Film, Square, X } from 'lucide-react';
-import { useEditorContext } from '../workspace/EditorContext';
+import { useEditorContext } from '../EditorContext';
 import { LprPreviewOverlayLayer } from './LprPreviewOverlayLayer';
-import type { PlaybackPreviewState } from '../../modules/editor/application/usePlaybackController';
-import type { LiveTransportStore } from '../../modules/editor/application/liveTransport';
-import type { LprSessionState, LprTargetTrack } from '../../shared/contracts';
+import type { PlaybackPreviewState } from '../../../modules/editor/application/usePlaybackController';
+import type { LiveTransportStore } from '../../../modules/editor/application/liveTransport';
+import type { LprSessionState, LprTargetTrack } from '../../../shared/contracts';
 import type { PreviewViewport } from './useVideoViewport';
-import styles from '../workspace/MainWorkspace.module.css';
+import styles from '../MainWorkspace.module.css';
 
 interface VideoPlayerPanelProps {
   previewContainerRef: React.RefObject<HTMLDivElement | null>;

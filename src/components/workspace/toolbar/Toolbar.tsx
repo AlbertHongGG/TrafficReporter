@@ -7,8 +7,8 @@ import {
   Import,
   Target,
 } from 'lucide-react';
-import type { EditorFileState } from '../../modules/editor/domain/model';
-import styles from '../workspace/MainWorkspace.module.css';
+import type { EditorFileState } from '../../../modules/editor/domain/model';
+import styles from '../MainWorkspace.module.css';
 
 interface ToolbarProps {
   activeFile: EditorFileState | null;

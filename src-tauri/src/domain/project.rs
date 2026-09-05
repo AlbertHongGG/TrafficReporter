@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::contracts::{RenderProfilePayload, TimelineClipPayload, TimelineTrackPayload, VideoMarkerRectPayload};
+use crate::contracts::{RenderProfilePayload, TimelineClipPayload, TimelineTrackPayload};
 use super::lpr::EditorAnalysisState;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

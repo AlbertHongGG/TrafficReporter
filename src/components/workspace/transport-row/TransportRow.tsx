@@ -9,9 +9,9 @@ import {
   Volume2,
   VolumeX,
 } from 'lucide-react';
-import { useEditorContext } from '../workspace/EditorContext';
-import { formatRulerLabel, getTimelineDuration } from '../../modules/editor/domain/model';
-import styles from '../workspace/MainWorkspace.module.css';
+import { useEditorContext } from '../EditorContext';
+import { formatRulerLabel, getTimelineDuration } from '../../../modules/editor/domain/model';
+import styles from '../MainWorkspace.module.css';
 
 interface TransportRowProps {
   currentTimecodeRef: React.RefObject<HTMLSpanElement | null>;

@@ -20,6 +20,7 @@ pub struct Job {
     pub error_message: Option<String>,
 }
 
+#[allow(dead_code)]
 impl Job {
     pub fn new(id: String) -> Self {
         Self {

@@ -1,4 +1,4 @@
-import { editorReducer, initialEditorState, type EditorAction } from '../../../modules/editor/application/editorReducer';
+import { editorReducer, createInitialEditorState, type EditorAction } from '../../../modules/editor/application/editorReducer';
 import type { EditorWorkspaceState } from '../../../modules/editor/domain/model';
 
 export interface EditorSessionStoreState {
@@ -8,7 +8,7 @@ export interface EditorSessionStoreState {
 }
 
 export function createEditorSessionStoreState(
-  workspace: EditorWorkspaceState = initialEditorState,
+  workspace: EditorWorkspaceState = createInitialEditorState(),
   updatedAt = new Date().toISOString(),
 ): EditorSessionStoreState {
   return {

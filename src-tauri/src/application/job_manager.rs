@@ -7,6 +7,7 @@ pub struct JobManager {
     cancel_token: Arc<AtomicBool>,
 }
 
+#[allow(dead_code)]
 impl JobManager {
     pub fn new() -> Self {
         Self {

@@ -11,21 +11,29 @@ interface EditorContextValue {
 
 const EditorContext = createContext<EditorContextValue | null>(null);
 
-export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { state, dispatch } = useEditorSessionController();
+export const EditorProvider: React.FC<{
+  children: React.ReactNode;
+  value?: EditorContextValue;
+}> = ({ children, value: externalValue }) => {
+  const internal = useEditorSessionController();
 
-  const activeFile = useMemo(() => {
-    return state.files.find(f => f.id === state.activeFileId);
-  }, [state.files, state.activeFileId]);
+  const internalActiveFile = useMemo(() => {
+    return internal.state?.files?.find(f => f.id === internal.state?.activeFileId);
+  }, [internal.state?.files, internal.state?.activeFileId]);
 
-  const value = useMemo(() => ({
-    state,
-    dispatch,
-    activeFile,
-  }), [state, dispatch, activeFile]);
+  const contextValue = useMemo(() => {
+    if (externalValue) {
+      return externalValue;
+    }
+    return {
+      state: internal.state,
+      dispatch: internal.dispatch,
+      activeFile: internalActiveFile,
+    };
+  }, [externalValue, internal.state, internal.dispatch, internalActiveFile]);
 
   return (
-    <EditorContext.Provider value={value}>
+    <EditorContext.Provider value={contextValue}>
       {children}
     </EditorContext.Provider>
   );

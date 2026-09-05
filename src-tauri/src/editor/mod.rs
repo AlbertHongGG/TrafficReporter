@@ -6,18 +6,16 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
 use tauri::Emitter;
-use crate::infrastructure::python_client::{invoke_lpr_runtime, invoke_lpr_runtime_with_progress, terminate_lpr_runtime_process};
+use crate::infrastructure::python_client::terminate_lpr_runtime_process;
 
 use crate::contracts::{
-    AiEvidenceProgressPayload, AiEvidenceRequestPayload, AiEvidenceResponsePayload,
+    AiEvidenceProgressPayload, AiEvidenceResponsePayload,
     FrameExportRequest, LprAnalysisProvenancePayload,
     LprEvidenceExportRequestPayload, LprEvidenceExportResponsePayload,
-    LprFrameAnalysisRequestPayload, LprFrameAnalysisResponsePayload,
-    LprIntervalAnalysisRequestPayload, LprIntervalAnalysisResponsePayload,
     LprProgressPayload,
     OutputCompressionModePayload,
     LprReviewStatePayload,
-    LprTargetScanRequestPayload, LprTargetScanResponsePayload, MediaProbePayload,
+    MediaProbePayload,
     VideoMarkerRectPayload,
 };
 use crate::media::{

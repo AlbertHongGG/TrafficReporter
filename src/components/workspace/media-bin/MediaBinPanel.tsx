@@ -1,8 +1,8 @@
 import React from 'react';
 import { AlertCircle, Film, Import, Link2, Trash2 } from 'lucide-react';
-import { formatTransportTime, type EditorFileState } from '../../modules/editor/domain/model';
-import { useEditorContext } from './EditorContext';
-import styles from './MainWorkspace.module.css';
+import { formatTransportTime, type EditorFileState } from '../../../modules/editor/domain/model';
+import { useEditorContext } from '../EditorContext';
+import styles from '../MainWorkspace.module.css';
 
 interface MediaBinPanelProps {
   isExternalDropActive: boolean;
