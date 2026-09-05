@@ -122,7 +122,7 @@ export async function buildEditorAsset(path: string): Promise<EditorAsset> {
   try {
     thumbnailUrl = await captureVideoThumbnail(url, durationMs);
   } catch {
-    thumbnailUrl = null;
+    // Ignore thumbnail generation errors; fallback to null
   }
 
   return {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import {
   commands,
@@ -12,7 +12,9 @@ import { createEditorSessionStoreState, reduceEditorSessionStoreState } from './
 export function useEditorSessionController() {
   const [session, setSession] = useState(() => createEditorSessionStoreState());
   const latestSessionRef = useRef(session);
-  latestSessionRef.current = session;
+  useLayoutEffect(() => {
+    latestSessionRef.current = session;
+  });
 
   useEffect(() => {
     // 1. Fetch initial state from Rust
