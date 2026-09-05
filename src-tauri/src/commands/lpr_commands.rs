@@ -3,6 +3,7 @@ use crate::application::lpr_service::LprService;
 use crate::contracts::LprRuntimeStatusPayload;
 
 #[tauri::command]
+#[specta::specta]
 pub async fn get_lpr_runtime_status(
     app_handle: AppHandle,
 ) -> Result<LprRuntimeStatusPayload, String> {
@@ -12,6 +13,7 @@ pub async fn get_lpr_runtime_status(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cancel_lpr_runtime_job(
     app_handle: AppHandle,
 ) -> Result<bool, String> {
@@ -19,6 +21,7 @@ pub fn cancel_lpr_runtime_job(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn scan_lpr_targets(
     app_handle: AppHandle,
     request: crate::contracts::LprTargetScanRequestPayload,
@@ -30,6 +33,7 @@ pub async fn scan_lpr_targets(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn analyze_lpr_frame(
     app_handle: AppHandle,
     request: crate::contracts::LprFrameAnalysisRequestPayload,
@@ -41,6 +45,7 @@ pub async fn analyze_lpr_frame(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn analyze_lpr_interval(
     app_handle: AppHandle,
     request: crate::contracts::LprIntervalAnalysisRequestPayload,
@@ -52,6 +57,7 @@ pub async fn analyze_lpr_interval(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn analyze_ai_evidence(
     app_handle: AppHandle,
     request: crate::contracts::AiEvidenceRequestPayload,

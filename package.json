@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "bindings:generate": "cargo run --bin export_bindings --manifest-path src-tauri/Cargo.toml",
     "generate:lpr-contracts": "node schemas/lpr/generate-contracts.mjs",
     "check:lpr-contracts": "node schemas/lpr/generate-contracts.mjs --check",
     "dev": "npm run generate:lpr-contracts && vite",

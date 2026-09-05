@@ -265,8 +265,8 @@ fn parse_json_stream_bitrate_kbps(stream: &serde_json::Value) -> Option<u32> {
     u32::try_from((bitrate_bps.saturating_add(500)) / 1000).ok()
 }
 
-fn seconds_from_ms(value: u64) -> String {
-    format!("{:.3}", value as f64 / 1000.0)
+fn seconds_from_ms(value: f64) -> String {
+    format!("{:.3}", value / 1000.0)
 }
 
 fn runtime_data_root() -> Result<PathBuf, String> {
@@ -368,14 +368,14 @@ fn probe_video_stream_profile(path: &str) -> Result<(u32, u32, u32), String> {
 
 fn build_ai_evidence_clip_args(
     source_path: &str,
-    start_ms: u64,
-    end_ms: u64,
+    start_ms: f64,
+    end_ms: f64,
     output_path: &Path,
     compression_mode: OutputCompressionModePayload,
     audio_bitrate_kbps: Option<u32>,
     stream_profile: (u32, u32, u32),
 ) -> Vec<String> {
-    let duration_ms = end_ms.saturating_sub(start_ms);
+    let duration_ms = (end_ms - start_ms).max(0.0);
     let (width, height, fps) = stream_profile;
     let settings = resolve_video_compression_settings(
         compression_mode,
@@ -384,6 +384,7 @@ fn build_ai_evidence_clip_args(
         height,
         fps,
     );
+
     let mut args = vec![
         "-y".to_string(),
         "-hide_banner".to_string(),
@@ -400,6 +401,7 @@ fn build_ai_evidence_clip_args(
         "-map".to_string(),
         "0:a?".to_string(),
     ];
+
     append_h264_aac_codec_args(
         &mut args,
         settings,
@@ -412,8 +414,8 @@ fn build_ai_evidence_clip_args(
 
 pub fn export_ai_evidence_clip(
     source_path: &str,
-    start_ms: u64,
-    end_ms: u64,
+    start_ms: f64,
+    end_ms: f64,
     output_path: &Path,
     compression_mode: OutputCompressionModePayload,
     audio_bitrate_kbps: Option<u32>,
@@ -560,7 +562,7 @@ fn probe_with_ffprobe(path: &str) -> Result<MediaProbePayload, String> {
     }
 
     Ok(MediaProbePayload {
-        duration_ms,
+        duration_ms: duration_ms as f64,
         has_video,
         has_audio,
         fps,
@@ -638,7 +640,7 @@ fn probe_with_ffmpeg(path: &str) -> Result<MediaProbePayload, String> {
     }
 
     Ok(MediaProbePayload {
-        duration_ms: duration_ms.max(1000),
+        duration_ms: (duration_ms.max(1000)) as f64,
         has_video,
         has_audio,
         fps,
@@ -648,7 +650,6 @@ fn probe_with_ffmpeg(path: &str) -> Result<MediaProbePayload, String> {
     })
 }
 
-#[tauri::command]
 pub async fn probe_media_source(path: String) -> Result<MediaProbePayload, String> {
     let file_name = Path::new(&path)
         .file_name()
@@ -893,7 +894,6 @@ fn build_evidence_source_frame_path(
     bundle_dir.join("source-frame.png")
 }
 
-#[tauri::command]
 pub fn save_generated_media_asset(source_path: String, output_path: String) -> Result<(), String> {
     let source_path = PathBuf::from(source_path);
     if !source_path.exists() {
@@ -913,7 +913,6 @@ pub fn save_generated_media_asset(source_path: String, output_path: String) -> R
     Ok(())
 }
 
-#[tauri::command]
 pub fn export_frame_image(request: FrameExportRequest) -> Result<(), String> {
     export_frame_image_internal(&request, StillImageOutputTarget::FrameExport)
 }
@@ -930,7 +929,6 @@ pub(crate) fn terminate_runtime_for_app_exit(
     terminate_lpr_runtime_process(app_handle, "app-exit")
 }
 
-#[tauri::command]
 pub async fn export_lpr_evidence(
     app_handle: tauri::AppHandle,
     request: LprEvidenceExportRequestPayload,
@@ -1008,8 +1006,8 @@ pub async fn export_lpr_evidence(
             json_path: json_path.to_string_lossy().to_string(),
             image_path: image_path.to_string_lossy().to_string(),
             bundle_dir: bundle_dir.to_string_lossy().to_string(),
-            exported_file_count,
-            decision_frame_count: decision_frames.len(),
+            exported_file_count: exported_file_count as u32,
+            decision_frame_count: decision_frames.len() as u32,
         })
     })
     .await

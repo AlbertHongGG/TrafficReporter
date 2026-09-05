@@ -183,11 +183,14 @@ function renderRust(spec) {
       continue;
     }
     if (definition.kind === 'object') {
-      chunks.push('#[derive(Debug, Clone, Serialize, Deserialize)]');
+      chunks.push('#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]');
       chunks.push('#[serde(rename_all = "camelCase")]');
       chunks.push(`pub struct ${definition.rustName ?? definition.name} {`);
       for (const field of definition.fields ?? []) {
         const rustFieldName = toRustFieldName(field.name);
+        if (field.name === 'diagnostics') {
+          chunks.push('    #[specta(type = Option<specta_typescript::Any>)]');
+        }
         chunks.push(`    pub ${rustFieldName}: ${rustTypeForField(field, definitionMap)},`);
       }
       chunks.push('}', '');

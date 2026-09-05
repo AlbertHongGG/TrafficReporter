@@ -64,9 +64,10 @@ function findClip(fileState: EditorFileState, clipId: string) {
 }
 
 function sanitizeClipForAsset(clip: TimelineClip, asset: EditorAsset, trackId: string): TimelineClip {
-  const inPointMs = Math.min(Math.max(0, clip.inPointMs), Math.max(0, asset.durationMs - MIN_CLIP_DURATION_MS));
+  const assetDurationMs = asset.durationMs ?? 0;
+  const inPointMs = Math.min(Math.max(0, clip.inPointMs), Math.max(0, assetDurationMs - MIN_CLIP_DURATION_MS));
   const outPointMs = Math.min(
-    asset.durationMs,
+    assetDurationMs,
     Math.max(inPointMs + MIN_CLIP_DURATION_MS, clip.outPointMs),
   );
 
@@ -253,7 +254,7 @@ export function trimClipEnd(
     return fileState;
   }
 
-  const maxByAsset = fileState.asset.durationMs;
+  const maxByAsset = fileState.asset.durationMs ?? 0;
   const next = nextClip(fileState, clip);
   const maxByTrack = next
     ? clip.inPointMs + Math.max(MIN_CLIP_DURATION_MS, next.startMs - clip.startMs)

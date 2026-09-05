@@ -127,9 +127,9 @@
       "kind": "object",
       "fields": [
         { "name": "strategy", "type": "string" },
-        { "name": "referenceTimeMs", "type": "number", "rustType": "u64" },
+        { "name": "referenceTimeMs", "type": "number", "rustType": "f64" },
         { "name": "supportFrameCount", "type": "number", "rustType": "u32" },
-        { "name": "supportWindowMs", "type": "number", "rustType": "u64" },
+        { "name": "supportWindowMs", "type": "number", "rustType": "f64" },
         { "name": "supportTimes", "type": "array", "items": "number" },
         { "name": "meanAlignmentScore", "type": "number" },
         { "name": "meanQualityScore", "type": "number" },
@@ -155,7 +155,7 @@
         { "name": "source", "type": "LprDecisionSource" },
         { "name": "candidateId", "type": "string", "nullable": true },
         { "name": "sampleId", "type": "string", "nullable": true },
-        { "name": "frameTimeMs", "type": "number", "rustType": "u64", "nullable": true },
+        { "name": "frameTimeMs", "type": "number", "rustType": "f64", "nullable": true },
         { "name": "stage", "type": "LprArtifactStage", "nullable": true },
         { "name": "supportFrameCount", "type": "number", "rustType": "u32" },
         { "name": "agreementRatio", "type": "number", "nullable": true },
@@ -191,7 +191,7 @@
         { "name": "minIntervalSupportFrames", "type": "number", "rustType": "u32", "optional": true },
         { "name": "minSequencePersistence", "type": "number", "optional": true },
         { "name": "maxSequenceGapCount", "type": "number", "rustType": "u32", "optional": true },
-        { "name": "temporalWindowMs", "type": "number", "rustType": "u64", "optional": true },
+        { "name": "temporalWindowMs", "type": "number", "rustType": "f64", "optional": true },
         { "name": "temporalNeighborCount", "type": "number", "rustType": "u32", "optional": true },
         { "name": "maxEvidenceSampleCount", "type": "number", "rustType": "u32", "optional": true },
         { "name": "anchorBurstCount", "type": "number", "rustType": "u32", "optional": true }
@@ -249,7 +249,7 @@
         { "name": "recognizerBackend", "type": "string", "nullable": true, "optional": true },
         { "name": "temporalEvidenceMode", "type": "string", "nullable": true, "optional": true },
         { "name": "sequenceReviewMode", "type": "string", "nullable": true, "optional": true },
-        { "name": "emittedAtMs", "type": "number", "rustType": "u64" }
+        { "name": "emittedAtMs", "type": "number", "rustType": "f64" }
       ]
     },
     {
@@ -257,8 +257,8 @@
       "kind": "object",
       "rustName": "TimelineIntervalSelectionPayload",
       "fields": [
-        { "name": "startMs", "type": "number", "rustType": "u64" },
-        { "name": "endMs", "type": "number", "rustType": "u64" }
+        { "name": "startMs", "type": "number", "rustType": "f64" },
+        { "name": "endMs", "type": "number", "rustType": "f64" }
       ]
     },
     {
@@ -283,7 +283,7 @@
       "rustName": "LprTrackedRegionPayload",
       "fields": [
         { "name": "id", "type": "string" },
-        { "name": "timeMs", "type": "number", "rustType": "u64" },
+        { "name": "timeMs", "type": "number", "rustType": "f64" },
         { "name": "box", "type": "VideoMarkerRect" },
         { "name": "confidence", "type": "number" },
         { "name": "className", "type": "string" },
@@ -323,7 +323,7 @@
         { "name": "text", "type": "string" },
         { "name": "confidence", "type": "number" },
         { "name": "source", "type": "LprRecognitionSource" },
-        { "name": "frameTimeMs", "type": "number", "rustType": "u64", "nullable": true },
+        { "name": "frameTimeMs", "type": "number", "rustType": "f64", "nullable": true },
         { "name": "countryCode", "type": "string", "nullable": true },
         { "name": "box", "type": "VideoMarkerRect", "nullable": true },
         { "name": "quality", "type": "LprQualityMetrics", "nullable": true },
@@ -336,7 +336,7 @@
       "rustName": "LprFrameSamplePayload",
       "fields": [
         { "name": "id", "type": "string" },
-        { "name": "timeMs", "type": "number", "rustType": "u64" },
+        { "name": "timeMs", "type": "number", "rustType": "f64" },
         { "name": "targetBox", "type": "VideoMarkerRect", "nullable": true },
         { "name": "plateBox", "type": "VideoMarkerRect", "nullable": true },
         { "name": "quality", "type": "LprQualityMetrics", "nullable": true },
@@ -479,7 +479,7 @@
       "rustName": "LprTargetScanRequestPayload",
       "fields": [
         { "name": "sourcePath", "type": "string" },
-        { "name": "timeMs", "type": "number", "rustType": "u64" },
+        { "name": "timeMs", "type": "number", "rustType": "f64" },
         { "name": "markerRect", "type": "VideoMarkerRect", "nullable": true },
         { "name": "targetVehicleKind", "type": "LprVehicleKind" },
         { "name": "requestId", "type": "string", "optional": true, "nullable": true }
@@ -500,7 +500,7 @@
       "rustName": "LprFrameAnalysisRequestPayload",
       "fields": [
         { "name": "sourcePath", "type": "string" },
-        { "name": "timeMs", "type": "number", "rustType": "u64" },
+        { "name": "timeMs", "type": "number", "rustType": "f64" },
         { "name": "markerRect", "type": "VideoMarkerRect", "nullable": true },
         { "name": "targetVehicleKind", "type": "LprVehicleKind" },
         { "name": "selectedTargetBox", "type": "VideoMarkerRect", "nullable": true },
@@ -535,15 +535,15 @@
       "fields": [
         { "name": "sourcePath", "type": "string" },
         { "name": "interval", "type": "TimelineIntervalSelection" },
-        { "name": "anchorTimeMs", "type": "number", "rustType": "u64" },
+        { "name": "anchorTimeMs", "type": "number", "rustType": "f64" },
         { "name": "targetVehicleKind", "type": "LprVehicleKind" },
         { "name": "selectedTargetBox", "type": "VideoMarkerRect", "nullable": true },
         { "name": "selectedTargetTrackId", "type": "string", "optional": true, "nullable": true },
         { "name": "countryHints", "type": "array", "items": "string" },
-        { "name": "sampleEveryMs", "type": "number", "rustType": "u64", "optional": true },
+        { "name": "sampleEveryMs", "type": "number", "rustType": "f64", "optional": true },
         { "name": "maxSamples", "type": "number", "rustType": "u32", "optional": true },
         { "name": "analysisIntent", "type": "LprAnalysisIntent", "optional": true },
-        { "name": "latencyBudgetMs", "type": "number", "rustType": "u64", "optional": true },
+        { "name": "latencyBudgetMs", "type": "number", "rustType": "f64", "optional": true },
         { "name": "analysisProfileId", "type": "LprAnalysisProfileId", "optional": true, "nullable": true },
         { "name": "enableDeveloperDiagnostics", "type": "boolean", "optional": true },
         { "name": "analysisOptions", "type": "LprAnalysisOptions", "optional": true, "nullable": true },
@@ -578,7 +578,7 @@
       "fields": [
         { "name": "outputPath", "type": "string" },
         { "name": "sourcePath", "type": "string" },
-        { "name": "timeMs", "type": "number", "rustType": "u64" },
+        { "name": "timeMs", "type": "number", "rustType": "f64" },
         { "name": "markerRect", "type": "VideoMarkerRect", "nullable": true },
         { "name": "compressionMode", "type": "OutputCompressionMode" },
         { "name": "interval", "type": "TimelineIntervalSelection", "nullable": true },
@@ -598,8 +598,8 @@
         { "name": "jsonPath", "type": "string" },
         { "name": "imagePath", "type": "string" },
         { "name": "bundleDir", "type": "string" },
-        { "name": "exportedFileCount", "type": "number", "rustType": "usize" },
-        { "name": "decisionFrameCount", "type": "number", "rustType": "usize" }
+        { "name": "exportedFileCount", "type": "number", "rustType": "u32" },
+        { "name": "decisionFrameCount", "type": "number", "rustType": "u32" }
       ]
     },
     {
@@ -684,7 +684,7 @@
       "rustName": "AiEvidenceTimelineFrameRefPayload",
       "fields": [
         { "name": "frameId", "type": "string" },
-        { "name": "timeMs", "type": "number", "rustType": "u64" },
+        { "name": "timeMs", "type": "number", "rustType": "f64" },
         { "name": "sequenceIndex", "type": "number", "rustType": "u32" },
         { "name": "label", "type": "string" },
         { "name": "imagePath", "type": "string", "nullable": true },
@@ -701,8 +701,8 @@
         { "name": "toolName", "type": "string" },
         { "name": "inputSummary", "type": "string" },
         { "name": "outputSummary", "type": "string" },
-        { "name": "startedAtMs", "type": "number", "rustType": "u64" },
-        { "name": "completedAtMs", "type": "number", "rustType": "u64" },
+        { "name": "startedAtMs", "type": "number", "rustType": "f64" },
+        { "name": "completedAtMs", "type": "number", "rustType": "f64" },
         { "name": "success", "type": "boolean" }
       ]
     },
@@ -787,9 +787,9 @@
         { "name": "countryHints", "type": "array", "items": "string" },
         { "name": "analysisProfileId", "type": "LprAnalysisProfileId", "optional": true, "nullable": true },
         { "name": "enableDeveloperDiagnostics", "type": "boolean", "optional": true },
-        { "name": "coarseSampleEveryMs", "type": "number", "rustType": "u64", "optional": true },
-        { "name": "fineSampleEveryMs", "type": "number", "rustType": "u64", "optional": true },
-        { "name": "fineWindowPaddingMs", "type": "number", "rustType": "u64", "optional": true },
+        { "name": "coarseSampleEveryMs", "type": "number", "rustType": "f64", "optional": true },
+        { "name": "fineSampleEveryMs", "type": "number", "rustType": "f64", "optional": true },
+        { "name": "fineWindowPaddingMs", "type": "number", "rustType": "f64", "optional": true },
         { "name": "maxKeyframes", "type": "number", "rustType": "u32", "optional": true },
         { "name": "requestId", "type": "string", "optional": true, "nullable": true }
       ]

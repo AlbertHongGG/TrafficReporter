@@ -91,8 +91,8 @@ fn resolved_export_fps(request: &TimelineExportRequest) -> u32 {
     clamp_export_fps(request.profile.fps, source_fps)
 }
 
-fn seconds_from_ms(value: u64) -> String {
-    format!("{:.3}", value as f64 / 1000.0)
+fn seconds_from_ms(value: f64) -> String {
+    format!("{:.3}", value / 1000.0)
 }
 
 fn emit_export_progress(
@@ -175,7 +175,7 @@ fn build_filter_graph(request: &TimelineExportRequest, export_fps: u32) -> Resul
         "pipe:1".to_string(),
     ];
 
-    let total_ms = snapshot.timeline_duration_ms.max(1000);
+    let total_ms = snapshot.timeline_duration_ms.max(1000.0);
     let total_seconds = seconds_from_ms(total_ms);
     let (width, height) = resolved_video_dimensions(request).unwrap_or((0, 0));
 
@@ -249,11 +249,12 @@ fn build_filter_graph(request: &TimelineExportRequest, export_fps: u32) -> Resul
                     .unwrap_or(false)
             })
             .collect();
-        video_clips.sort_by_key(|clip| {
-            (
-                track_order_map.get(clip.track_id.as_str()).copied().unwrap_or_default(),
-                clip.start_ms,
-            )
+        video_clips.sort_by(|a, b| {
+            let order_a = track_order_map.get(a.track_id.as_str()).copied().unwrap_or_default();
+            let order_b = track_order_map.get(b.track_id.as_str()).copied().unwrap_or_default();
+            order_a.cmp(&order_b).then_with(|| {
+                a.start_ms.partial_cmp(&b.start_ms).unwrap_or(std::cmp::Ordering::Equal)
+            })
         });
 
         for (index, clip) in video_clips.iter().enumerate() {
@@ -262,7 +263,7 @@ fn build_filter_graph(request: &TimelineExportRequest, export_fps: u32) -> Resul
                 .ok_or_else(|| "Missing ffmpeg input index for video clip.".to_string())?;
             let clip_label = format!("vclip{}", index);
             let next_label = format!("vbase{}", index + 1);
-            let clip_end_ms = clip.start_ms + clip.out_point_ms.saturating_sub(clip.in_point_ms);
+            let clip_end_ms = clip.start_ms + (clip.out_point_ms - clip.in_point_ms).max(0.0);
 
             filters.push(format!(
                 "[{input}:v]trim=start={trim_start}:end={trim_end},setpts=PTS-STARTPTS+{timeline_start}/TB,scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=0x09090b[{label}]",
@@ -304,11 +305,12 @@ fn build_filter_graph(request: &TimelineExportRequest, export_fps: u32) -> Resul
                     .unwrap_or(false)
         })
         .collect();
-    audio_clips.sort_by_key(|clip| {
-        (
-            track_order_map.get(clip.track_id.as_str()).copied().unwrap_or_default(),
-            clip.start_ms,
-        )
+    audio_clips.sort_by(|a, b| {
+        let order_a = track_order_map.get(a.track_id.as_str()).copied().unwrap_or_default();
+        let order_b = track_order_map.get(b.track_id.as_str()).copied().unwrap_or_default();
+        order_a.cmp(&order_b).then_with(|| {
+            a.start_ms.partial_cmp(&b.start_ms).unwrap_or(std::cmp::Ordering::Equal)
+        })
     });
 
     for (index, clip) in audio_clips.iter().enumerate() {
@@ -321,7 +323,7 @@ fn build_filter_graph(request: &TimelineExportRequest, export_fps: u32) -> Resul
             input = input_index,
             trim_start = seconds_from_ms(clip.in_point_ms),
             trim_end = seconds_from_ms(clip.out_point_ms),
-            delay = clip.start_ms,
+            delay = clip.start_ms.round() as u64,
             label = audio_label,
         ));
         audio_mix_inputs.push(format!("[{label}]", label = audio_label));
@@ -391,10 +393,9 @@ fn codec_args_for_profile(profile: &RenderProfilePayload, video_dimensions: Opti
     }
 }
 
-#[tauri::command]
 pub async fn process_timeline_export(app: AppHandle, request: TimelineExportRequest) -> Result<(), String> {
     let ffmpeg = find_bundled("ffmpeg")?;
-    let total_ms = request.snapshot.timeline_duration_ms.max(1000);
+    let total_ms = request.snapshot.timeline_duration_ms.max(1000.0);
     let format = request.profile.format.to_lowercase();
     let is_video_output = matches!(format.as_str(), "mp4" | "mkv");
 
@@ -465,11 +466,11 @@ pub async fn process_timeline_export(app: AppHandle, request: TimelineExportRequ
         if trimmed == "progress=continue" || trimmed == "progress=end" {
             let progress = (last_out_time_ms as f64 / total_ms as f64).clamp(0.0, 0.98);
             let detail = if last_speed.is_empty() {
-                format!("{} / {}", seconds_from_ms(last_out_time_ms), seconds_from_ms(total_ms))
+                format!("{} / {}", seconds_from_ms(last_out_time_ms as f64), seconds_from_ms(total_ms))
             } else {
                 format!(
                     "{} / {}  •  {}",
-                    seconds_from_ms(last_out_time_ms),
+                    seconds_from_ms(last_out_time_ms as f64),
                     seconds_from_ms(total_ms),
                     last_speed
                 )

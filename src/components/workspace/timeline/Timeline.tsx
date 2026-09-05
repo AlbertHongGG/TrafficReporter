@@ -341,7 +341,7 @@ export const TimelinePanel: React.FC<TimelinePanelProps> = ({
       const clip = activeFile.clips.find((c) => c.id === interaction.clipId);
       if (!clip) return;
       const deltaMs = pxToMs(event.clientX - interaction.startClientX, activeFile.zoom);
-      setInteraction({ ...interaction, previewOutPointMs: clamp(interaction.originOutPointMs + deltaMs, clip.inPointMs + MIN_CLIP_DURATION_MS, activeFile.asset.durationMs) });
+      setInteraction({ ...interaction, previewOutPointMs: clamp(interaction.originOutPointMs + deltaMs, clip.inPointMs + MIN_CLIP_DURATION_MS, activeFile.asset.durationMs ?? 0) });
     };
 
     const handlePointerUp = () => {
@@ -416,7 +416,7 @@ export const TimelinePanel: React.FC<TimelinePanelProps> = ({
               <div className={styles.trackLabelBlock}>
                 <span>{activeClips.length} clip(s)</span>
               </div>
-              <span className={styles.trackHint}>{activeFile ? formatTransportTime(activeFile.asset.durationMs) : '--:--'}</span>
+              <span className={styles.trackHint}>{activeFile ? formatTransportTime(activeFile.asset.durationMs ?? 0) : '--:--'}</span>
             </div>
             <div
               className={styles.trackLane}

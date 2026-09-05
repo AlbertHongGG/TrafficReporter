@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct MediaProbePayload {
-    pub duration_ms: u64,
+    pub duration_ms: f64,
     pub has_video: bool,
     pub has_audio: bool,
     pub fps: Option<u32>,
@@ -12,7 +12,7 @@ pub struct MediaProbePayload {
     pub height: Option<u32>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct TimelineTrackPayload {
     pub id: String,
@@ -20,19 +20,19 @@ pub struct TimelineTrackPayload {
     pub order: i32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct TimelineClipPayload {
     pub id: String,
     pub asset_id: String,
     pub track_id: String,
-    pub start_ms: u64,
-    pub in_point_ms: u64,
-    pub out_point_ms: u64,
+    pub start_ms: f64,
+    pub in_point_ms: f64,
+    pub out_point_ms: f64,
     pub muted: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum OutputCompressionModePayload {
     Standard,
@@ -45,7 +45,7 @@ impl OutputCompressionModePayload {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct RenderProfilePayload {
     pub format: String,
@@ -55,7 +55,7 @@ pub struct RenderProfilePayload {
     pub compression_mode: OutputCompressionModePayload,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct VideoMarkerRectPayload {
     pub x: f64,
@@ -68,7 +68,7 @@ mod lpr_generated;
 
 pub use lpr_generated::*;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportSource {
     pub id: String,
@@ -80,14 +80,14 @@ pub struct ExportSource {
     pub height: Option<u32>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportSnapshotPayload {
     pub file_id: String,
     pub file_name: String,
     pub workspace_name: String,
     pub suggested_name: String,
-    pub timeline_duration_ms: u64,
+    pub timeline_duration_ms: f64,
     pub has_video: bool,
     pub has_audio: bool,
     pub dominant_width: Option<u32>,
@@ -98,7 +98,7 @@ pub struct ExportSnapshotPayload {
     pub render_profile: RenderProfilePayload,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct TimelineExportRequest {
     pub output_path: String,
@@ -106,17 +106,17 @@ pub struct TimelineExportRequest {
     pub snapshot: ExportSnapshotPayload,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct FrameExportRequest {
     pub output_path: String,
     pub source_path: String,
-    pub time_ms: u64,
+    pub time_ms: f64,
     pub marker_rect: Option<VideoMarkerRectPayload>,
     pub compression_mode: OutputCompressionModePayload,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportProgressPayload {
     pub progress: f64,

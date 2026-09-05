@@ -1,6 +1,5 @@
-import { convertFileSrc, invoke } from '@tauri-apps/api/core';
-import type { FrameExportRequest } from '../../../shared/contracts/export';
-import type { EditorAsset, MediaProbeResult } from '../domain/model';
+import { convertFileSrc } from '@tauri-apps/api/core';
+import { commands, type EditorAsset, type FrameExportRequest, type MediaProbePayload } from '../../../types/bindings';
 import { basename, createId, extensionOf } from '../domain/model';
 
 const SUPPORTED_EXTENSIONS = new Set([
@@ -93,17 +92,22 @@ async function captureVideoThumbnail(url: string, durationMs: number) {
   });
 }
 
-export async function probePath(path: string) {
-  return invoke<MediaProbeResult>('probe_media_source', { path });
+export async function probePath(path: string): Promise<MediaProbePayload> {
+  const result = await commands.probeMediaSource(path);
+  if (result.status === 'error') {
+    throw new Error(result.error);
+  }
+  return result.data;
 }
 
-export async function exportFrameImage(request: FrameExportRequest) {
-  return invoke<void>('export_frame_image', {
-    request: {
-      ...request,
-      timeMs: Math.max(0, Math.round(request.timeMs)),
-    },
+export async function exportFrameImage(request: FrameExportRequest): Promise<void> {
+  const result = await commands.exportFrameImage({
+    ...request,
+    timeMs: Math.max(0, Math.round(request.timeMs ?? 0)),
   });
+  if (result.status === 'error') {
+    throw new Error(result.error);
+  }
 }
 
 export async function buildEditorAsset(path: string): Promise<EditorAsset> {
@@ -112,23 +116,27 @@ export async function buildEditorAsset(path: string): Promise<EditorAsset> {
     throw new Error('Only video files are supported in this editor.');
   }
 
+  const durationMs = probe.durationMs ?? 0;
   const url = convertFileSrc(path);
-  const thumbnailUrl = await captureVideoThumbnail(url, probe.durationMs);
+  const thumbnailUrl = await captureVideoThumbnail(url, durationMs);
 
   return {
     id: createId('asset'),
     name: basename(path),
     path,
     kind: 'video',
-    durationMs: probe.durationMs,
+    durationMs,
     hasVideo: probe.hasVideo,
     hasAudio: probe.hasAudio,
-    fps: probe.fps,
-    audioBitrateKbps: probe.audioBitrateKbps,
-    width: probe.width,
-    height: probe.height,
+    fps: probe.fps ?? null,
+    audioBitrateKbps: probe.audioBitrateKbps ?? null,
+    width: probe.width ?? null,
+    height: probe.height ?? null,
     status: 'ready',
     url,
     thumbnailUrl,
+    fileSize: 0,
+    createdAt: '',
+    modifiedAt: '',
   };
 }

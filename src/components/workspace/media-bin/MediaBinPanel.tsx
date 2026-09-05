@@ -74,7 +74,7 @@ export const MediaBinPanel: React.FC<MediaBinPanelProps> = ({
               </div>
               <div className={styles.assetMeta}>
                 <strong>{fileState.asset.name}</strong>
-                <span>{formatTransportTime(fileState.asset.durationMs)}</span>
+                <span>{formatTransportTime(fileState.asset.durationMs ?? 0)}</span>
                 <span>{fileState.asset.status === 'missing' ? 'Missing file' : `${fileState.clips.length} segment(s)`}</span>
               </div>
             </button>

@@ -23,8 +23,28 @@ impl WorkspaceService {
         let existing_paths: std::collections::HashSet<_> = state.files.iter().map(|f| f.asset.path.clone()).collect();
         let mut next_files = Vec::new();
         
-        for asset in assets {
+        for mut asset in assets {
             if !existing_paths.contains(&asset.path) {
+                if asset.file_size == 0.0 || asset.created_at.is_empty() || asset.modified_at.is_empty() {
+                    if let Ok(metadata) = std::fs::metadata(&asset.path) {
+                        if asset.file_size == 0.0 {
+                            asset.file_size = metadata.len() as f64;
+                        }
+                        let now = std::time::SystemTime::now();
+                        if asset.created_at.is_empty() {
+                            let created = metadata.created().unwrap_or(now);
+                            asset.created_at = chrono::DateTime::<chrono::Utc>::from(created).to_rfc3339();
+                        }
+                        if asset.modified_at.is_empty() {
+                            let modified = metadata.modified().unwrap_or(now);
+                            asset.modified_at = chrono::DateTime::<chrono::Utc>::from(modified).to_rfc3339();
+                        }
+                    }
+                }
+                if asset.status.is_empty() {
+                    asset.status = "ready".to_string();
+                }
+
                 let track = TimelineTrackPayload {
                     id: format!("track-{}", uuid::Uuid::new_v4()),
                     name: "Track 1".to_string(),
@@ -34,9 +54,9 @@ impl WorkspaceService {
                     id: format!("clip-{}", uuid::Uuid::new_v4()),
                     asset_id: asset.id.clone(),
                     track_id: track.id.clone(),
-                    start_ms: 0,
-                    in_point_ms: 0,
-                    out_point_ms: std::cmp::max(120, asset.duration_ms),
+                    start_ms: 0.0,
+                    in_point_ms: 0.0,
+                    out_point_ms: asset.duration_ms.max(120.0),
                     muted: false,
                 };
                 let fps = asset.fps.unwrap_or(60);
@@ -104,11 +124,10 @@ impl WorkspaceService {
 
     fn sort_clips(clips: &mut Vec<TimelineClipPayload>) {
         clips.sort_by(|a, b| {
-            if a.start_ms != b.start_ms {
-                a.start_ms.cmp(&b.start_ms)
-            } else {
-                a.id.cmp(&b.id)
-            }
+            a.start_ms
+                .partial_cmp(&b.start_ms)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| a.id.cmp(&b.id))
         });
     }
 
@@ -118,7 +137,7 @@ impl WorkspaceService {
 
         if let Some(file) = state.files.iter_mut().find(|f| f.id == file_id) {
             if let Some(clip) = file.clips.iter_mut().find(|c| c.id == clip_id) {
-                clip.start_ms = start_ms as u64;
+                clip.start_ms = start_ms;
             }
             Self::sort_clips(&mut file.clips);
             Self::broadcast_state(&app_handle, &state);
@@ -132,8 +151,8 @@ impl WorkspaceService {
 
         if let Some(file) = state.files.iter_mut().find(|f| f.id == file_id) {
             if let Some(clip) = file.clips.iter_mut().find(|c| c.id == clip_id) {
-                clip.in_point_ms = in_point_ms as u64;
-                clip.start_ms = start_ms as u64;
+                clip.in_point_ms = in_point_ms;
+                clip.start_ms = start_ms;
             }
             Self::broadcast_state(&app_handle, &state);
         }
@@ -146,7 +165,7 @@ impl WorkspaceService {
 
         if let Some(file) = state.files.iter_mut().find(|f| f.id == file_id) {
             if let Some(clip) = file.clips.iter_mut().find(|c| c.id == clip_id) {
-                clip.out_point_ms = out_point_ms as u64;
+                clip.out_point_ms = out_point_ms;
             }
             Self::broadcast_state(&app_handle, &state);
         }
@@ -156,13 +175,12 @@ impl WorkspaceService {
     pub fn split_clip(app_handle: AppHandle, file_id: String, clip_id: String, at_ms: f64) -> Result<(), String> {
         let state_arc = Self::get_state(&app_handle);
         let mut state = state_arc.lock().unwrap();
-        let at_ms = at_ms as u64;
 
         if let Some(file) = state.files.iter_mut().find(|f| f.id == file_id) {
             let mut new_clip = None;
             if let Some(clip) = file.clips.iter_mut().find(|c| c.id == clip_id) {
-                let local_offset_ms = at_ms.saturating_sub(clip.start_ms);
-                if local_offset_ms > 120 && (clip.out_point_ms - clip.in_point_ms).saturating_sub(local_offset_ms) > 120 {
+                let local_offset_ms = at_ms - clip.start_ms;
+                if local_offset_ms > 120.0 && (clip.out_point_ms - clip.in_point_ms) - local_offset_ms > 120.0 {
                     let split_in_point_ms = clip.in_point_ms + local_offset_ms;
                     
                     let right_clip = TimelineClipPayload {

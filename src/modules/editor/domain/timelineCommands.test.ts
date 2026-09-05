@@ -13,6 +13,8 @@ describe('timeline commands', () => {
       durationMs: 8000,
       hasVideo: true,
       hasAudio: true,
+      fps: 30,
+      audioBitrateKbps: 192,
       width: 1920,
       height: 1080,
       status: 'ready',

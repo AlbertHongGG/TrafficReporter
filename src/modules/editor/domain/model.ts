@@ -3,13 +3,13 @@ import type {
   LprTrackedRegion,
   LprTargetTrack,
   MediaProbeResult,
-  MediaAssetRecord,
   RenderProfile,
   TimelineClip,
   TimelineTrack,
   VideoMarkerRect,
 } from '../../../shared/contracts';
 import { buildDefaultAnalysisState, type EditorAnalysisState } from './analysisState';
+import type { EditorAsset } from '../../../types/bindings';
 
 export type { AudioBitrateKbps, VideoQuality } from '../../../shared/contracts';
 
@@ -37,12 +37,7 @@ export type {
 } from '../../../shared/contracts';
 
 export type AssetStatus = 'ready' | 'missing';
-
-export interface EditorAsset extends MediaAssetRecord {
-  status: AssetStatus;
-  url: string | null;
-  thumbnailUrl: string | null;
-}
+export type { EditorAsset };
 
 export interface EditorFilePayload {
   id: string;
@@ -275,9 +270,9 @@ export function buildEditorFileState(asset: EditorAsset, options: BuildEditorFil
   const track = options.track ? { ...options.track } : createSingleTrack();
   const clips = options.clips?.length
     ? options.clips.map((clip) => ({ ...clip }))
-    : [createDefaultClip(asset.id, track.id, asset.durationMs)];
+    : [createDefaultClip(asset.id, track.id, asset.durationMs ?? 0)];
   const defaultFps = asset.fps ?? DEFAULT_RENDER_PROFILE.fps;
-  const defaultAudioBitrateKbps = resolveDefaultAudioBitrateKbps(asset.audioBitrateKbps);
+  const defaultAudioBitrateKbps = resolveDefaultAudioBitrateKbps(asset.audioBitrateKbps ?? undefined);
 
   return {
     id: options.id ?? createId('file'),
@@ -454,6 +449,6 @@ export function getSourceTimeAtPlayhead(file: EditorFileState, playheadMs: numbe
   return clamp(
     clip.inPointMs + (playheadMs - clip.startMs),
     0,
-    file.asset.durationMs,
+    file.asset.durationMs ?? 0,
   );
 }

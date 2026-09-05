@@ -28,7 +28,7 @@ pub type LprEvidenceReason = String;
 
 pub type LprDecisionSource = String;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprSampleSelection {
     pub selected: bool,
@@ -36,13 +36,13 @@ pub struct LprSampleSelection {
     pub reasons: Vec<LprEvidenceReason>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprTemporalSupport {
     pub strategy: String,
-    pub reference_time_ms: u64,
+    pub reference_time_ms: f64,
     pub support_frame_count: u32,
-    pub support_window_ms: u64,
+    pub support_window_ms: f64,
     pub support_times: Vec<f64>,
     pub mean_alignment_score: f64,
     pub mean_quality_score: f64,
@@ -50,7 +50,7 @@ pub struct LprTemporalSupport {
     pub selected_stage: LprArtifactStage,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprOcrInput {
     pub stage: LprArtifactStage,
@@ -60,20 +60,20 @@ pub struct LprOcrInput {
     pub support_frame_count: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprDecisionTrace {
     pub source: LprDecisionSource,
     pub candidate_id: Option<String>,
     pub sample_id: Option<String>,
-    pub frame_time_ms: Option<u64>,
+    pub frame_time_ms: Option<f64>,
     pub stage: Option<LprArtifactStage>,
     pub support_frame_count: u32,
     pub agreement_ratio: Option<f64>,
     pub margin: Option<f64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprAnalysisOptionsPayload {
     pub persist_artifacts: Option<bool>,
@@ -100,7 +100,7 @@ pub struct LprAnalysisOptionsPayload {
     pub min_interval_support_frames: Option<u32>,
     pub min_sequence_persistence: Option<f64>,
     pub max_sequence_gap_count: Option<u32>,
-    pub temporal_window_ms: Option<u64>,
+    pub temporal_window_ms: Option<f64>,
     pub temporal_neighbor_count: Option<u32>,
     pub max_evidence_sample_count: Option<u32>,
     pub anchor_burst_count: Option<u32>,
@@ -108,7 +108,7 @@ pub struct LprAnalysisOptionsPayload {
 
 pub type LprReviewStatus = String;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprReviewStatePayload {
     pub status: LprReviewStatus,
@@ -117,7 +117,7 @@ pub struct LprReviewStatePayload {
     pub reasons: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprAnalysisProvenancePayload {
     pub request_id: Option<String>,
@@ -129,17 +129,17 @@ pub struct LprAnalysisProvenancePayload {
     pub recognizer_backend: Option<String>,
     pub temporal_evidence_mode: Option<String>,
     pub sequence_review_mode: Option<String>,
-    pub emitted_at_ms: u64,
+    pub emitted_at_ms: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct TimelineIntervalSelectionPayload {
-    pub start_ms: u64,
-    pub end_ms: u64,
+    pub start_ms: f64,
+    pub end_ms: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprQualityMetricsPayload {
     pub sharpness: f64,
@@ -153,18 +153,19 @@ pub struct LprQualityMetricsPayload {
     pub legibility_level: LprLegibilityLevel,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprTrackedRegionPayload {
     pub id: String,
-    pub time_ms: u64,
+    pub time_ms: f64,
     pub r#box: VideoMarkerRectPayload,
     pub confidence: f64,
     pub class_name: String,
+    #[specta(type = Option<specta_typescript::Any>)]
     pub diagnostics: Option<LprDiagnostics>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprTargetTrackPayload {
     pub id: String,
@@ -172,28 +173,30 @@ pub struct LprTargetTrackPayload {
     pub label: String,
     pub confidence: f64,
     pub frames: Vec<LprTrackedRegionPayload>,
+    #[specta(type = Option<specta_typescript::Any>)]
     pub diagnostics: Option<LprDiagnostics>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprPlateCandidatePayload {
     pub id: String,
     pub text: String,
     pub confidence: f64,
     pub source: LprRecognitionSource,
-    pub frame_time_ms: Option<u64>,
+    pub frame_time_ms: Option<f64>,
     pub country_code: Option<String>,
     pub r#box: Option<VideoMarkerRectPayload>,
     pub quality: Option<LprQualityMetricsPayload>,
+    #[specta(type = Option<specta_typescript::Any>)]
     pub diagnostics: Option<LprDiagnostics>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprFrameSamplePayload {
     pub id: String,
-    pub time_ms: u64,
+    pub time_ms: f64,
     pub target_box: Option<VideoMarkerRectPayload>,
     pub plate_box: Option<VideoMarkerRectPayload>,
     pub quality: Option<LprQualityMetricsPayload>,
@@ -202,10 +205,11 @@ pub struct LprFrameSamplePayload {
     pub selection: Option<LprSampleSelection>,
     pub ocr_input: Option<LprOcrInput>,
     pub temporal_support: Option<LprTemporalSupport>,
+    #[specta(type = Option<specta_typescript::Any>)]
     pub diagnostics: Option<LprDiagnostics>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprProgressPayload {
     pub progress: f64,
@@ -219,7 +223,7 @@ pub struct LprProgressPayload {
     pub coverage_ratio: Option<f64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprTrackingSummary {
     pub tracking_tier: LprTrackingTier,
@@ -233,7 +237,7 @@ pub struct LprTrackingSummary {
 
 pub type LprSequenceTier = String;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprSequenceSummary {
     pub sequence_tier: LprSequenceTier,
@@ -247,7 +251,7 @@ pub struct LprSequenceSummary {
     pub character_consistency_mean: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprRuntimeStatusPayload {
     pub available: bool,
@@ -259,28 +263,28 @@ pub struct LprRuntimeStatusPayload {
     pub detail: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprTargetScanRequestPayload {
     pub source_path: String,
-    pub time_ms: u64,
+    pub time_ms: f64,
     pub marker_rect: Option<VideoMarkerRectPayload>,
     pub target_vehicle_kind: LprVehicleKind,
     pub request_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprTargetScanResponsePayload {
     pub detections: Vec<LprTrackedRegionPayload>,
     pub runtime: LprRuntimeStatusPayload,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprFrameAnalysisRequestPayload {
     pub source_path: String,
-    pub time_ms: u64,
+    pub time_ms: f64,
     pub marker_rect: Option<VideoMarkerRectPayload>,
     pub target_vehicle_kind: LprVehicleKind,
     pub selected_target_box: Option<VideoMarkerRectPayload>,
@@ -291,7 +295,7 @@ pub struct LprFrameAnalysisRequestPayload {
     pub request_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprFrameAnalysisResponsePayload {
     pub detections: Vec<LprTrackedRegionPayload>,
@@ -303,30 +307,31 @@ pub struct LprFrameAnalysisResponsePayload {
     pub decision: Option<LprDecisionTrace>,
     pub runtime: LprRuntimeStatusPayload,
     pub job_status: Option<LprJobStatus>,
+    #[specta(type = Option<specta_typescript::Any>)]
     pub diagnostics: Option<LprDiagnostics>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprIntervalAnalysisRequestPayload {
     pub source_path: String,
     pub interval: TimelineIntervalSelectionPayload,
-    pub anchor_time_ms: u64,
+    pub anchor_time_ms: f64,
     pub target_vehicle_kind: LprVehicleKind,
     pub selected_target_box: Option<VideoMarkerRectPayload>,
     pub selected_target_track_id: Option<String>,
     pub country_hints: Vec<String>,
-    pub sample_every_ms: Option<u64>,
+    pub sample_every_ms: Option<f64>,
     pub max_samples: Option<u32>,
     pub analysis_intent: Option<LprAnalysisIntent>,
-    pub latency_budget_ms: Option<u64>,
+    pub latency_budget_ms: Option<f64>,
     pub analysis_profile_id: Option<LprAnalysisProfileId>,
     pub enable_developer_diagnostics: Option<bool>,
     pub analysis_options: Option<LprAnalysisOptionsPayload>,
     pub request_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprIntervalAnalysisResponsePayload {
     pub target_tracks: Vec<LprTargetTrackPayload>,
@@ -342,15 +347,16 @@ pub struct LprIntervalAnalysisResponsePayload {
     pub job_status: Option<LprJobStatus>,
     pub tracking: Option<LprTrackingSummary>,
     pub sequence: Option<LprSequenceSummary>,
+    #[specta(type = Option<specta_typescript::Any>)]
     pub diagnostics: Option<LprDiagnostics>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprEvidenceExportRequestPayload {
     pub output_path: String,
     pub source_path: String,
-    pub time_ms: u64,
+    pub time_ms: f64,
     pub marker_rect: Option<VideoMarkerRectPayload>,
     pub compression_mode: OutputCompressionModePayload,
     pub interval: Option<TimelineIntervalSelectionPayload>,
@@ -362,21 +368,21 @@ pub struct LprEvidenceExportRequestPayload {
     pub provenance: Option<LprAnalysisProvenancePayload>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprEvidenceExportResponsePayload {
     pub json_path: String,
     pub image_path: String,
     pub bundle_dir: String,
-    pub exported_file_count: usize,
-    pub decision_frame_count: usize,
+    pub exported_file_count: u32,
+    pub decision_frame_count: u32,
 }
 
 pub type AiEvidenceProviderKind = String;
 
 pub type AiEvidenceProgressKind = String;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AiEvidenceProgressPayload {
     pub progress: f64,
@@ -394,7 +400,7 @@ pub struct AiEvidenceProgressPayload {
     pub request_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AiEvidencePixelBoxPayload {
     pub x: u32,
@@ -403,7 +409,7 @@ pub struct AiEvidencePixelBoxPayload {
     pub height: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AiEvidenceOverlayBoxPayload {
     pub normalized_box: Option<VideoMarkerRectPayload>,
@@ -412,11 +418,11 @@ pub struct AiEvidenceOverlayBoxPayload {
     pub frame_height: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AiEvidenceTimelineFrameRefPayload {
     pub frame_id: String,
-    pub time_ms: u64,
+    pub time_ms: f64,
     pub sequence_index: u32,
     pub label: String,
     pub image_path: Option<String>,
@@ -424,19 +430,19 @@ pub struct AiEvidenceTimelineFrameRefPayload {
     pub frame_height: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AiEvidenceToolCallPayload {
     pub stage: String,
     pub tool_name: String,
     pub input_summary: String,
     pub output_summary: String,
-    pub started_at_ms: u64,
-    pub completed_at_ms: u64,
+    pub started_at_ms: f64,
+    pub completed_at_ms: f64,
     pub success: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AiEvidenceTargetSelectionPayload {
     pub anchor_frame_id: String,
@@ -447,7 +453,7 @@ pub struct AiEvidenceTargetSelectionPayload {
     pub selected_box: Option<AiEvidenceOverlayBoxPayload>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AiEvidenceKeyframePayload {
     pub frame: AiEvidenceTimelineFrameRefPayload,
@@ -460,7 +466,7 @@ pub struct AiEvidenceKeyframePayload {
     pub is_valid_for_user_facing_output: Option<bool>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AiEvidenceSharedProjectionPayload {
     pub interval: Option<TimelineIntervalSelectionPayload>,
@@ -475,7 +481,7 @@ pub struct AiEvidenceSharedProjectionPayload {
     pub decision: Option<LprDecisionTrace>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AiEvidenceResponsePayload {
     pub request_id: Option<String>,
@@ -495,7 +501,7 @@ pub struct AiEvidenceResponsePayload {
     pub runtime: LprRuntimeStatusPayload,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AiEvidenceRequestPayload {
     pub source_path: String,
@@ -507,9 +513,9 @@ pub struct AiEvidenceRequestPayload {
     pub country_hints: Vec<String>,
     pub analysis_profile_id: Option<LprAnalysisProfileId>,
     pub enable_developer_diagnostics: Option<bool>,
-    pub coarse_sample_every_ms: Option<u64>,
-    pub fine_sample_every_ms: Option<u64>,
-    pub fine_window_padding_ms: Option<u64>,
+    pub coarse_sample_every_ms: Option<f64>,
+    pub fine_sample_every_ms: Option<f64>,
+    pub fine_window_padding_ms: Option<f64>,
     pub max_keyframes: Option<u32>,
     pub request_id: Option<String>,
 }
