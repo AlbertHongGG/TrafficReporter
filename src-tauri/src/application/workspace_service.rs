@@ -46,12 +46,12 @@ impl WorkspaceService {
                 }
 
                 let track = TimelineTrackPayload {
-                    id: format!("track-{}", uuid::Uuid::new_v4()),
+                    id: format!("track-{}", asset.id),
                     name: "Track 1".to_string(),
                     order: 1,
                 };
                 let clip = TimelineClipPayload {
-                    id: format!("clip-{}", uuid::Uuid::new_v4()),
+                    id: format!("clip-{}", asset.id),
                     asset_id: asset.id.clone(),
                     track_id: track.id.clone(),
                     start_ms: 0.0,
@@ -62,7 +62,7 @@ impl WorkspaceService {
                 let fps = asset.fps.unwrap_or(60);
                 
                 let file_state = EditorFileState {
-                    id: format!("file-{}", uuid::Uuid::new_v4()),
+                    id: format!("file-{}", asset.id),
                     asset,
                     track,
                     clips: vec![clip],

@@ -11,6 +11,7 @@ import {
   buildDefaultWorkspaceState,
   buildEditorFileState,
   clamp,
+  DEFAULT_ZOOM,
   getActiveFile,
   MAX_ZOOM,
   MIN_ZOOM,
@@ -146,28 +147,31 @@ export function editorReducer(state: EditorWorkspaceState, action: EditorAction)
 
     case 'sync-workspace-state': {
       const nextFiles = action.workspace.files.map((remoteFile) => {
-        const localFile = state.files.find((f) => f.id === remoteFile.id);
+        const localFile = state.files.find(
+          (f) => f.id === remoteFile.id || f.asset.path === remoteFile.asset.path || f.asset.id === remoteFile.asset.id,
+        );
         if (!localFile) {
-           return {
-             ...remoteFile,
-             playheadMs: 0,
-             zoom: 1,
-             previewVolume: 0.85,
-             previewMuted: false,
-             isPlaying: false,
-             markerRect: null,
-             selectedClipIds: [],
-           };
+          return {
+            ...remoteFile,
+            playheadMs: 0,
+            zoom: DEFAULT_ZOOM,
+            previewVolume: 0.85,
+            previewMuted: false,
+            isPlaying: false,
+            markerRect: null,
+            selectedClipIds: [],
+          };
         }
         return {
-           ...remoteFile,
-           playheadMs: localFile.playheadMs,
-           zoom: localFile.zoom,
-           previewVolume: localFile.previewVolume,
-           previewMuted: localFile.previewMuted,
-           isPlaying: localFile.isPlaying,
-           markerRect: localFile.markerRect,
-           selectedClipIds: localFile.selectedClipIds,
+          ...remoteFile,
+          id: remoteFile.id,
+          playheadMs: localFile.playheadMs,
+          zoom: localFile.zoom ?? DEFAULT_ZOOM,
+          previewVolume: localFile.previewVolume,
+          previewMuted: localFile.previewMuted,
+          isPlaying: localFile.isPlaying,
+          markerRect: localFile.markerRect,
+          selectedClipIds: localFile.selectedClipIds,
         };
       });
       return {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import {
   commands,
@@ -11,6 +11,8 @@ import { createEditorSessionStoreState, reduceEditorSessionStoreState } from './
 
 export function useEditorSessionController() {
   const [session, setSession] = useState(() => createEditorSessionStoreState());
+  const latestSessionRef = useRef(session);
+  latestSessionRef.current = session;
 
   useEffect(() => {
     // 1. Fetch initial state from Rust
@@ -45,6 +47,8 @@ export function useEditorSessionController() {
   const dispatch = useCallback((action: EditorAction) => {
     // Apply optimistic update immediately to local session store
     setSession((currentSession) => reduceEditorSessionStoreState(currentSession, action));
+
+    const currentWorkspace = latestSessionRef.current.workspace;
 
     // Synchronize core domain mutations with Rust backend
     switch (action.type) {
@@ -81,7 +85,7 @@ export function useEditorSessionController() {
         break;
 
       case 'move-clip': {
-        const fileId = session.workspace.activeFileId;
+        const fileId = currentWorkspace.activeFileId;
         if (fileId) {
           commands.workspaceMoveClip(fileId, action.clipId, action.startMs)
             .then((res) => {
@@ -95,9 +99,9 @@ export function useEditorSessionController() {
       }
 
       case 'trim-clip-start': {
-        const fileId = session.workspace.activeFileId;
+        const fileId = currentWorkspace.activeFileId;
         if (fileId) {
-          const clip = session.workspace.files.find((f) => f.id === fileId)?.clips.find((c) => c.id === action.clipId);
+          const clip = currentWorkspace.files.find((f) => f.id === fileId)?.clips.find((c) => c.id === action.clipId);
           if (clip) {
             const newStartMs = clip.startMs + (action.inPointMs - clip.inPointMs);
             commands.workspaceTrimClipStart(fileId, action.clipId, action.inPointMs, newStartMs)
@@ -113,7 +117,7 @@ export function useEditorSessionController() {
       }
 
       case 'trim-clip-end': {
-        const fileId = session.workspace.activeFileId;
+        const fileId = currentWorkspace.activeFileId;
         if (fileId) {
           commands.workspaceTrimClipEnd(fileId, action.clipId, action.outPointMs)
             .then((res) => {
@@ -127,7 +131,7 @@ export function useEditorSessionController() {
       }
 
       case 'split-clip': {
-        const fileId = session.workspace.activeFileId;
+        const fileId = currentWorkspace.activeFileId;
         if (fileId) {
           commands.workspaceSplitClip(fileId, action.clipId, action.atMs)
             .then((res) => {
@@ -141,7 +145,7 @@ export function useEditorSessionController() {
       }
 
       case 'delete-selected-clips': {
-        const file = session.workspace.files.find((f) => f.id === session.workspace.activeFileId);
+        const file = currentWorkspace.files.find((f) => f.id === currentWorkspace.activeFileId);
         if (file) {
           commands.workspaceDeleteClips(file.id, file.selectedClipIds)
             .then((res) => {
@@ -155,7 +159,7 @@ export function useEditorSessionController() {
       }
 
       case 'set-selected-clips-muted': {
-        const file = session.workspace.files.find((f) => f.id === session.workspace.activeFileId);
+        const file = currentWorkspace.files.find((f) => f.id === currentWorkspace.activeFileId);
         if (file) {
           commands.workspaceSetClipsMuted(file.id, file.selectedClipIds, action.muted)
             .then((res) => {
@@ -169,7 +173,7 @@ export function useEditorSessionController() {
       }
 
       case 'set-render-profile': {
-        const file = session.workspace.files.find((f) => f.id === session.workspace.activeFileId);
+        const file = currentWorkspace.files.find((f) => f.id === currentWorkspace.activeFileId);
         if (file) {
           const newProfile: RenderProfilePayload = {
             format: action.renderProfile.format ?? file.renderProfile.format,
@@ -192,7 +196,7 @@ export function useEditorSessionController() {
       default:
         break;
     }
-  }, [session.workspace]);
+  }, []);
 
   return {
     state: session.workspace,

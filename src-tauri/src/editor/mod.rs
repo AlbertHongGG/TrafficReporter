@@ -1240,8 +1240,8 @@ mod ai_clip_tests {
     fn compact_ai_clip_args_use_shared_video_policy_and_audio_bitrate() {
         let args = build_ai_evidence_clip_args(
             "demo.mp4",
-            1000,
-            4000,
+            1000.0,
+            4000.0,
             Path::new("clip.mp4"),
             OutputCompressionModePayload::Compact,
             Some(256),
@@ -1285,7 +1285,7 @@ mod tests {
             text: text.to_string(),
             confidence,
             source: "baseline".to_string(),
-            frame_time_ms: Some(0),
+            frame_time_ms: Some(0.0),
             country_code: None,
             r#box: None,
             quality: None,
@@ -1359,7 +1359,7 @@ mod tests {
         let args = build_frame_export_args(&FrameExportRequest {
             output_path: "C:/tmp/frame.png".to_string(),
             source_path: "C:/tmp/source.mp4".to_string(),
-            time_ms: 1250,
+            time_ms: 1250.0,
             marker_rect: None,
             compression_mode: OutputCompressionModePayload::Compact,
         });
@@ -1380,7 +1380,7 @@ mod tests {
         let samples = vec![
             LprFrameSamplePayload {
                 id: "sample-low".to_string(),
-                time_ms: 100,
+                time_ms: 100.0,
                 target_box: None,
                 plate_box: None,
                 quality: Some(sample_quality(0.4)),
@@ -1393,7 +1393,7 @@ mod tests {
             },
             LprFrameSamplePayload {
                 id: "sample-match".to_string(),
-                time_ms: 200,
+                time_ms: 200.0,
                 target_box: None,
                 plate_box: None,
                 quality: Some(sample_quality(0.7)),

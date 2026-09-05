@@ -11,7 +11,7 @@ const SUPPORTED_EXTENSIONS = new Set([
   'm4v',
 ]);
 
-const THUMBNAIL_CAPTURE_TIMEOUT_MS = 4000;
+const THUMBNAIL_CAPTURE_TIMEOUT_MS = 1500;
 
 export function isSupportedMediaPath(path: string) {
   return SUPPORTED_EXTENSIONS.has(extensionOf(path));
@@ -118,7 +118,12 @@ export async function buildEditorAsset(path: string): Promise<EditorAsset> {
 
   const durationMs = probe.durationMs ?? 0;
   const url = convertFileSrc(path);
-  const thumbnailUrl = await captureVideoThumbnail(url, durationMs);
+  let thumbnailUrl: string | null = null;
+  try {
+    thumbnailUrl = await captureVideoThumbnail(url, durationMs);
+  } catch {
+    thumbnailUrl = null;
+  }
 
   return {
     id: createId('asset'),

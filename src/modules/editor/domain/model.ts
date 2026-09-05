@@ -248,7 +248,7 @@ export function createSingleTrack(trackId = createId('track')): TimelineTrack {
 
 export function createDefaultClip(assetId: string, trackId: string, durationMs: number): TimelineClip {
   return {
-    id: createId('clip'),
+    id: `clip-${assetId}`,
     assetId,
     trackId,
     startMs: 0,
@@ -267,7 +267,7 @@ export interface BuildEditorFileStateOptions {
 }
 
 export function buildEditorFileState(asset: EditorAsset, options: BuildEditorFileStateOptions = {}): EditorFileState {
-  const track = options.track ? { ...options.track } : createSingleTrack();
+  const track = options.track ? { ...options.track } : createSingleTrack(`track-${asset.id}`);
   const clips = options.clips?.length
     ? options.clips.map((clip) => ({ ...clip }))
     : [createDefaultClip(asset.id, track.id, asset.durationMs ?? 0)];
@@ -275,7 +275,7 @@ export function buildEditorFileState(asset: EditorAsset, options: BuildEditorFil
   const defaultAudioBitrateKbps = resolveDefaultAudioBitrateKbps(asset.audioBitrateKbps ?? undefined);
 
   return {
-    id: options.id ?? createId('file'),
+    id: options.id ?? `file-${asset.id}`,
     asset,
     track,
     clips,
