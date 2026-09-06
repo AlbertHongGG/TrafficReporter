@@ -10,7 +10,7 @@ from traffic_lpr_runtime.infrastructure.image_processing import QualityScorer
 from traffic_lpr_runtime.infrastructure.model_runtime import (
     FastAlprPlateRecognizer,
     ModelRegistry,
-    UltralyticsTargetDetector,
+    Yolo26TargetDetector,
 )
 
 
@@ -28,11 +28,11 @@ def build_default_runtime_service_container(runtime_script: Path) -> RuntimeServ
     frame_reader = OpenCvFrameReader(dependencies)
     quality_scorer = QualityScorer(dependencies)
     model_registry = ModelRegistry(dependencies)
+    target_detector = Yolo26TargetDetector(model_registry)
     # Preload the baseline detector and recognizer so the first interactive frame request
     # does not pay the full cold-start cost while the UI is waiting for a result.
-    model_registry.load_vehicle_model()
+    target_detector.load_model()
     model_registry.load_alpr_model()
-    target_detector = UltralyticsTargetDetector(model_registry)
     primary_recognizer = FastAlprPlateRecognizer(model_registry, quality_scorer)
     return RuntimeServiceContainer(
         dependencies=dependencies,

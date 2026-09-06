@@ -24,14 +24,7 @@ COCO_VEHICLE_CLASSES = {
     'truck': 7,
 }
 
-VEHICLE_MODEL_NAMES = (
-    'yolo26x.pt',
-    'yolo11x.pt',
-    'yolov8x.pt',
-    'yolo26s.pt',
-    'yolo11s.pt',
-    'yolov8s.pt',
-)
+DEFAULT_VEHICLE_MODEL_NAME = 'yolo26s.pt'
 
 DEFAULT_CROP_OCR_MODEL_NAMES = (
     'cct-xs-v2-global-model',
@@ -63,7 +56,7 @@ class ModelRegistry:
             COCO_VEHICLE_CLASSES['truck'],
         ]
 
-    def load_vehicle_model(self) -> Any:
+    def load_vehicle_model(self, model_name: str = DEFAULT_VEHICLE_MODEL_NAME) -> Any:
         if self._vehicle_model is not None:
             return self._vehicle_model
 
@@ -72,19 +65,16 @@ class ModelRegistry:
         if yolo_type is None:
             raise RuntimeFailure('ultralytics.YOLO is unavailable in the configured Python environment.')
 
-        last_error: Exception | None = None
         preferred_device = self._dependencies.preferred_torch_device()
-        for model_name in VEHICLE_MODEL_NAMES:
-            try:
-                self._vehicle_model = yolo_type(str(self._ensure_vehicle_model_path(model_name)))
-                move_to = getattr(self._vehicle_model, 'to', None)
-                if callable(move_to):
-                    move_to(preferred_device)
-                return self._vehicle_model
-            except Exception as error:
-                last_error = error
-
-        raise RuntimeFailure(f'Unable to load a vehicle detector model: {last_error}')
+        model_path = self._ensure_vehicle_model_path(model_name)
+        try:
+            self._vehicle_model = yolo_type(str(model_path))
+            move_to = getattr(self._vehicle_model, 'to', None)
+            if callable(move_to):
+                move_to(preferred_device)
+            return self._vehicle_model
+        except Exception as error:
+            raise RuntimeFailure(f'Unable to load vehicle detector model {model_name}: {error}') from error
 
     @property
     def dependencies(self) -> DependencyRegistry:
@@ -151,29 +141,42 @@ class ModelRegistry:
         return ['CPUExecutionProvider']
 
     def _ensure_vehicle_model_path(self, model_name: str) -> Path:
-        model_path = self._dependencies.models_root() / model_name
-        if model_path.exists() and model_path.stat().st_size > 0:
+        clean_name = model_name if model_name.endswith('.pt') else f'{model_name}.pt'
+        model_path = self._dependencies.models_root() / clean_name
+        if model_path.exists() and model_path.stat().st_size > 1000:
             return model_path
 
         model_path.parent.mkdir(parents=True, exist_ok=True)
-        utils_module = importlib.import_module('ultralytics.utils')
-        downloads_module = importlib.import_module('ultralytics.utils.downloads')
-        assets_url = getattr(utils_module, 'ASSETS_URL', None)
-        safe_download = getattr(downloads_module, 'safe_download', None)
+        yolo_type = getattr(self._dependencies.ultralytics, 'YOLO', None)
+        if yolo_type is None:
+            raise RuntimeFailure('ultralytics.YOLO is unavailable to download weights.')
 
-        if not assets_url or not callable(safe_download):
-            raise RuntimeFailure(f'Unable to resolve the Ultralytics downloader for {model_name}.')
+        instance = yolo_type(clean_name)
+        raw_weights = getattr(instance, 'weights', clean_name)
+        downloaded_path = Path(str(raw_weights))
+        if downloaded_path.exists() and downloaded_path.resolve() != model_path.resolve():
+            import shutil
+            shutil.copy2(downloaded_path, model_path)
 
-        safe_download(url=f'{assets_url}/{model_name}', file=model_path, unzip=False)
-        if model_path.exists() and model_path.stat().st_size > 0:
+        if model_path.exists() and model_path.stat().st_size > 1000:
             return model_path
+        if downloaded_path.exists() and downloaded_path.stat().st_size > 1000:
+            return downloaded_path
 
-        raise RuntimeFailure(f'Unable to download the detector model {model_name} into {model_path.parent}.')
+        v8_path = self._dependencies.models_root() / 'yolov8x.pt'
+        if v8_path.exists() and v8_path.stat().st_size > 1000:
+            return v8_path
+
+        raise RuntimeFailure(f'Unable to resolve or download detector weights for {model_name}.')
 
 
-class UltralyticsTargetDetector:
-    def __init__(self, models: ModelRegistry) -> None:
+class Yolo26TargetDetector:
+    def __init__(self, models: ModelRegistry, model_name: str = DEFAULT_VEHICLE_MODEL_NAME) -> None:
         self._models = models
+        self._model_name = model_name
+
+    def load_model(self) -> Any:
+        return self._models.load_vehicle_model(self._model_name)
 
     def detect_targets(
         self,
@@ -182,7 +185,10 @@ class UltralyticsTargetDetector:
         vehicle_kind: str,
         marker_rect: NormalizedRect | None,
     ) -> list[TrackedRegion]:
-        model = self._models.load_vehicle_model()
+        if frame is None or getattr(frame, 'size', 0) == 0:
+            return []
+
+        model = self.load_model()
         inference_device = self._models.dependencies.preferred_torch_device()
         working_frame = crop_image(frame, marker_rect) if marker_rect else frame
         if working_frame is None or getattr(working_frame, 'size', 0) == 0:
@@ -229,6 +235,9 @@ class UltralyticsTargetDetector:
 
         detections.sort(key=lambda candidate: candidate.confidence, reverse=True)
         return detections
+
+
+UltralyticsTargetDetector = Yolo26TargetDetector
 
 
 class FastAlprPlateRecognizer:
