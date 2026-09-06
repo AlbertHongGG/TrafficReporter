@@ -12,7 +12,7 @@ from traffic_lpr_runtime.application.services.preprocessing import PlatePreproce
 from traffic_lpr_runtime.domain.analysis_options import AnalysisOptions
 from traffic_lpr_runtime.domain.models import QualityMetrics
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect
-from traffic_lpr_runtime.infrastructure.image_processing import QualityScorer
+from traffic_lpr_runtime.infrastructure.vision import QualityScorer
 
 try:
     import cv2

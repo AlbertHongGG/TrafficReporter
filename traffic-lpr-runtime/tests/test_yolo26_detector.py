@@ -11,7 +11,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import numpy as np
 
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect
-from traffic_lpr_runtime.infrastructure.model_runtime import ModelRegistry, Yolo26TargetDetector
+from traffic_lpr_runtime.infrastructure.detection import Yolo26TargetDetector
+from traffic_lpr_runtime.infrastructure.models import ModelHub
 
 
 class TestYolo26TargetDetector(unittest.TestCase):
@@ -19,7 +20,7 @@ class TestYolo26TargetDetector(unittest.TestCase):
         self.mock_deps = MagicMock()
         self.mock_deps.preferred_torch_device.return_value = 'cpu'
         self.mock_deps.models_root.return_value = MagicMock()
-        self.model_registry = ModelRegistry(self.mock_deps)
+        self.model_registry = ModelHub(self.mock_deps)
 
     def test_detect_targets_maps_boxes_and_filters_classes(self) -> None:
         mock_box_1 = MagicMock()

@@ -1,15 +1,18 @@
 from __future__ import annotations
 
-from traffic_lpr_runtime.domain.errors import RuntimeFailure
+from typing import Any
 
-from .dependencies import DependencyRegistry
+from traffic_lpr_runtime.domain.errors import RuntimeFailure
+from traffic_lpr_runtime.infrastructure.dependencies import DependencyRegistry
 
 
 class OpenCvFrameReader:
+    """Decodes video frames at specific timestamps using OpenCV."""
+
     def __init__(self, dependencies: DependencyRegistry) -> None:
         self._dependencies = dependencies
 
-    def read_frame(self, source_path: str, time_ms: int):
+    def read_frame(self, source_path: str, time_ms: int) -> Any:
         self._dependencies.ensure_ready()
         cv2 = self._dependencies.cv2
         capture = cv2.VideoCapture(source_path)

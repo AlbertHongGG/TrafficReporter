@@ -3,7 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from traffic_lpr_runtime.domain.interfaces import FrameReader, PlateRecognizer, TargetDetector
+from traffic_lpr_runtime.domain.interfaces import (
+    FrameReader,
+    PlateRecognizer,
+    PlateRestorer,
+    QualityScorer,
+    TargetDetector,
+)
 from traffic_lpr_runtime.domain.models import FrameSample, PlateCandidate, TargetTrack, TrackedRegion
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect
 from traffic_lpr_runtime.application.contracts import LprContractRegistry
@@ -36,7 +42,6 @@ from traffic_lpr_runtime.infrastructure.container import (
     build_default_runtime_service_container,
 )
 from traffic_lpr_runtime.infrastructure.dependencies import DependencyRegistry
-from traffic_lpr_runtime.infrastructure.image_processing import QualityScorer
 
 
 class LprRuntimeApplication:
@@ -47,15 +52,17 @@ class LprRuntimeApplication:
         target_detector: TargetDetector,
         primary_recognizer: PlateRecognizer,
         quality_scorer: QualityScorer,
+        restorer: PlateRestorer | None = None,
     ) -> None:
         self._dependencies = dependencies
         self._frame_reader = frame_reader
         self._target_detector = target_detector
         self._primary_recognizer = primary_recognizer
         self._quality_scorer = quality_scorer
+        self._restorer = restorer
 
         # Initialize core application domain services
-        self._plate_preprocessor = PlatePreprocessor(dependencies, quality_scorer)
+        self._plate_preprocessor = PlatePreprocessor(dependencies, quality_scorer, restorer)
         self._tracker = TargetCentricTracker(dependencies, frame_reader, target_detector)
         self._interval_tracking = IntervalTrackingService(frame_reader, self._target_detector.detect_targets, self._tracker)
         self._candidate_fusion = CandidateFusionService(dependencies, primary_recognizer)
@@ -171,5 +178,6 @@ def build_default_application(runtime_script: Path) -> LprRuntimeApplication:
         target_detector=container.target_detector,
         primary_recognizer=container.primary_recognizer,
         quality_scorer=container.quality_scorer,
+        restorer=container.restorer,
     )
 

@@ -41,6 +41,8 @@ class PlateRecognizer(Protocol):
 
 
 class PlateRestorer(Protocol):
+    def restore(self, image: Any, scale: int = 2) -> Any: ...
+
     def restore_plate(
         self,
         image: Any,

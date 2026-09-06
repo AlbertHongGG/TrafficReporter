@@ -8,9 +8,8 @@ from typing import Any
 from traffic_lpr_runtime.domain.analysis_options import AnalysisOptions
 from traffic_lpr_runtime.domain.models import PlateCandidate, QualityMetrics
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect, clamp, crop_image
+from traffic_lpr_runtime.domain.interfaces import PlateRestorer, QualityScorer
 from traffic_lpr_runtime.infrastructure.dependencies import DependencyRegistry
-from traffic_lpr_runtime.infrastructure.image_processing import QualityScorer
-from traffic_lpr_runtime.infrastructure.mambair_runtime import MambaIrV2LightRestorer
 
 
 @dataclass(slots=True)
@@ -32,10 +31,15 @@ class PlateObservation:
 
 
 class PlatePreprocessor:
-    def __init__(self, dependencies: DependencyRegistry, quality_scorer: QualityScorer) -> None:
+    def __init__(
+        self,
+        dependencies: DependencyRegistry,
+        quality_scorer: QualityScorer,
+        restorer: PlateRestorer | None = None,
+    ) -> None:
         self._dependencies = dependencies
         self._quality_scorer = quality_scorer
-        self._mambair_restorer = MambaIrV2LightRestorer(dependencies)
+        self._restorer = restorer
 
     def prepare(
         self,
@@ -476,9 +480,9 @@ class PlatePreprocessor:
         if restoration_mode == 'off':
             return None, {'applied': False, 'backend': 'none', 'mode': restoration_mode}
 
-        if restoration_mode.startswith('mambairv2'):
+        if restoration_mode.startswith('mambairv2') and self._restorer is not None:
             scale = 4 if restoration_mode.endswith('x4') or min(plate_image.shape[:2]) < 40 else 2
-            restored_image = self._mambair_restorer.restore(plate_image, scale=scale)
+            restored_image = self._restorer.restore(plate_image, scale=scale)
             if restored_image is not None and getattr(restored_image, 'size', 0) > 0:
                 return restored_image, {
                     'applied': True,

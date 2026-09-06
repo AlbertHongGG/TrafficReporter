@@ -6,10 +6,9 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+from traffic_lpr_runtime.domain.analysis_options import AnalysisOptions
 from traffic_lpr_runtime.domain.errors import RuntimeFailure
-
-from .dependencies import DependencyRegistry
-
+from traffic_lpr_runtime.infrastructure.dependencies import DependencyRegistry
 
 _ARCH_URL = 'https://raw.githubusercontent.com/csguoh/MambaIR/main/basicsr/archs/mambairv2light_arch.py'
 _ARCH_MODULE_NAME = 'traffic_lpr_runtime._vendor.mambairv2light_arch'
@@ -42,7 +41,9 @@ _LIGHT_CONFIG = {
 }
 
 
-class MambaIrV2LightRestorer:
+class MambaIrV2PlateRestorer:
+    """Super-resolution plate restorer using MambaIRv2-Light."""
+
     def __init__(self, dependencies: DependencyRegistry) -> None:
         self._dependencies = dependencies
         self._arch_module: Any | None = None
@@ -72,6 +73,31 @@ class MambaIrV2LightRestorer:
             if preferred_device == 'cpu':
                 raise
             return self._infer(image, resolved_scale, 'cpu')
+
+    def restore_plate(
+        self,
+        image: Any,
+        options: AnalysisOptions,
+    ) -> tuple[Any | None, dict[str, Any]]:
+        if image is None or getattr(image, 'size', 0) == 0:
+            return None, {'applied': False, 'reason': 'empty_image'}
+
+        scale = 4 if max(image.shape[:2]) < 56 else 2
+        try:
+            restored = self.restore(image, scale=scale)
+            return restored, {
+                'applied': restored is not None,
+                'backend': 'mambairv2-lightsr',
+                'scale': scale,
+                'mode': options.restoration_mode,
+            }
+        except Exception as error:
+            return None, {
+                'applied': False,
+                'backend': 'mambairv2-lightsr',
+                'error': str(error),
+                'mode': options.restoration_mode,
+            }
 
     def _infer(self, image: Any, scale: int, device: str) -> Any:
         torch = self._dependencies.torch
@@ -129,7 +155,7 @@ class MambaIrV2LightRestorer:
         if self._arch_module is not None:
             return self._arch_module
 
-        stubs_root = Path(__file__).resolve().parent / 'restoration' / 'stubs'
+        stubs_root = Path(__file__).resolve().parent / 'stubs'
         if str(stubs_root) not in sys.path:
             sys.path.insert(0, str(stubs_root))
 
@@ -190,3 +216,6 @@ class MambaIrV2LightRestorer:
         if not all(name.startswith('module.') for name in state_dict):
             return state_dict
         return {name.removeprefix('module.'): value for name, value in state_dict.items()}
+
+
+MambaIrV2LightRestorer = MambaIrV2PlateRestorer

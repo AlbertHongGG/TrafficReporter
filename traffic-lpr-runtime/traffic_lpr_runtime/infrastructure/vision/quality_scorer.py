@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+from typing import Any
+
 from traffic_lpr_runtime.domain.models import QualityMetrics
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect, clamp, crop_image
-
-from .dependencies import DependencyRegistry
+from traffic_lpr_runtime.infrastructure.dependencies import DependencyRegistry
 
 
 class QualityScorer:
+    """Calculates objective quality metrics for license plate image crops."""
+
     def __init__(self, dependencies: DependencyRegistry) -> None:
         self._dependencies = dependencies
 
-    def score(self, image, plate_box: NormalizedRect | None) -> QualityMetrics | None:
+    def score(self, image: Any, plate_box: NormalizedRect | None) -> QualityMetrics:
         if image is None or self._dependencies.cv2 is None or self._dependencies.numpy is None:
             return QualityMetrics(
                 sharpness=0.0,

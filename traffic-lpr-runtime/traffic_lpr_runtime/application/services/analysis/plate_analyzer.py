@@ -1,17 +1,16 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
 
 from traffic_lpr_runtime.domain.analysis_options import AnalysisOptions
 from traffic_lpr_runtime.domain.enums import ArtifactStage, DecisionSource
-from traffic_lpr_runtime.domain.interfaces import PlateRecognizer
+from traffic_lpr_runtime.domain.interfaces import PlateRecognizer, QualityScorer
 from traffic_lpr_runtime.domain.models import FrameSample, PlateCandidate
 from traffic_lpr_runtime.domain.text import normalize_plate_text
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect, crop_image
 from traffic_lpr_runtime.application.services.fusion.candidate_fusion import CandidateFusionService
 from traffic_lpr_runtime.application.services.preprocessing import PlateObservation, PlatePreprocessor
-from traffic_lpr_runtime.infrastructure.image_processing import QualityScorer
 
 HARD_PLATE_SECONDARY_CROP_SPECS = (
     (0.0, 0.3),
