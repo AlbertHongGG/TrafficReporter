@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from traffic_lpr_runtime.application.contracts.profiles import resolve_analysis_profile_options
 from traffic_lpr_runtime.domain.analysis_options import AnalysisOptions
+from traffic_lpr_runtime.domain.profiles import AnalysisProfileCatalog
 
 
 def _to_optional_str(value: Any) -> str | None:
@@ -16,7 +16,7 @@ def _to_optional_str(value: Any) -> str | None:
 def build_analysis_options_from_payload(payload: dict[str, Any] | None) -> AnalysisOptions:
     request_payload = payload or {}
     developer_diagnostics_enabled = request_payload.get('enableDeveloperDiagnostics') is True
-    analysis_profile_id, profile_options = resolve_analysis_profile_options(
+    analysis_profile_id, profile_options = AnalysisProfileCatalog.resolve_profile_options(
         _to_optional_str(request_payload.get('analysisProfileId')),
         developer_diagnostics_enabled,
     )

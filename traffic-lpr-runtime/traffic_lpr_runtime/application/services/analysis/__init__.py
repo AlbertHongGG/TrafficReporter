@@ -1,9 +1,5 @@
 from __future__ import annotations
 
-from traffic_lpr_runtime.application.contracts.profiles import (
-    load_analysis_profile_catalog,
-    resolve_analysis_profile_options,
-)
 from .diagnostics import IntervalAnalysisDiagnostics, RuntimeStageTiming
 from .interval_service import IntervalAnalysisDependencies, IntervalAnalysisService
 from .plate_analyzer import PlateAnalysisService
@@ -21,6 +17,4 @@ __all__ = [
     'RuntimeStageTiming',
     'build_analysis_provenance',
     'build_review_state',
-    'load_analysis_profile_catalog',
-    'resolve_analysis_profile_options',
 ]
