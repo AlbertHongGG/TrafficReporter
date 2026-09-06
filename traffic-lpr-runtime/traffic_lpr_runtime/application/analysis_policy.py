@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from traffic_lpr_runtime.application.pipeline_support import AnalysisOptions
+from traffic_lpr_runtime.domain.analysis_options import AnalysisOptions
 
 
 SHORT_INTERVAL_MAX_MS = 3500

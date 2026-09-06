@@ -7,7 +7,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from traffic_lpr_runtime.application.analysis_profiles import load_analysis_profile_catalog
-from traffic_lpr_runtime.application.pipeline_support import AnalysisOptions
+from traffic_lpr_runtime.domain.analysis_options import AnalysisOptions
 
 
 class AnalysisOptionsTests(unittest.TestCase):

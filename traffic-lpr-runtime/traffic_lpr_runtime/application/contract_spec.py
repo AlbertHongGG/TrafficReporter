@@ -11,7 +11,7 @@ class LprContractRegistry:
     def validate_request(self, subcommand: str, payload: dict[str, Any]) -> None:
         if not isinstance(payload, dict):
             raise RuntimeFailure(f'{subcommand}.request must be an object.')
-        if subcommand in {'scan-targets', 'analyze-frame', 'analyze-interval', 'ai-evidence'}:
+        if subcommand in {'scan-targets', 'analyze-frame', 'analyze-interval', 'sample-storyboard-frames'}:
             if 'sourcePath' not in payload or not isinstance(payload['sourcePath'], str):
                 raise RuntimeFailure(f'{subcommand}.request.sourcePath is required.')
 

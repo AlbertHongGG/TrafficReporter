@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from traffic_lpr_runtime.application.workflows import FrameAnalysisWorkflow
+from traffic_lpr_runtime.application.use_cases.analyze_frame import AnalyzeFrameUseCase as FrameAnalysisWorkflow
 from traffic_lpr_runtime.domain.models import FrameSample, PlateCandidate, QualityMetrics
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect
 

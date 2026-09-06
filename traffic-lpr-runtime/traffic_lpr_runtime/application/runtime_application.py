@@ -3,37 +3,47 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from traffic_lpr_runtime.domain.analysis_options import AnalysisOptions
 from traffic_lpr_runtime.domain.enums import ArtifactStage, DecisionSource
 from traffic_lpr_runtime.domain.errors import RuntimeFailure
 from traffic_lpr_runtime.domain.interfaces import FrameReader, PlateRecognizer, TargetDetector
 from traffic_lpr_runtime.domain.models import FrameSample, PlateCandidate, TargetTrack, TrackedRegion
 from traffic_lpr_runtime.domain.text import normalize_plate_text
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect, crop_image
-from traffic_lpr_runtime.application.ai_evidence_workflow import AiEvidenceRuntimeBridge, AiEvidenceWorkflow
-from traffic_lpr_runtime.application.candidate_fusion import CandidateFusionService, apply_reliability_selection
 from traffic_lpr_runtime.application.contract_spec import LprContractRegistry
+from traffic_lpr_runtime.application.interval_analysis_service import (
+    IntervalAnalysisDependencies,
+    IntervalAnalysisService,
+)
 from traffic_lpr_runtime.application.interval_tracking import IntervalTrackingService
-from traffic_lpr_runtime.application.pipeline_support import AnalysisOptions, TargetCentricTracker
-from traffic_lpr_runtime.application.preprocessing import PlateObservation, PlatePreprocessor
-from traffic_lpr_runtime.application.workflows import FrameAnalysisWorkflow, IntervalAnalysisWorkflow, TargetScanWorkflow
+from traffic_lpr_runtime.application.services.fusion.candidate_fusion import (
+    CandidateFusionService,
+    apply_reliability_selection,
+)
+from traffic_lpr_runtime.application.services.preprocessing import (
+    PlateObservation,
+    PlatePreprocessor,
+)
+from traffic_lpr_runtime.application.services.tracking.tracker import TargetCentricTracker
+from traffic_lpr_runtime.application.use_cases.analyze_frame import AnalyzeFrameUseCase
+from traffic_lpr_runtime.application.use_cases.extract_storyboard import ExtractStoryboardUseCase
+from traffic_lpr_runtime.application.use_cases.registry import (
+    CallableRuntimeUseCase,
+    RuntimeUseCaseRegistry,
+)
+from traffic_lpr_runtime.application.use_cases.scan_targets import ScanTargetsUseCase
+from traffic_lpr_runtime.infrastructure.container import (
+    RuntimeServiceContainer,
+    build_default_runtime_service_container,
+)
 from traffic_lpr_runtime.infrastructure.dependencies import DependencyRegistry
 from traffic_lpr_runtime.infrastructure.frame_reader import OpenCvFrameReader
-from traffic_lpr_runtime.infrastructure.ai_provider_factory import build_ai_provider
 from traffic_lpr_runtime.infrastructure.image_processing import QualityScorer
 from traffic_lpr_runtime.infrastructure.model_runtime import (
     FastAlprPlateRecognizer,
     ModelRegistry,
     UltralyticsTargetDetector,
 )
-from traffic_lpr_runtime.infrastructure.container import (
-    RuntimeServiceContainer,
-    build_default_runtime_service_container,
-)
-from traffic_lpr_runtime.application.use_cases import (
-    CallableRuntimeUseCase,
-    RuntimeUseCaseRegistry,
-)
-
 
 
 HARD_PLATE_SECONDARY_CROP_SPECS = (
@@ -65,13 +75,13 @@ class LprRuntimeApplication:
         self._tracker = TargetCentricTracker(dependencies, frame_reader, target_detector)
         self._interval_tracking = IntervalTrackingService(self._frame_reader, self._detect_targets, self._tracker)
         self._candidate_fusion = CandidateFusionService(dependencies, primary_recognizer)
-        self._target_scan_workflow = TargetScanWorkflow(
+        self._target_scan_use_case = ScanTargetsUseCase(
             ensure_ready=self._dependencies.ensure_ready,
             status=self.status,
             frame_reader=self._frame_reader,
             detect_targets=self._detect_targets,
         )
-        self._frame_analysis_workflow = FrameAnalysisWorkflow(
+        self._frame_analysis_use_case = AnalyzeFrameUseCase(
             ensure_ready=self._dependencies.ensure_ready,
             status=self.status,
             runtime_root=self._dependencies.runtime_root,
@@ -81,38 +91,31 @@ class LprRuntimeApplication:
             analyze_plate_candidates=self._analyze_plate_candidates,
             apply_reliability_selection=_apply_reliability_selection,
         )
-        self._interval_analysis_workflow = IntervalAnalysisWorkflow(
+        self._interval_analysis_use_case = IntervalAnalysisService(
+            IntervalAnalysisDependencies(
+                ensure_ready=self._dependencies.ensure_ready,
+                status=self.status,
+                runtime_root=self._dependencies.runtime_root,
+                frame_reader=self._frame_reader,
+                track_target_across_interval=self._track_target_across_interval,
+                calibrate_interval_target_boxes=self._calibrate_interval_target_boxes,
+                analyze_plate_candidates=self._analyze_plate_candidates,
+                aggregate_candidates=self._aggregate_candidates,
+                apply_reliability_selection=_apply_reliability_selection,
+                build_track_payload=self._build_track_payload,
+            )
+        )
+        self._extract_storyboard_use_case = ExtractStoryboardUseCase(
             ensure_ready=self._dependencies.ensure_ready,
-            status=self.status,
             runtime_root=self._dependencies.runtime_root,
             frame_reader=self._frame_reader,
-            track_target_across_interval=self._track_target_across_interval,
-            calibrate_interval_target_boxes=self._calibrate_interval_target_boxes,
-            analyze_plate_candidates=self._analyze_plate_candidates,
-            aggregate_candidates=self._aggregate_candidates,
-            apply_reliability_selection=_apply_reliability_selection,
-            build_track_payload=self._build_track_payload,
-        )
-        self._ai_evidence_runtime_bridge = AiEvidenceRuntimeBridge(
-            detect_targets=self._detect_targets,
-            analyze_frame=self.analyze_frame,
-            analyze_interval=self.analyze_interval,
-        )
-        self._ai_provider = build_ai_provider(runtime_root=self._dependencies.runtime_root())
-        self._ai_evidence_workflow = AiEvidenceWorkflow(
-            ensure_ready=self._dependencies.ensure_ready,
-            status=self.status,
-            runtime_root=self._dependencies.runtime_root,
             dependencies=self._dependencies,
-            frame_reader=self._frame_reader,
-            runtime_bridge=self._ai_evidence_runtime_bridge,
-            provider=self._ai_provider,
         )
         self._contract_registry = LprContractRegistry()
         self._use_case_registry = RuntimeUseCaseRegistry([
             CallableRuntimeUseCase(name='status', handler=lambda payload: self.status()),
+            CallableRuntimeUseCase(name='sample-storyboard-frames', handler=self.sample_storyboard_frames),
             CallableRuntimeUseCase(name='scan-targets', handler=self.scan_targets),
-            CallableRuntimeUseCase(name='ai-evidence', handler=self.ai_evidence),
             CallableRuntimeUseCase(name='analyze-frame', handler=self.analyze_frame),
             CallableRuntimeUseCase(name='analyze-interval', handler=self.analyze_interval),
         ])
@@ -128,17 +131,17 @@ class LprRuntimeApplication:
     def status(self) -> dict[str, Any]:
         return self._dependencies.build_status().to_payload()
 
+    def sample_storyboard_frames(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._extract_storyboard_use_case.run(payload)
+
     def scan_targets(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return self._target_scan_workflow.run(payload)
+        return self._target_scan_use_case.run(payload)
 
     def analyze_frame(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return self._frame_analysis_workflow.run(payload)
+        return self._frame_analysis_use_case.run(payload)
 
     def analyze_interval(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return self._interval_analysis_workflow.run(payload)
-
-    def ai_evidence(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return self._ai_evidence_workflow.run(payload)
+        return self._interval_analysis_use_case.run(payload)
 
     def _detect_targets(
         self,

@@ -3,8 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from traffic_lpr_runtime.application.pipeline_support import AnalysisOptions
-from traffic_lpr_runtime.application.preprocessing import PlateObservation
+from traffic_lpr_runtime.domain.analysis_options import AnalysisOptions
+from traffic_lpr_runtime.application.services.preprocessing import PlateObservation
 from traffic_lpr_runtime.domain.interfaces import PlateRecognizer
 from traffic_lpr_runtime.domain.models import FrameSample, PlateCandidate
 from traffic_lpr_runtime.domain.text import normalize_plate_text

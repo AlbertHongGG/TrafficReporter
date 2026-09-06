@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from traffic_lpr_runtime.domain.interfaces import FrameReader, PlateRecognizer, TargetDetector
-from traffic_lpr_runtime.infrastructure.ai_provider_factory import build_ai_provider
 from traffic_lpr_runtime.infrastructure.dependencies import DependencyRegistry
 from traffic_lpr_runtime.infrastructure.frame_reader import OpenCvFrameReader
 from traffic_lpr_runtime.infrastructure.image_processing import QualityScorer

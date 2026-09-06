@@ -8,7 +8,7 @@ from traffic_lpr_runtime.application.analysis_policy import (
     SHORT_INTERVAL_MIN_SAMPLE_BUDGET,
     SHORT_INTERVAL_SAMPLE_STEP_MS,
 )
-from traffic_lpr_runtime.application.pipeline_support import AnalysisOptions
+from traffic_lpr_runtime.domain.analysis_options import AnalysisOptions
 from traffic_lpr_runtime.domain.enums import EvidenceReason
 from traffic_lpr_runtime.domain.models import TargetTrack, TrackedRegion
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect, clamp

@@ -62,8 +62,5 @@ pub async fn analyze_ai_evidence(
     app_handle: AppHandle,
     request: crate::contracts::AiEvidenceRequestPayload,
 ) -> Result<crate::contracts::AiEvidenceResponsePayload, String> {
-    tauri::async_runtime::spawn_blocking(move || LprService::analyze_ai_evidence(app_handle, request))
-        .await
-        .map_err(|error| format!("Failed to join ai evidence task: {}", error))
-        .and_then(|res| res)
+    LprService::analyze_ai_evidence(app_handle, request).await
 }

@@ -138,55 +138,37 @@ class AnalyzeIntervalCommand:
 
 
 @dataclass(frozen=True, slots=True)
-class AiEvidenceCommand:
+class ExtractStoryboardCommand:
     source_path: str
-    start_ms: int
-    end_ms: int
-    anchor_time_ms: int | None
-    description: str
-    target_vehicle_kind: str = 'vehicle'
-    plate_number_hint: str | None = None
-    compression_mode: str = 'compact'
-    coarse_sample_interval_ms: int | None = None
-    fine_window_ms: int | None = None
-    fine_sample_interval_ms: int | None = None
-    max_keyframes: int | None = None
-    analysis_profile_id: str | None = None
-    enable_developer_diagnostics: bool = False
+    times_ms: tuple[int, ...] = ()
+    start_ms: int = 0
+    end_ms: int | None = None
+    sample_every_ms: int = 1000
+    max_samples: int = 30
+    prefix: str = 'frame'
+    show_header: bool = True
+    output_dir: str | None = None
     request_id: str | None = None
-    raw_payload: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_payload(cls, payload: dict[str, Any]) -> 'AiEvidenceCommand':
+    def from_payload(cls, payload: dict[str, Any]) -> 'ExtractStoryboardCommand':
         source_path = str(payload.get('sourcePath') or '').strip()
         if not source_path:
-            raise RuntimeFailure('AiEvidenceCommand requires a non-empty sourcePath.')
+            raise RuntimeFailure('ExtractStoryboardCommand requires a non-empty sourcePath.')
 
-        interval = payload.get('interval') or {}
-        start_ms = _safe_int(interval.get('startMs'))
-        end_ms = _safe_int(interval.get('endMs'))
-        anchor_time_ms = payload.get('anchorTimeMs')
-        resolved_anchor_ms = _safe_int(anchor_time_ms) if anchor_time_ms is not None else None
-
-        description = str(payload.get('description') or '').strip()
-        if not description:
-            raise RuntimeFailure('AI evidence analysis requires a descriptive target vehicle prompt.')
+        raw_times = payload.get('timesMs')
+        times_ms = tuple(int(t) for t in raw_times if isinstance(t, (int, float))) if isinstance(raw_times, list) else ()
 
         return cls(
             source_path=source_path,
-            start_ms=start_ms,
-            end_ms=end_ms,
-            anchor_time_ms=resolved_anchor_ms,
-            description=description,
-            target_vehicle_kind=str(payload.get('targetVehicleKind') or 'vehicle'),
-            plate_number_hint=_optional_str(payload.get('plateNumberHint')),
-            compression_mode=str(payload.get('compressionMode') or 'compact'),
-            coarse_sample_interval_ms=payload.get('coarseSampleIntervalMs'),
-            fine_window_ms=payload.get('fineWindowMs'),
-            fine_sample_interval_ms=payload.get('fineSampleIntervalMs'),
-            max_keyframes=payload.get('maxKeyframes'),
-            analysis_profile_id=_optional_str(payload.get('analysisProfileId')),
-            enable_developer_diagnostics=payload.get('enableDeveloperDiagnostics') is True,
+            times_ms=times_ms,
+            start_ms=_safe_int(payload.get('startMs')),
+            end_ms=_safe_int(payload.get('endMs')) if payload.get('endMs') is not None else None,
+            sample_every_ms=max(100, _safe_int(payload.get('sampleEveryMs'), default=1000)),
+            max_samples=max(2, _safe_int(payload.get('maxSamples'), default=30)),
+            prefix=str(payload.get('prefix') or 'frame'),
+            show_header=bool(payload.get('showHeader', True)),
+            output_dir=_optional_str(payload.get('outputDir')),
             request_id=_optional_str(payload.get('requestId')),
-            raw_payload=dict(payload),
         )
+

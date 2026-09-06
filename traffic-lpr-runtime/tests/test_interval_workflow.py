@@ -6,13 +6,49 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from traffic_lpr_runtime.application.pipeline_support import AnalysisOptions
-from traffic_lpr_runtime.application.workflows import IntervalAnalysisWorkflow
-from traffic_lpr_runtime.application.workflows import _resolve_analysis_target_box
-from traffic_lpr_runtime.application.workflows import _select_interval_evidence_frames
+from traffic_lpr_runtime.domain.analysis_options import AnalysisOptions
+from traffic_lpr_runtime.application.interval_analysis_service import (
+    IntervalAnalysisDependencies,
+    IntervalAnalysisService,
+)
+from traffic_lpr_runtime.application.services.tracking.calibration import _resolve_analysis_target_box
+from traffic_lpr_runtime.application.services.tracking.evidence_frames import _select_interval_evidence_frames
 from traffic_lpr_runtime.domain.errors import RuntimeFailure
 from traffic_lpr_runtime.domain.models import FrameSample, PlateCandidate, QualityMetrics, TargetTrack, TrackedRegion
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect
+
+
+class IntervalAnalysisWorkflow:
+    def __init__(
+        self,
+        ensure_ready=None,
+        status=None,
+        runtime_root=None,
+        frame_reader=None,
+        track_target_across_interval=None,
+        calibrate_interval_target_boxes=None,
+        analyze_plate_candidates=None,
+        aggregate_candidates=None,
+        apply_reliability_selection=None,
+        build_track_payload=None,
+    ) -> None:
+        self._service = IntervalAnalysisService(
+            IntervalAnalysisDependencies(
+                ensure_ready=ensure_ready or (lambda: None),
+                status=status or (lambda: {}),
+                runtime_root=runtime_root or (lambda: Path('.')),
+                frame_reader=frame_reader,
+                track_target_across_interval=track_target_across_interval,
+                calibrate_interval_target_boxes=calibrate_interval_target_boxes,
+                analyze_plate_candidates=analyze_plate_candidates,
+                aggregate_candidates=aggregate_candidates,
+                apply_reliability_selection=apply_reliability_selection,
+                build_track_payload=build_track_payload,
+            )
+        )
+
+    def run(self, payload: dict) -> dict:
+        return self._service.run(payload)
 
 
 def make_quality() -> QualityMetrics:

@@ -219,4 +219,13 @@ mod tests {
             other => panic!("Expected AgentError::Provider, got {:?}", other),
         }
     }
+
+    #[test]
+    fn test_resolve_default_provider() {
+        let res = crate::ai::workflow::AiEvidenceWorkflowEngine::resolve_default_provider();
+        assert!(res.is_ok());
+        let (provider, model) = res.unwrap();
+        assert_eq!(provider.name(), "Ollama");
+        assert!(!model.is_empty());
+    }
 }

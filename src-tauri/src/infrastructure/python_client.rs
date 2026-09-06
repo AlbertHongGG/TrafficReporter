@@ -17,9 +17,6 @@ use crate::editor::{emit_app_log, emit_lpr_progress};
 const LPR_RUNTIME_RETRY_LIMIT: usize = 1;
 const LPR_RUNTIME_PROTOCOL_VERSION: u8 = 1;
 const DEFAULT_LPR_RUNTIME_REQUEST_TIMEOUT: Duration = Duration::from_secs(300);
-const DEFAULT_AI_EVIDENCE_PROVIDER_TIMEOUT_S: u64 = 1200;
-const MIN_AI_EVIDENCE_PROVIDER_TIMEOUT_S: u64 = 30;
-const AI_EVIDENCE_REQUEST_TIMEOUT_BUFFER_S: u64 = 60;
 
 static RUNTIME_BROKER: OnceLock<RuntimeBroker> = OnceLock::new();
 
@@ -83,29 +80,8 @@ where
     })
 }
 
-fn request_timeout_for_subcommand(subcommand: &str) -> Duration {
-    request_timeout_for_subcommand_with_ollama_timeout(subcommand, read_ollama_timeout_seconds_from_env())
-}
-
-fn request_timeout_for_subcommand_with_ollama_timeout(
-    subcommand: &str,
-    ollama_timeout_s: Option<u64>,
-) -> Duration {
-    if subcommand != "ai-evidence" {
-        return DEFAULT_LPR_RUNTIME_REQUEST_TIMEOUT;
-    }
-
-    let resolved_timeout_s = ollama_timeout_s
-        .unwrap_or(DEFAULT_AI_EVIDENCE_PROVIDER_TIMEOUT_S)
-        .max(MIN_AI_EVIDENCE_PROVIDER_TIMEOUT_S)
-        .saturating_add(AI_EVIDENCE_REQUEST_TIMEOUT_BUFFER_S);
-    Duration::from_secs(resolved_timeout_s)
-}
-
-fn read_ollama_timeout_seconds_from_env() -> Option<u64> {
-    std::env::var("TRAFFIC_OLLAMA_TIMEOUT_S")
-        .ok()
-        .and_then(|value| value.trim().parse::<u64>().ok())
+fn request_timeout_for_subcommand(_subcommand: &str) -> Duration {
+    DEFAULT_LPR_RUNTIME_REQUEST_TIMEOUT
 }
 
 fn cancel_generation_changed(invoke_generation: u64, current_generation: u64) -> bool {
@@ -634,8 +610,8 @@ mod tests {
 
     use super::{
         cancel_generation_changed, deserialize_progress_payload, parse_worker_response_line,
-        request_timeout_for_subcommand_with_ollama_timeout, RuntimeWorkerEnvelope, RuntimeWorkerInvokeError,
-        AI_EVIDENCE_REQUEST_TIMEOUT_BUFFER_S, DEFAULT_LPR_RUNTIME_REQUEST_TIMEOUT,
+        request_timeout_for_subcommand, RuntimeWorkerEnvelope, RuntimeWorkerInvokeError,
+        DEFAULT_LPR_RUNTIME_REQUEST_TIMEOUT,
     };
 
     #[test]
@@ -726,14 +702,8 @@ mod tests {
     }
 
     #[test]
-    fn request_timeout_for_ai_evidence_uses_provider_timeout_and_buffer() {
-        let timeout = request_timeout_for_subcommand_with_ollama_timeout("ai-evidence", Some(900));
-        assert_eq!(timeout.as_secs(), 900 + AI_EVIDENCE_REQUEST_TIMEOUT_BUFFER_S);
-    }
-
-    #[test]
-    fn request_timeout_for_non_ai_evidence_keeps_default_timeout() {
-        let timeout = request_timeout_for_subcommand_with_ollama_timeout("analyze-interval", Some(900));
+    fn request_timeout_for_subcommand_uses_default_timeout() {
+        let timeout = request_timeout_for_subcommand("analyze-interval");
         assert_eq!(timeout, DEFAULT_LPR_RUNTIME_REQUEST_TIMEOUT);
     }
 

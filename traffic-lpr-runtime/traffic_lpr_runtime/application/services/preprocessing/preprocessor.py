@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from traffic_lpr_runtime.application.pipeline_support import AnalysisOptions
+from traffic_lpr_runtime.domain.analysis_options import AnalysisOptions
 from traffic_lpr_runtime.domain.models import PlateCandidate, QualityMetrics
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect, clamp, crop_image
 from traffic_lpr_runtime.infrastructure.dependencies import DependencyRegistry

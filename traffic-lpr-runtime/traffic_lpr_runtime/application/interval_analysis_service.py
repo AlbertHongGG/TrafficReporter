@@ -7,8 +7,8 @@ from typing import Any, Callable
 
 from traffic_lpr_runtime.application.analysis_policy import AnalysisPolicyResolver
 from traffic_lpr_runtime.application.diagnostics import IntervalAnalysisDiagnostics, RuntimeStageTiming
-from traffic_lpr_runtime.application.pipeline_support import AnalysisOptions
-from traffic_lpr_runtime.application.preprocessing import PlateObservation
+from traffic_lpr_runtime.domain.analysis_options import AnalysisOptions
+from traffic_lpr_runtime.application.services.preprocessing import PlateObservation
 from traffic_lpr_runtime.application.provenance import build_analysis_provenance
 from traffic_lpr_runtime.application.review_state import build_review_state
 from traffic_lpr_runtime.domain.errors import RuntimeFailure

@@ -7,8 +7,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from traffic_lpr_runtime.application.pipeline_support import AnalysisOptions
-from traffic_lpr_runtime.application.preprocessing import PlatePreprocessor
+from traffic_lpr_runtime.domain.analysis_options import AnalysisOptions
+from traffic_lpr_runtime.application.services.preprocessing import PlatePreprocessor
 from traffic_lpr_runtime.domain.models import QualityMetrics
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect
 from traffic_lpr_runtime.infrastructure.image_processing import QualityScorer
