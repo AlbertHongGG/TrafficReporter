@@ -55,3 +55,16 @@ class QualityScorer(Protocol):
         box: NormalizedRect | None,
     ) -> QualityMetrics: ...
 
+
+class ProgressSink(Protocol):
+    def emit(
+        self,
+        progress: float,
+        stage: str,
+        detail: str,
+        *,
+        done: bool = False,
+        failed: bool = False,
+        **kwargs: Any,
+    ) -> None: ...
+

@@ -11,13 +11,7 @@ from typing import Any
 
 from traffic_lpr_runtime.domain.errors import RuntimeFailure
 from traffic_lpr_runtime.domain.models import RuntimeStatus
-from traffic_lpr_runtime.infrastructure.runtime_layout import (
-    cache_root as resolve_cache_root,
-    ensure_runtime_layout,
-    runtime_data_root as resolve_runtime_data_root,
-    runs_root as resolve_runs_root,
-    vendor_cache_root as resolve_vendor_cache_root,
-)
+from traffic_lpr_runtime.infrastructure.storage import RuntimeStorageLayout
 
 
 DEPENDENCY_NAMES = [
@@ -34,6 +28,7 @@ DEPENDENCY_NAMES = [
 @dataclass(slots=True)
 class DependencyRegistry:
     runtime_script: Path
+    storage: RuntimeStorageLayout
     einops: Any | None
     cv2: Any | None
     numpy: Any | None
@@ -44,10 +39,13 @@ class DependencyRegistry:
     fast_plate_ocr: Any | None
 
     @classmethod
-    def load(cls, runtime_script: Path) -> 'DependencyRegistry':
+    def load(cls, runtime_script: Path, storage: RuntimeStorageLayout | None = None) -> DependencyRegistry:
         _prime_gpu_runtime()
+        resolved_storage = storage or RuntimeStorageLayout.discover(runtime_script)
+        resolved_storage.ensure_layout()
         return cls(
             runtime_script=runtime_script,
+            storage=resolved_storage,
             einops=_safe_import('einops'),
             cv2=_safe_import('cv2'),
             numpy=_safe_import('numpy'),
@@ -59,36 +57,22 @@ class DependencyRegistry:
         )
 
     def runtime_root(self) -> Path:
-        search_roots = (self.runtime_script.parent, *self.runtime_script.parents)
-        for candidate in search_roots:
-            if (candidate / 'pyproject.toml').exists():
-                return candidate
-        return self.runtime_script.parent
+        return self.storage.runtime_root
 
     def runtime_data_root(self) -> Path:
-        runtime_root = self.runtime_root()
-        ensure_runtime_layout(runtime_root)
-        return resolve_runtime_data_root(runtime_root)
+        return self.storage.data_root
 
     def runtime_runs_root(self) -> Path:
-        runtime_root = self.runtime_root()
-        ensure_runtime_layout(runtime_root)
-        return resolve_runs_root(runtime_root)
+        return self.storage.runs_root
 
     def runtime_cache_root(self) -> Path:
-        runtime_root = self.runtime_root()
-        ensure_runtime_layout(runtime_root)
-        return resolve_cache_root(runtime_root)
+        return self.storage.cache_root
 
     def vendor_cache_root(self) -> Path:
-        runtime_root = self.runtime_root()
-        ensure_runtime_layout(runtime_root)
-        return resolve_vendor_cache_root(runtime_root)
+        return self.storage.vendor_cache_root
 
     def models_root(self) -> Path:
-        models_root = self.runtime_root() / 'models'
-        models_root.mkdir(parents=True, exist_ok=True)
-        return models_root
+        return self.storage.models_root
 
     def torch_cuda_available(self) -> bool:
         if self.torch is None:

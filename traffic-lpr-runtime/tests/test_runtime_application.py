@@ -7,8 +7,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from traffic_lpr_runtime.application.services.analysis.plate_analyzer import PlateAnalysisService
 from traffic_lpr_runtime.domain.analysis_options import AnalysisOptions
-from traffic_lpr_runtime.application.runtime_application import LprRuntimeApplication
 from traffic_lpr_runtime.domain.models import FrameSample, PlateCandidate, QualityMetrics
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect
 
@@ -92,14 +92,10 @@ class HardPlateRecognizerStub:
         return []
 
 
-class RuntimeApplicationTests(unittest.TestCase):
+class PlateAnalysisServiceTests(unittest.TestCase):
     def test_baseline_recognizer_backend_skips_crop_refinement(self) -> None:
         recognizer = RecognizerStub()
-        app = object.__new__(LprRuntimeApplication)
-        app._primary_recognizer = recognizer
-        app._quality_scorer = types.SimpleNamespace(score=lambda image, box: make_quality())
-        app._select_analysis_roi = lambda frame, marker_rect, target_box: (frame, target_box)
-        app._plate_preprocessor = types.SimpleNamespace(
+        plate_preprocessor = types.SimpleNamespace(
             prepare=lambda *args, **kwargs: types.SimpleNamespace(
                 working_image=object(),
                 enhanced_image=object(),
@@ -112,10 +108,23 @@ class RuntimeApplicationTests(unittest.TestCase):
                 ocr_candidates=[],
             )
         )
-        app._rank_sample_candidates = lambda baseline_candidates, crop_candidates, observation: baseline_candidates + crop_candidates
+        quality_scorer = types.SimpleNamespace(score=lambda image, box: make_quality())
+        candidate_fusion = types.SimpleNamespace(
+            fuse_candidates=lambda *args, **kwargs: [],
+            aggregate_candidates=lambda *args, **kwargs: ([], {}),
+            rank_sample_candidates=lambda baseline, crop, observation: baseline + crop,
+        )
 
-        candidates, sample, observation = app._analyze_plate_candidates(
-            frame=object(),
+        service = PlateAnalysisService(
+            primary_recognizer=recognizer,
+            plate_preprocessor=plate_preprocessor,
+            quality_scorer=quality_scorer,
+            candidate_fusion=candidate_fusion,
+        )
+
+        fake_frame = np.zeros((100, 100, 3), dtype=np.uint8) if np is not None else types.SimpleNamespace(shape=(100, 100, 3))
+        candidates, sample, observation = service.analyze_plate_candidates(
+            frame=fake_frame,
             time_ms=100,
             marker_rect=None,
             target_box=NormalizedRect(x=0.1, y=0.2, width=0.3, height=0.3),
@@ -132,8 +141,13 @@ class RuntimeApplicationTests(unittest.TestCase):
 
     @unittest.skipIf(np is None, 'NumPy is required for OCR crop regression tests.')
     def test_recognize_observation_crop_adds_secondary_subcrop_candidates_for_hard_plate(self) -> None:
-        app = object.__new__(LprRuntimeApplication)
-        app._primary_recognizer = HardPlateRecognizerStub()
+        recognizer = HardPlateRecognizerStub()
+        service = PlateAnalysisService(
+            primary_recognizer=recognizer,
+            plate_preprocessor=types.SimpleNamespace(),
+            quality_scorer=types.SimpleNamespace(),
+            candidate_fusion=types.SimpleNamespace(),
+        )
 
         observation = types.SimpleNamespace(
             working_image=np.zeros((40, 128, 3), dtype=np.uint8),
@@ -157,7 +171,7 @@ class RuntimeApplicationTests(unittest.TestCase):
             },
         )
 
-        candidates = app._recognize_observation_crop(
+        candidates = service.recognize_observation_crop(
             observation,
             2535,
             NormalizedRect(x=0.23108639717102053, y=0.2735787707104006, width=0.0367583018762094, height=0.03190133052524574),

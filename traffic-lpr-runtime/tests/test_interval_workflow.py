@@ -7,7 +7,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from traffic_lpr_runtime.domain.analysis_options import AnalysisOptions
-from traffic_lpr_runtime.application.interval_analysis_service import (
+from traffic_lpr_runtime.application.services.analysis.interval_analysis_service import (
     IntervalAnalysisDependencies,
     IntervalAnalysisService,
 )

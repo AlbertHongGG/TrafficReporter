@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from traffic_lpr_runtime.application.commands import ScanTargetsCommand
+from traffic_lpr_runtime.application.contracts.commands import ScanTargetsCommand
 from traffic_lpr_runtime.domain.interfaces import FrameReader, TargetDetector
 from traffic_lpr_runtime.domain.models import TrackedRegion
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect

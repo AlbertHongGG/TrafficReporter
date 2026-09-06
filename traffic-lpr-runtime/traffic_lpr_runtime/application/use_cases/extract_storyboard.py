@@ -7,6 +7,7 @@ from typing import Any, Callable, Sequence
 from traffic_lpr_runtime.domain.errors import RuntimeFailure
 from traffic_lpr_runtime.domain.interfaces import FrameReader
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect, crop_image
+from traffic_lpr_runtime.infrastructure.storage import RuntimeStorageLayout
 
 
 def format_time_label(time_ms: int) -> str:
@@ -26,11 +27,13 @@ class ExtractStoryboardUseCase:
         runtime_root: Callable[[], Path],
         frame_reader: FrameReader,
         dependencies: Any,
+        storage: RuntimeStorageLayout | None = None,
     ) -> None:
         self._ensure_ready = ensure_ready
         self._runtime_root = runtime_root
         self._frame_reader = frame_reader
         self._dependencies = dependencies
+        self._storage = storage
 
     def run(self, payload: dict[str, Any]) -> dict[str, Any]:
         self._ensure_ready()
@@ -48,7 +51,8 @@ class ExtractStoryboardUseCase:
             output_dir = Path(output_dir_str)
         else:
             request_id = str(payload.get("requestId") or "storyboard")
-            output_dir = self._runtime_root() / "runs" / request_id / "storyboard"
+            storage = self._storage or getattr(self._dependencies, 'storage', None) or RuntimeStorageLayout.discover(self._runtime_root())
+            output_dir = storage.run_child(request_id, "storyboard")
 
         output_dir.mkdir(parents=True, exist_ok=True)
         prefix = str(payload.get("prefix") or "frame")

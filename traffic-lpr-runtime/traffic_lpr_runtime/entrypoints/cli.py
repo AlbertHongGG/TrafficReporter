@@ -10,7 +10,7 @@ from typing import Any
 
 from traffic_lpr_runtime.application.runtime_application import build_default_application
 from traffic_lpr_runtime.domain.errors import RuntimeFailure
-from traffic_lpr_runtime.protocol import (
+from traffic_lpr_runtime.infrastructure.ipc import (
     RuntimeRequestContext,
     build_runtime_error,
     build_runtime_progress,

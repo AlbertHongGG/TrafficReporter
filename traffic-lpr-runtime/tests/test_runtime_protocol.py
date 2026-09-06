@@ -7,7 +7,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from traffic_lpr_runtime.domain.errors import RuntimeFailure
-from traffic_lpr_runtime.protocol import (
+from traffic_lpr_runtime.infrastructure.ipc import (
     LEGACY_RUNTIME_PROTOCOL_VERSION,
     VNEXT_RUNTIME_PROTOCOL_VERSION,
     RuntimeRequestContext,

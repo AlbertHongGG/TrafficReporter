@@ -1,12 +1,7 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from pathlib import Path
 from typing import Any
-
-from traffic_lpr_runtime.application.analysis_profiles import resolve_analysis_profile_options
-from traffic_lpr_runtime.infrastructure.runtime_layout import build_run_id, run_child
-
 
 DEFAULT_OCR_MODEL_NAMES = [
     'cct-xs-v2-global-model',
@@ -24,6 +19,8 @@ def _to_optional_str(value: Any) -> str | None:
 
 @dataclass(slots=True)
 class AnalysisOptions:
+    """Pure domain entity representing license plate recognition analysis configuration."""
+
     analysis_profile_id: str = 'precision'
     enable_developer_diagnostics: bool = False
     persist_artifacts: bool = False
@@ -57,82 +54,58 @@ class AnalysisOptions:
     anchor_burst_count: int = 4
 
     @classmethod
-    def from_payload(cls, payload: dict[str, Any] | None) -> 'AnalysisOptions':
-        request_payload = payload or {}
-        developer_diagnostics_enabled = request_payload.get('enableDeveloperDiagnostics') is True
-        analysis_profile_id, profile_options = resolve_analysis_profile_options(
-            _to_optional_str(request_payload.get('analysisProfileId')),
-            developer_diagnostics_enabled,
-        )
-        raw = {
-            **profile_options,
-            **dict(request_payload.get('analysisOptions') or {}),
-        }
-        persist_artifacts = bool(raw.get('persistArtifacts') or False) and developer_diagnostics_enabled
+    def from_dict(cls, raw: dict[str, Any] | None) -> AnalysisOptions:
+        data = raw or {}
+        persist_artifacts = bool(data.get('persistArtifacts') or False)
         return cls(
-            analysis_profile_id=analysis_profile_id,
-            enable_developer_diagnostics=developer_diagnostics_enabled,
+            analysis_profile_id=_to_optional_str(data.get('analysisProfileId')) or 'precision',
+            enable_developer_diagnostics=bool(data.get('enableDeveloperDiagnostics')),
             persist_artifacts=persist_artifacts,
-            artifact_dir=_to_optional_str(raw.get('artifactDir')),
-            tracker_mode=_to_optional_str(raw.get('trackerMode')) or 'botsort',
-            fusion_mode=_to_optional_str(raw.get('fusionMode')) or 'aligned-char',
-            restoration_mode=_to_optional_str(raw.get('restorationMode')) or 'mambairv2',
-            recognizer_backend=_to_optional_str(raw.get('recognizerBackend')) or 'hybrid',
-            temporal_evidence_mode=_to_optional_str(raw.get('temporalEvidenceMode')) or 'motion-aware',
-            sequence_review_mode=_to_optional_str(raw.get('sequenceReviewMode')) or 'balanced',
-            enable_rectification=raw.get('enableRectification', True) is not False,
-            enable_enhancement=raw.get('enableEnhancement', True) is not False,
-            enable_recognizer_comparison=raw.get('enableRecognizerComparison', True) is not False,
-            debug_tag=_to_optional_str(raw.get('debugTag')),
-            ocr_model_names=[str(name) for name in (raw.get('ocrModelNames') or DEFAULT_OCR_MODEL_NAMES)],
-            max_plate_candidates=max(1, min(int(raw.get('maxPlateCandidates') or 3), 6)),
-            tracker_high_confidence=float(raw.get('trackerHighConfidence') or 0.35),
-            tracker_low_confidence=float(raw.get('trackerLowConfidence') or 0.15),
-            max_tracking_gap=max(1, min(int(raw.get('maxTrackingGap') or 3), 8)),
-            min_alignment_score=float(raw.get('minAlignmentScore') or 0.05),
-            enable_reliability_gates=raw.get('enableReliabilityGates', True) is not False,
-            min_accepted_confidence=float(raw.get('minAcceptedConfidence') or 0.62),
-            min_candidate_margin=float(raw.get('minCandidateMargin') or 0.08),
-            min_interval_support_frames=max(1, min(int(raw.get('minIntervalSupportFrames') or 2), 8)),
+            artifact_dir=_to_optional_str(data.get('artifactDir')),
+            tracker_mode=_to_optional_str(data.get('trackerMode')) or 'botsort',
+            fusion_mode=_to_optional_str(data.get('fusionMode')) or 'aligned-char',
+            restoration_mode=_to_optional_str(data.get('restorationMode')) or 'mambairv2',
+            recognizer_backend=_to_optional_str(data.get('recognizerBackend')) or 'hybrid',
+            temporal_evidence_mode=_to_optional_str(data.get('temporalEvidenceMode')) or 'motion-aware',
+            sequence_review_mode=_to_optional_str(data.get('sequenceReviewMode')) or 'balanced',
+            enable_rectification=data.get('enableRectification', True) is not False,
+            enable_enhancement=data.get('enableEnhancement', True) is not False,
+            enable_recognizer_comparison=data.get('enableRecognizerComparison', True) is not False,
+            debug_tag=_to_optional_str(data.get('debugTag')),
+            ocr_model_names=[str(name) for name in (data.get('ocrModelNames') or DEFAULT_OCR_MODEL_NAMES)],
+            max_plate_candidates=max(1, min(int(data.get('maxPlateCandidates') or 3), 6)),
+            tracker_high_confidence=float(data.get('trackerHighConfidence') or 0.35),
+            tracker_low_confidence=float(data.get('trackerLowConfidence') or 0.15),
+            max_tracking_gap=max(1, min(int(data.get('maxTrackingGap') or 3), 8)),
+            min_alignment_score=float(data.get('minAlignmentScore') or 0.05),
+            enable_reliability_gates=data.get('enableReliabilityGates', True) is not False,
+            min_accepted_confidence=float(data.get('minAcceptedConfidence') or 0.62),
+            min_candidate_margin=float(data.get('minCandidateMargin') or 0.08),
+            min_interval_support_frames=max(1, min(int(data.get('minIntervalSupportFrames') or 2), 8)),
             min_sequence_persistence=max(
                 0.0,
                 min(
-                    float(0.55 if raw.get('minSequencePersistence') is None else raw.get('minSequencePersistence')),
+                    float(0.55 if data.get('minSequencePersistence') is None else data.get('minSequencePersistence')),
                     1.0,
                 ),
             ),
             max_sequence_gap_count=max(
                 0,
                 min(
-                    int(1 if raw.get('maxSequenceGapCount') is None else raw.get('maxSequenceGapCount')),
+                    int(1 if data.get('maxSequenceGapCount') is None else data.get('maxSequenceGapCount')),
                     8,
                 ),
             ),
-            temporal_window_ms=max(80, min(int(raw.get('temporalWindowMs') or 240), 1200)),
-            temporal_neighbor_count=max(1, min(int(raw.get('temporalNeighborCount') or 5), 9)),
-            max_evidence_sample_count=max(4, min(int(raw.get('maxEvidenceSampleCount') or 12), 24)),
-            anchor_burst_count=max(1, min(int(raw.get('anchorBurstCount') or 4), 8)),
+            temporal_window_ms=max(80, min(int(data.get('temporalWindowMs') or 240), 1200)),
+            temporal_neighbor_count=max(1, min(int(data.get('temporalNeighborCount') or 5), 9)),
+            max_evidence_sample_count=max(4, min(int(data.get('maxEvidenceSampleCount') or 12), 24)),
+            anchor_burst_count=max(1, min(int(data.get('anchorBurstCount') or 4), 8)),
         )
-
-    def resolve_artifact_root(self, runtime_root: Path, suffix: str | None = None, run_id: str | None = None) -> Path | None:
-        if not self.persist_artifacts:
-            return None
-        if self.artifact_dir:
-            root = Path(self.artifact_dir)
-        else:
-            resolved_run_id = run_id or build_run_id()
-            root = run_child(runtime_root, resolved_run_id, 'analysis')
-            if self.debug_tag:
-                root = root / self.debug_tag
-        if suffix:
-            root = root / suffix
-        root.mkdir(parents=True, exist_ok=True)
-        return root
 
     def ocr_models(self) -> list[str]:
         return self.ocr_model_names if self.enable_recognizer_comparison else self.ocr_model_names[:1]
 
-    def for_interactive_frame(self) -> 'AnalysisOptions':
+    def for_interactive_frame(self) -> AnalysisOptions:
         return replace(
             self,
             enable_recognizer_comparison=False,
@@ -143,7 +116,7 @@ class AnalysisOptions:
             temporal_neighbor_count=1,
         )
 
-    def for_interval_sample(self, sample_count_hint: int | None = None) -> 'AnalysisOptions':
+    def for_interval_sample(self, sample_count_hint: int | None = None) -> AnalysisOptions:
         return replace(
             self,
             enable_recognizer_comparison=False,

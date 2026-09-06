@@ -129,9 +129,9 @@ class MambaIrV2LightRestorer:
         if self._arch_module is not None:
             return self._arch_module
 
-        third_party_root = Path(__file__).resolve().parents[1] / 'third_party'
-        if str(third_party_root) not in sys.path:
-            sys.path.insert(0, str(third_party_root))
+        stubs_root = Path(__file__).resolve().parent / 'restoration' / 'stubs'
+        if str(stubs_root) not in sys.path:
+            sys.path.insert(0, str(stubs_root))
 
         arch_path = self._ensure_vendor_arch()
         spec = importlib.util.spec_from_file_location(_ARCH_MODULE_NAME, arch_path)

@@ -1,8 +1,9 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
 
+from traffic_lpr_runtime.application.contracts.options_factory import build_analysis_options_from_payload
 from traffic_lpr_runtime.domain.analysis_options import AnalysisOptions
 from traffic_lpr_runtime.domain.errors import RuntimeFailure
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect
@@ -31,7 +32,7 @@ class ScanTargetsCommand:
     request_id: str | None = None
 
     @classmethod
-    def from_payload(cls, payload: dict[str, Any]) -> 'ScanTargetsCommand':
+    def from_payload(cls, payload: dict[str, Any]) -> ScanTargetsCommand:
         source_path = str(payload.get('sourcePath') or '').strip()
         if not source_path:
             raise RuntimeFailure('ScanTargetsCommand requires a non-empty sourcePath.')
@@ -58,11 +59,11 @@ class AnalyzeFrameCommand:
     request_id: str | None = None
 
     @classmethod
-    def from_payload(cls, payload: dict[str, Any]) -> 'AnalyzeFrameCommand':
+    def from_payload(cls, payload: dict[str, Any]) -> AnalyzeFrameCommand:
         source_path = str(payload.get('sourcePath') or '').strip()
         if not source_path:
             raise RuntimeFailure('AnalyzeFrameCommand requires a non-empty sourcePath.')
-        options = AnalysisOptions.from_payload(payload).for_interactive_frame()
+        options = build_analysis_options_from_payload(payload).for_interactive_frame()
         country_hints = tuple(str(h) for h in (payload.get('countryHints') or []) if str(h).strip())
         return cls(
             source_path=source_path,
@@ -97,7 +98,7 @@ class AnalyzeIntervalCommand:
     raw_payload: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_payload(cls, payload: dict[str, Any]) -> 'AnalyzeIntervalCommand':
+    def from_payload(cls, payload: dict[str, Any]) -> AnalyzeIntervalCommand:
         source_path = str(payload.get('sourcePath') or '').strip()
         if not source_path:
             raise RuntimeFailure('AnalyzeIntervalCommand requires a non-empty sourcePath.')
@@ -113,7 +114,7 @@ class AnalyzeIntervalCommand:
         if anchor_time_ms < start_ms or anchor_time_ms > end_ms:
             raise RuntimeFailure('Range analysis requires the selected target anchor to stay inside the requested interval.')
 
-        options = AnalysisOptions.from_payload(payload)
+        options = build_analysis_options_from_payload(payload)
         country_hints = tuple(str(h) for h in (payload.get('countryHints') or []) if str(h).strip())
         gt = payload.get('groundTruthFrames')
         ground_truth_frames = tuple(gt) if isinstance(gt, list) else ()
@@ -151,7 +152,7 @@ class ExtractStoryboardCommand:
     request_id: str | None = None
 
     @classmethod
-    def from_payload(cls, payload: dict[str, Any]) -> 'ExtractStoryboardCommand':
+    def from_payload(cls, payload: dict[str, Any]) -> ExtractStoryboardCommand:
         source_path = str(payload.get('sourcePath') or '').strip()
         if not source_path:
             raise RuntimeFailure('ExtractStoryboardCommand requires a non-empty sourcePath.')
@@ -171,4 +172,3 @@ class ExtractStoryboardCommand:
             output_dir=_optional_str(payload.get('outputDir')),
             request_id=_optional_str(payload.get('requestId')),
         )
-

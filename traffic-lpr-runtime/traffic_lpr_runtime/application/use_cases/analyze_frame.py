@@ -3,25 +3,17 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable
 
-from traffic_lpr_runtime.application.commands import AnalyzeFrameCommand
-from traffic_lpr_runtime.application.provenance import build_analysis_provenance
-from traffic_lpr_runtime.application.review_state import build_review_state
+from traffic_lpr_runtime.application.contracts.commands import AnalyzeFrameCommand
+from traffic_lpr_runtime.application.services.analysis.provenance import build_analysis_provenance
+from traffic_lpr_runtime.application.services.analysis.review_state import build_review_state
 from traffic_lpr_runtime.application.services.fusion.review_decision import _build_decision_trace, _request_run_id
 from traffic_lpr_runtime.domain.analysis_options import AnalysisOptions
 from traffic_lpr_runtime.domain.enums import EvidenceReason
+from traffic_lpr_runtime.domain.interfaces import ProgressSink
 from traffic_lpr_runtime.domain.models import FrameSample, PlateCandidate, TrackedRegion
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect
-from traffic_lpr_runtime.protocol import emit_runtime_progress
-
-
-def _emit_progress(progress: float, stage: str, detail: str) -> None:
-    emit_runtime_progress({
-        'progress': progress,
-        'stage': stage,
-        'detail': detail,
-        'done': False,
-        'failed': False,
-    })
+from traffic_lpr_runtime.infrastructure.ipc import IpcProgressSink
+from traffic_lpr_runtime.infrastructure.storage import RuntimeStorageLayout
 
 
 class AnalyzeFrameUseCase:
@@ -37,6 +29,8 @@ class AnalyzeFrameUseCase:
         match_anchor_target: Callable[[list[TrackedRegion], NormalizedRect | None], TrackedRegion | None],
         analyze_plate_candidates: Callable[..., Any],
         apply_reliability_selection: Callable[..., Any],
+        storage: RuntimeStorageLayout | None = None,
+        progress_sink: ProgressSink | None = None,
     ) -> None:
         self._ensure_ready = ensure_ready
         self._status = status
@@ -46,19 +40,22 @@ class AnalyzeFrameUseCase:
         self._match_anchor_target = match_anchor_target
         self._analyze_plate_candidates = analyze_plate_candidates
         self._apply_reliability_selection = apply_reliability_selection
+        self._storage = storage
+        self._progress_sink = progress_sink or IpcProgressSink()
 
     def run(self, payload: dict[str, Any]) -> dict[str, Any]:
         self._ensure_ready()
         command = AnalyzeFrameCommand.from_payload(payload)
         time_ms = command.time_ms
         options = command.options.for_interactive_frame()
-        artifact_root = options.resolve_artifact_root(self._runtime_root(), f'frame-{time_ms}', command.request_id)
+        storage = self._storage or RuntimeStorageLayout.discover(self._runtime_root())
+        artifact_root = storage.resolve_artifact_dir(options, f'frame-{time_ms}', command.request_id)
         marker_rect = command.marker_rect
         selected_target_box = command.selected_target_box
 
-        _emit_progress(0.12, 'Frame', 'Reading the selected frame for interactive analysis.')
+        self._progress_sink.emit(0.12, 'Frame', 'Reading the selected frame for interactive analysis.')
         frame = self._frame_reader.read_frame(command.source_path, time_ms)
-        _emit_progress(0.28, 'Frame', 'Locating the selected vehicle and plate candidates.')
+        self._progress_sink.emit(0.28, 'Frame', 'Locating the selected vehicle and plate candidates.')
         detections = self._detect_targets(
             frame,
             time_ms,
@@ -67,7 +64,7 @@ class AnalyzeFrameUseCase:
         )
         target_region = self._match_anchor_target(detections, selected_target_box)
         target_box = target_region.box if target_region else selected_target_box
-        _emit_progress(0.64, 'Frame', 'Running the interactive plate analysis fast path.')
+        self._progress_sink.emit(0.64, 'Frame', 'Running the interactive plate analysis fast path.')
         candidates, sample, observation = self._analyze_plate_candidates(
             frame,
             time_ms,
@@ -89,7 +86,7 @@ class AnalyzeFrameUseCase:
             **(sample.diagnostics or {}),
             'selection': selection_diagnostics,
         }
-        _emit_progress(0.9, 'Frame', 'Finalizing the frame analysis result.')
+        self._progress_sink.emit(0.9, 'Frame', 'Finalizing the frame analysis result.')
         runtime_status = self._status()
         decision = _build_decision_trace(candidates, accepted_candidate_id, selection_diagnostics, [sample])
         return {

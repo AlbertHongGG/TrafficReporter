@@ -1,17 +1,15 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
 
 from traffic_lpr_runtime.domain.analysis_options import AnalysisOptions
 
-
 SHORT_INTERVAL_MAX_MS = 3500
 SHORT_INTERVAL_SAMPLE_STEP_MS = 150
 SHORT_INTERVAL_MIN_SAMPLE_BUDGET = 16
 DEFAULT_INTERACTIVE_LATENCY_BUDGET_MS = 30_000
 DEFAULT_AI_EVIDENCE_LATENCY_BUDGET_MS = 45_000
-
 
 KNOWN_INTERVAL_INTENTS = {
     'interactive-short-range',

@@ -1,9 +1,9 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
 
-from traffic_lpr_runtime.application.analysis_policy import ResolvedIntervalAnalysisPolicy
+from traffic_lpr_runtime.application.services.analysis.policy import ResolvedIntervalAnalysisPolicy
 
 
 @dataclass(frozen=True, slots=True)

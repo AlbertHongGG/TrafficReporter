@@ -6,7 +6,7 @@ from typing import Any
 from traffic_lpr_runtime.domain.interfaces import FrameReader, PlateRecognizer, TargetDetector
 from traffic_lpr_runtime.domain.models import FrameSample, PlateCandidate, TargetTrack, TrackedRegion
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect
-from traffic_lpr_runtime.application.contract_spec import LprContractRegistry
+from traffic_lpr_runtime.application.contracts import LprContractRegistry
 from traffic_lpr_runtime.application.services.analysis import (
     IntervalAnalysisDependencies,
     IntervalAnalysisService,
@@ -66,6 +66,8 @@ class LprRuntimeApplication:
             candidate_fusion=self._candidate_fusion,
         )
 
+        storage = getattr(dependencies, 'storage', None)
+
         # Initialize Use Cases
         self._target_scan_use_case = ScanTargetsUseCase(
             ensure_ready=self._dependencies.ensure_ready,
@@ -82,6 +84,7 @@ class LprRuntimeApplication:
             match_anchor_target=self._interval_tracking.match_anchor_target,
             analyze_plate_candidates=self._plate_analyzer.analyze_plate_candidates,
             apply_reliability_selection=apply_reliability_selection,
+            storage=storage,
         )
         self._interval_analysis_use_case = IntervalAnalysisService(
             IntervalAnalysisDependencies(
@@ -95,6 +98,7 @@ class LprRuntimeApplication:
                 aggregate_candidates=self._candidate_fusion.aggregate_candidates,
                 apply_reliability_selection=apply_reliability_selection,
                 build_track_payload=self._interval_tracking.build_track_payload,
+                storage=storage,
             )
         )
         self._extract_storyboard_use_case = ExtractStoryboardUseCase(
@@ -102,6 +106,7 @@ class LprRuntimeApplication:
             runtime_root=self._dependencies.runtime_root,
             frame_reader=self._frame_reader,
             dependencies=self._dependencies,
+            storage=storage,
         )
 
         # Register contract validator and command routes
@@ -137,44 +142,25 @@ class LprRuntimeApplication:
     def analyze_interval(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._interval_analysis_use_case.run(payload)
 
-    # Delegations for service access & backward-compatible test hooks
-    def _select_analysis_roi(self, frame: Any, marker_rect: NormalizedRect | None, target_box: NormalizedRect | None) -> tuple[Any, NormalizedRect | None]:
-        analyzer = getattr(self, '_plate_analyzer', None)
-        if analyzer is not None:
-            return analyzer.select_analysis_roi(frame, marker_rect, target_box)
-        if target_box:
-            from traffic_lpr_runtime.domain.value_objects import crop_image
-            return crop_image(frame, target_box), target_box
-        if marker_rect:
-            from traffic_lpr_runtime.domain.value_objects import crop_image
-            return crop_image(frame, marker_rect), marker_rect
-        return frame, None
+    @property
+    def plate_analyzer(self) -> PlateAnalysisService:
+        return self._plate_analyzer
 
-    def _analyze_plate_candidates(self, *args: Any, **kwargs: Any) -> Any:
-        analyzer = getattr(self, '_plate_analyzer', None)
-        if analyzer is None:
-            analyzer = PlateAnalysisService(
-                primary_recognizer=getattr(self, '_primary_recognizer', None),
-                plate_preprocessor=getattr(self, '_plate_preprocessor', None),
-                quality_scorer=getattr(self, '_quality_scorer', None),
-                candidate_fusion=getattr(self, '_candidate_fusion', None),
-            )
-            if hasattr(self, '_select_analysis_roi'):
-                analyzer.select_analysis_roi = self._select_analysis_roi
-            if hasattr(self, '_rank_sample_candidates'):
-                analyzer.rank_sample_candidates = self._rank_sample_candidates
-        return analyzer.analyze_plate_candidates(*args, **kwargs)
+    @property
+    def candidate_fusion(self) -> CandidateFusionService:
+        return self._candidate_fusion
 
-    def _recognize_observation_crop(self, *args: Any, **kwargs: Any) -> Any:
-        analyzer = getattr(self, '_plate_analyzer', None)
-        if analyzer is None:
-            analyzer = PlateAnalysisService(
-                primary_recognizer=getattr(self, '_primary_recognizer', None),
-                plate_preprocessor=getattr(self, '_plate_preprocessor', None),
-                quality_scorer=getattr(self, '_quality_scorer', None),
-                candidate_fusion=getattr(self, '_candidate_fusion', None),
-            )
-        return analyzer.recognize_observation_crop(*args, **kwargs)
+    @property
+    def plate_preprocessor(self) -> PlatePreprocessor:
+        return self._plate_preprocessor
+
+    @property
+    def tracker(self) -> TargetCentricTracker:
+        return self._tracker
+
+    @property
+    def interval_tracking(self) -> IntervalTrackingService:
+        return self._interval_tracking
 
 
 def build_default_application(runtime_script: Path) -> LprRuntimeApplication:
@@ -186,3 +172,4 @@ def build_default_application(runtime_script: Path) -> LprRuntimeApplication:
         primary_recognizer=container.primary_recognizer,
         quality_scorer=container.quality_scorer,
     )
+

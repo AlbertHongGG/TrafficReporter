@@ -5,15 +5,43 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any, Callable
 
-from traffic_lpr_runtime.application.analysis_policy import AnalysisPolicyResolver
-from traffic_lpr_runtime.application.diagnostics import IntervalAnalysisDiagnostics, RuntimeStageTiming
-from traffic_lpr_runtime.domain.analysis_options import AnalysisOptions
+from traffic_lpr_runtime.application.contracts.options_factory import build_analysis_options_from_payload
+from traffic_lpr_runtime.application.services.fusion.review_decision import (
+    _build_decision_trace,
+    _build_sample_selection_payload,
+    _merge_reasons,
+    _request_run_id,
+    _safe_int,
+    _sequence_advisory_reasons,
+    _sequence_hard_review_reasons,
+)
 from traffic_lpr_runtime.application.services.preprocessing import PlateObservation
-from traffic_lpr_runtime.application.provenance import build_analysis_provenance
-from traffic_lpr_runtime.application.review_state import build_review_state
+from traffic_lpr_runtime.application.services.tracking.calibration import (
+    _anchor_status,
+    _build_tracking_summary,
+    _resolve_analysis_target_box,
+    _resolve_interval_anchor_box,
+    _selected_target_track_id,
+    _tracking_advisory_reasons,
+    _tracking_identity_review_reasons,
+)
+from traffic_lpr_runtime.application.services.tracking.evidence_frames import (
+    _resolve_temporal_support_budget,
+    _resolve_temporal_support_reason,
+    _select_interval_evidence_frames,
+    _select_temporal_support_frames,
+)
+from traffic_lpr_runtime.domain.analysis_options import AnalysisOptions
 from traffic_lpr_runtime.domain.errors import RuntimeFailure
+from traffic_lpr_runtime.domain.interfaces import ProgressSink
 from traffic_lpr_runtime.domain.models import FrameSample, PlateCandidate, TargetTrack, TrackedRegion
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect
+from traffic_lpr_runtime.infrastructure.ipc import IpcProgressSink
+from traffic_lpr_runtime.infrastructure.storage import RuntimeStorageLayout
+from .diagnostics import IntervalAnalysisDiagnostics, RuntimeStageTiming
+from .policy import AnalysisPolicyResolver
+from .provenance import build_analysis_provenance
+from .review_state import build_review_state
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,6 +56,8 @@ class IntervalAnalysisDependencies:
     aggregate_candidates: Callable[[list[FrameSample], list[PlateObservation], list[str], AnalysisOptions, Path | None], tuple[list[PlateCandidate], dict[str, Any]]]
     apply_reliability_selection: Callable[[list[PlateCandidate], list[FrameSample], list[str], AnalysisOptions, bool], tuple[list[PlateCandidate], str | None, dict[str, Any]]]
     build_track_payload: Callable[[list[TrackedRegion], dict[str, Any]], list[TargetTrack]]
+    storage: RuntimeStorageLayout | None = None
+    progress_sink: ProgressSink | None = None
 
 
 class IntervalAnalysisService:
@@ -36,49 +66,19 @@ class IntervalAnalysisService:
         self._policy_resolver = policy_resolver or AnalysisPolicyResolver()
 
     def run(self, payload: dict[str, Any]) -> dict[str, Any]:
-        from traffic_lpr_runtime.protocol import emit_runtime_progress
-        from traffic_lpr_runtime.application.services.tracking.calibration import (
-            _anchor_status,
-            _build_tracking_summary,
-            _resolve_analysis_target_box,
-            _resolve_interval_anchor_box,
-            _selected_target_track_id,
-            _tracking_advisory_reasons,
-            _tracking_identity_review_reasons,
-        )
-        from traffic_lpr_runtime.application.services.tracking.evidence_frames import (
-            _resolve_temporal_support_budget,
-            _resolve_temporal_support_reason,
-            _select_interval_evidence_frames,
-            _select_temporal_support_frames,
-        )
-        from traffic_lpr_runtime.application.services.fusion.review_decision import (
-            _build_decision_trace,
-            _build_sample_selection_payload,
-            _merge_reasons,
-            _request_run_id,
-            _safe_int,
-            _sequence_advisory_reasons,
-            _sequence_hard_review_reasons,
-        )
+        self._dependencies.ensure_ready()
+        sink = self._dependencies.progress_sink or IpcProgressSink()
+        storage = self._dependencies.storage or RuntimeStorageLayout.discover(self._dependencies.runtime_root())
 
         def _emit_progress(progress: float, stage: str, detail: str, **kwargs: Any) -> None:
-            emit_runtime_progress({
-                'progress': progress,
-                'stage': stage,
-                'detail': detail,
-                'done': False,
-                'failed': False,
-                **kwargs,
-            })
+            sink.emit(progress, stage, detail, **kwargs)
 
-        self._dependencies.ensure_ready()
         run_started = perf_counter()
-        options = AnalysisOptions.from_payload(payload)
+        options = build_analysis_options_from_payload(payload)
         analysis_policy = self._policy_resolver.resolve_interval(payload, options)
         payload = analysis_policy.apply_to_payload(payload)
-        artifact_root = options.resolve_artifact_root(
-            self._dependencies.runtime_root(),
+        artifact_root = storage.resolve_artifact_dir(
+            options,
             'interval',
             _request_run_id(payload),
         )

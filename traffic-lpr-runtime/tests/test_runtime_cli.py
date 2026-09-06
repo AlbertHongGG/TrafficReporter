@@ -10,7 +10,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from traffic_lpr_runtime.entrypoints import cli
-from traffic_lpr_runtime.protocol import build_runtime_request_envelope
+from traffic_lpr_runtime.infrastructure.ipc import build_runtime_request_envelope
 
 
 class _FakeStdin:

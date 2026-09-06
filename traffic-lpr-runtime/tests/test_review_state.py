@@ -7,8 +7,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from traffic_lpr_runtime.application.provenance import build_analysis_provenance
-from traffic_lpr_runtime.application.review_state import build_review_state
+from traffic_lpr_runtime.application.services.analysis.provenance import build_analysis_provenance
+from traffic_lpr_runtime.application.services.analysis.review_state import build_review_state
 from traffic_lpr_runtime.domain.models import PlateCandidate
 
 

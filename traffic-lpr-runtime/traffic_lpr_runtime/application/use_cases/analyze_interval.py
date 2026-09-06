@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from traffic_lpr_runtime.application.interval_analysis_service import (
+from traffic_lpr_runtime.application.services.analysis.interval_analysis_service import (
     IntervalAnalysisDependencies,
     IntervalAnalysisService,
 )

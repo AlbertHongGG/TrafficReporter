@@ -1,13 +1,15 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from traffic_lpr_runtime.infrastructure.storage import RuntimeStorageLayout
+
 
 def _catalog_path() -> Path:
-    return Path(__file__).resolve().parents[3] / 'src' / 'shared' / 'config' / 'lpr-analysis-profiles.json'
+    return RuntimeStorageLayout.discover().repo_root / 'src' / 'shared' / 'config' / 'lpr-analysis-profiles.json'
 
 
 @lru_cache(maxsize=1)
@@ -18,8 +20,11 @@ def load_analysis_profile_catalog() -> dict[str, Any]:
         'developerDiagnosticsOptions': {},
         'profiles': [],
     }
+    catalog_file = _catalog_path()
+    if not catalog_file.exists():
+        return fallback
     try:
-        payload = json.loads(_catalog_path().read_text(encoding='utf-8'))
+        payload = json.loads(catalog_file.read_text(encoding='utf-8'))
     except Exception:
         return fallback
     if not isinstance(payload, dict):

@@ -228,3 +228,26 @@ def _normalize_progress_request_id(value: Any) -> str | None:
     if isinstance(value, str):
         return value.strip() or None
     return str(value)
+
+
+class IpcProgressSink:
+    """Adapts the contextvar-based runtime progress sink to the domain ProgressSink Protocol."""
+
+    def emit(
+        self,
+        progress: float,
+        stage: str,
+        detail: str,
+        *,
+        done: bool = False,
+        failed: bool = False,
+        **kwargs: Any,
+    ) -> None:
+        emit_runtime_progress({
+            'progress': progress,
+            'stage': stage,
+            'detail': detail,
+            'done': done,
+            'failed': failed,
+            **kwargs,
+        })

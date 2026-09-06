@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from traffic_lpr_runtime.application.analysis_policy import AnalysisPolicyResolver
+from traffic_lpr_runtime.application.services.analysis.policy import AnalysisPolicyResolver
 from traffic_lpr_runtime.domain.analysis_options import AnalysisOptions
 
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 from typing import Any, Callable
 
-from traffic_lpr_runtime.application.analysis_policy import (
+from traffic_lpr_runtime.application.services.analysis.policy import (
     SHORT_INTERVAL_MAX_MS,
     SHORT_INTERVAL_MIN_SAMPLE_BUDGET,
     SHORT_INTERVAL_SAMPLE_STEP_MS,
