@@ -48,3 +48,4 @@ datasets/*
 !datasets/README.md
 __pycache__/
 .env
+.omo
