@@ -6,12 +6,12 @@ import type {
   LprSessionState,
   TimelineIntervalSelection,
 } from '../../../shared/contracts';
-import type { RevisionedWindowSnapshot } from '../../../vnext/windowing/revisionedSnapshot';
+import type { RevisionedWindowSnapshot } from '../../../shared/windowing';
 import { resolveEffectivePlayheadMs, type LiveTransportSnapshot } from './liveTransport';
 
 export const MAIN_WINDOW_LABEL = 'main';
 export const PLATE_WINDOW_LABEL = 'plate';
-export const PLATE_WINDOW_URL = 'plate.html';
+export const PLATE_WINDOW_URL = 'index.html?window=plate';
 export const PLATE_SESSION_UPDATED_EVENT = 'editor/plate-session-updated';
 export const PLATE_SESSION_REQUEST_EVENT = 'editor/plate-session-request';
 export const PLATE_ACTION_EVENT = 'editor/plate-action';

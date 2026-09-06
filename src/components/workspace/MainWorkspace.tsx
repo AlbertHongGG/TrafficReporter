@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle } from 'lucide-react';
 import styles from './MainWorkspace.module.css';
 
-import { EditorProvider } from './EditorContext';
+import { useEditorContext } from './EditorContext';
 import { Toolbar } from './toolbar/Toolbar';
 import { MediaBinPanel } from './media-bin/MediaBinPanel';
 import { VideoPlayerPanel } from './video-player/VideoPlayerPanel';
@@ -14,7 +14,6 @@ import { useMediaIngestion } from './hooks/useMediaIngestion';
 import { useMarkerInteraction } from './hooks/useMarkerInteraction';
 import { useWorkspaceHotkeys } from './hooks/useWorkspaceHotkeys';
 
-import { useEditorSessionController } from '../../vnext/editor/application/useEditorSessionController';
 import { useLprWorkflow } from '../../modules/editor/application/useLprWorkflow';
 import { useAiEvidenceWorkflow } from '../../modules/editor/application/useAiEvidenceWorkflow';
 import { useWindowCoordinator } from '../../modules/editor/application/useWindowCoordinator';
@@ -26,7 +25,7 @@ export interface MediaEditorWorkspaceProps {
 }
 
 export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isActive = true }) => {
-  const { state, dispatch, sessionRevision } = useEditorSessionController();
+  const { state, dispatch, sessionRevision } = useEditorContext();
   const [workspaceFeedback, setWorkspaceFeedback] = useState<string | null>(null);
   const [isScrubbing, setIsScrubbing] = useState(false);
   const plateWindowLiveSyncEnabledRef = useRef(false);
@@ -200,8 +199,7 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
   }, [refreshLprRuntimeStatus]);
 
   return (
-    <EditorProvider value={{ state, dispatch, activeFile: activeFile ?? undefined }}>
-      <div className={styles.editor}>
+    <div className={styles.editor}>
         <Toolbar
           activeFile={activeFile ?? null}
           onExportCurrentFrame={handleExportCurrentFrame}
@@ -276,7 +274,6 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
           </main>
         </div>
       </div>
-    </EditorProvider>
   );
 };
 

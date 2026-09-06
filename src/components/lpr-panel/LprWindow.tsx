@@ -41,7 +41,7 @@ import { buildDefaultLprState } from '../../modules/editor/domain/lprState';
 import type { LprFrameSample, LprJobState, LprPlateCandidate, LprReviewState, LprTargetTrack, TimelineIntervalSelection } from '../../shared/contracts';
 import { getLprAnalysisProfileLabel, getLprAnalysisProfiles } from '../../shared/lprAnalysisProfiles';
 import { createLogger, getErrorSummary, serializeError } from '../../utils/logger';
-import { shouldApplyRevisionedWindowSnapshot, unwrapRevisionedWindowSnapshot } from '../../vnext/windowing/revisionedSnapshot';
+import { shouldApplyRevisionedWindowSnapshot, unwrapRevisionedWindowSnapshot } from '../../shared/windowing';
 import { LprDashboard } from './LprDashboard';
 import { LprDataViewer } from './LprDataViewer';
 import styles from './LprWindow.module.css';

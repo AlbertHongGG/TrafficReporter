@@ -29,7 +29,7 @@ import {
   shouldApplyRevisionedWindowSnapshot,
   unwrapRevisionedWindowSnapshot,
   type RevisionedWindowSnapshot,
-} from '../../vnext/windowing/revisionedSnapshot';
+} from '../../shared/windowing';
 import { EXPORT_SESSION_UPDATED_EVENT } from '../../modules/export/application/exportWindow';
 import styles from './ExportWindow.module.css';
 import { Select } from '../common/Select/Select';

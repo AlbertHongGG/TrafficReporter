@@ -10,7 +10,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:vnext:frontend": "vitest run src/vnext/editor/application/sessionStore.test.ts src/vnext/windowing/revisionedSnapshot.test.ts src/modules/editor/application/lprProgress.test.ts",
+    "test:vnext:frontend": "vitest run src/modules/editor/application/session/sessionStore.test.ts src/shared/windowing/revisionedSnapshot.test.ts src/modules/editor/application/lprProgress.test.ts",
     "test:vnext:runtime": "python -m unittest discover -s traffic-lpr-runtime/tests -p \"test_runtime*.py\"",
     "check:vnext": "npm run test:vnext:frontend && cargo check --manifest-path src-tauri/Cargo.toml && npm run test:vnext:runtime",
     "preview": "vite preview",

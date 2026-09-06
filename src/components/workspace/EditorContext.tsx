@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useMemo } from 'react';
-import { useEditorSessionController } from '../../vnext/editor/application/useEditorSessionController';
+import { useEditorSessionController } from '../../modules/editor/application/session/useEditorSessionController';
 import type { EditorWorkspaceState, EditorFileState } from '../../modules/editor/domain/model';
 import type { EditorAction } from '../../modules/editor/application/editorReducer';
 
@@ -7,6 +7,8 @@ interface EditorContextValue {
   state: EditorWorkspaceState;
   dispatch: React.Dispatch<EditorAction>;
   activeFile: EditorFileState | undefined;
+  sessionRevision: number;
+  sessionUpdatedAt: string;
 }
 
 const EditorContext = createContext<EditorContextValue | null>(null);
@@ -29,8 +31,10 @@ export const EditorProvider: React.FC<{
       state: internal.state,
       dispatch: internal.dispatch,
       activeFile: internalActiveFile,
+      sessionRevision: internal.sessionRevision,
+      sessionUpdatedAt: internal.sessionUpdatedAt,
     };
-  }, [externalValue, internal.state, internal.dispatch, internalActiveFile]);
+  }, [externalValue, internal.state, internal.dispatch, internalActiveFile, internal.sessionRevision, internal.sessionUpdatedAt]);
 
   return (
     <EditorContext.Provider value={contextValue}>

@@ -4,9 +4,9 @@ import {
   commands,
   type EditorWorkspaceState as RustEditorWorkspaceState,
   type RenderProfilePayload,
-} from '../../../types/bindings';
-import type { EditorWorkspacePayload } from '../../../modules/editor/domain/model';
-import type { EditorAction } from '../../../modules/editor/application/editorReducer';
+} from '../../../../types/bindings';
+import type { EditorWorkspacePayload } from '../../domain/model';
+import type { EditorAction } from '../editorReducer';
 import { createEditorSessionStoreState, reduceEditorSessionStoreState } from './sessionStore';
 
 export function useEditorSessionController() {

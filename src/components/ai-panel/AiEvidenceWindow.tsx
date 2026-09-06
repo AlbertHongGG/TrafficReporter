@@ -28,7 +28,7 @@ import {
 import { buildJobTimingSnapshot, formatElapsedDuration } from '../../modules/editor/application/jobTiming';
 import { buildDefaultAiEvidenceState } from '../../modules/editor/domain/aiEvidenceState';
 import { formatRulerLabel, formatTransportTime } from '../../modules/editor/domain/model';
-import { shouldApplyRevisionedWindowSnapshot, unwrapRevisionedWindowSnapshot } from '../../vnext/windowing/revisionedSnapshot';
+import { shouldApplyRevisionedWindowSnapshot, unwrapRevisionedWindowSnapshot } from '../../shared/windowing';
 import styles from './AiEvidenceWindow.module.css';
 
 function clamp01(value: number | null | undefined) {

@@ -1,5 +1,5 @@
-import { editorReducer, createInitialEditorState, type EditorAction } from '../../../modules/editor/application/editorReducer';
-import type { EditorWorkspaceState } from '../../../modules/editor/domain/model';
+import { editorReducer, createInitialEditorState, type EditorAction } from '../editorReducer';
+import type { EditorWorkspaceState } from '../../domain/model';
 
 export interface EditorSessionStoreState {
   revision: number;

@@ -1,6 +1,5 @@
-import { resolve } from 'node:path'
-import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vitest/config'
+import react from '@vitejs/plugin-react';
+import { defineConfig } from 'vitest/config';
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -9,14 +8,4 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts'],
   },
-  build: {
-    rollupOptions: {
-      input: {
-        main: resolve(__dirname, 'index.html'),
-        'ai-panel': resolve(__dirname, 'ai-panel.html'),
-        export: resolve(__dirname, 'export.html'),
-        plate: resolve(__dirname, 'plate.html'),
-      },
-    },
-  },
-})
+});
