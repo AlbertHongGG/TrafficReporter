@@ -10,8 +10,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from traffic_lpr_runtime.infrastructure.runtime_layout import (
-    benchmark_import_root,
-    benchmark_suite_root,
     build_run_id,
     cache_root,
     resolve_repo_root,
@@ -43,8 +41,6 @@ class RuntimeLayoutTests(unittest.TestCase):
             runtime_data = (repo_root / '.runtime').resolve()
             self.assertEqual(runtime_data_root(runtime_root), runtime_data)
             self.assertEqual(cache_root(runtime_root), runtime_data / 'cache')
-            self.assertEqual(benchmark_suite_root(runtime_root), runtime_data / 'cache' / 'benchmark' / 'suites')
-            self.assertEqual(benchmark_import_root(runtime_root), runtime_data / 'cache' / 'benchmark' / 'imports')
             self.assertEqual(run_root(runtime_root, '260525-190807-deadbeef'), runtime_data / 'runs' / '260525-190807-deadbeef')
             self.assertEqual(
                 run_child(runtime_root, '260525-190807-deadbeef', 'ai-evidence', 'clip.mp4'),

@@ -143,14 +143,12 @@ pub enum LprAnalysisIntent {
     InteractiveRange,
     InteractiveDenseRange,
     AiEvidenceRange,
-    BenchmarkCase,
 }
 impl_enum_as_str_and_display!(LprAnalysisIntent {
     InteractiveShortRange => "interactive-short-range",
     InteractiveRange => "interactive-range",
     InteractiveDenseRange => "interactive-dense-range",
     AiEvidenceRange => "ai-evidence-range",
-    BenchmarkCase => "benchmark-case",
 });
 
 pub type LprRecognitionSource = String;

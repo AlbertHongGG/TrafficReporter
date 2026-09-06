@@ -20,8 +20,8 @@ from traffic_lpr_runtime.protocol import (
 class RuntimeProtocolTests(unittest.TestCase):
     def test_unwrap_protocol_request_accepts_versioned_envelope(self) -> None:
         payload, request_context = unwrap_runtime_request(
-            '{"protocolVersion": 1, "requestId": "req-001", "subcommand": "benchmark-run", "payload": {"cases": []}}',
-            'benchmark-run',
+            '{"protocolVersion": 1, "requestId": "req-001", "subcommand": "analyze-frame", "payload": {"sourcePath": "frame.png"}}',
+            'analyze-frame',
             require_protocol=True,
             accepted_versions=(LEGACY_RUNTIME_PROTOCOL_VERSION,),
             error_factory=RuntimeFailure,
@@ -29,13 +29,13 @@ class RuntimeProtocolTests(unittest.TestCase):
 
         self.assertTrue(request_context.protocol_mode)
         self.assertEqual(request_context.request_id, 'req-001')
-        self.assertEqual(payload, {'cases': []})
+        self.assertEqual(payload, {'sourcePath': 'frame.png'})
 
     def test_unwrap_protocol_request_rejects_missing_protocol_when_required(self) -> None:
         with self.assertRaises(RuntimeFailure):
             unwrap_runtime_request(
-                '{"cases": []}',
-                'benchmark-run',
+                '{"sourcePath": "frame.png"}',
+                'analyze-frame',
                 require_protocol=True,
                 accepted_versions=(LEGACY_RUNTIME_PROTOCOL_VERSION,),
                 error_factory=RuntimeFailure,

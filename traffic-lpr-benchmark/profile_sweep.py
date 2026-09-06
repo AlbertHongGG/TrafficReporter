@@ -1,3 +1,0 @@
-from __future__ import annotations
-
-from traffic_lpr_benchmark.application.profile_comparison_service import *

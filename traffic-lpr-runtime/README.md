@@ -10,14 +10,13 @@ This folder is the standalone Python runtime project for the Traffic desktop app
 - `traffic_lpr_runtime/infrastructure/` - OpenCV, Ultralytics, and Fast-ALPR adapters.
 - `models/` - auto-downloaded detector weights used by the runtime.
 - `.venv/` - optional local virtual environment for the runtime project.
-- `../.runtime/` - repo-level runtime data root shared with the desktop host and benchmark tool.
+- `../.runtime/` - repo-level runtime data root shared with the desktop host.
 
 The runtime now separates package assets from generated data:
 
 - `traffic-lpr-runtime/models/` stores reusable model weights.
-- `../.runtime/runs/<run-id>/` stores one execution's AI evidence, analysis artifacts, and benchmark outputs.
+- `../.runtime/runs/<run-id>/` stores one execution's AI evidence and analysis artifacts.
 - `../.runtime/cache/vendor/` stores reusable vendor shims such as the downloaded `mambair` architecture.
-- `../.runtime/cache/benchmark/` stores benchmark suites, imports, materialized datasets, and generated local manifests.
 
 ## Local Setup
 
@@ -30,8 +29,6 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e .
 .\.venv\Scripts\python.exe -m pip install --upgrade --force-reinstall --index-url https://download.pytorch.org/whl/cu128 torch torchvision
 ```
-
-If this environment was created before the multi-source benchmark update, run `.\.venv\Scripts\python.exe -m pip install -e .` again so `remotezip` is available for the UC3M-LP remote archive workflow.
 
 The final command is required on NVIDIA Windows machines. `pip install -e .` pulls the CPU-only PyTorch wheel from PyPI by default, while the local LPR pipeline needs the CUDA-enabled `torch` and `torchvision` builds so that:
 
@@ -62,61 +59,6 @@ You can override discovery with:
 
 - `TRAFFIC_LPR_PYTHON` - explicit Python executable.
 - `TRAFFIC_LPR_RUNTIME_DIR` - explicit runtime project root.
-
-## Benchmark Workflow
-
-The runtime now includes a `benchmark-run` subcommand so you can turn difficult moving-camera clips into a repeatable hard-case benchmark.
-
-Example usage:
-
-```powershell
-cd traffic-lpr-runtime
-.\.venv\Scripts\python.exe -m traffic_lpr_runtime benchmark-run < benchmarks\manifests\templates\sample-manifest.json
-```
-
-Each case can target either `frame` or `interval` mode and may include `analysisOptions` for ablations such as:
-
-- `trackerMode`: `legacy`, `botsort`, or `bytetrack`
-- `fusionMode`: `legacy` or `aligned-char`
-- `restorationMode`: `off`, `gated`, `mambairv2`, `mambairv2-x2`, or `mambairv2-x4`
-- `persistArtifacts`: store cropped / rectified / restored intermediate images under `../.runtime/runs/<run-id>/analysis/`
-- `ocrModelNames`: compare multiple OCR heads on the same plate crop
-
-Start by copying [benchmarks/manifests/templates/sample-manifest.json](benchmarks/manifests/templates/sample-manifest.json) and replacing the placeholder `sourcePath`, `selectedTargetBox`, and `expectedText` values with your own difficult cases.
-
-The benchmark output includes per-case exact match, top-3 match, and character error rate so you can compare tracker / fusion / restoration changes against the same hard-case set.
-
-The benchmark output now also includes localization recall / IoU when ground-truth boxes are present, accepted-candidate margin, confidence-calibration bins, failure-taxonomy summaries, interval track-consistency metrics, and p50 / p95 latency.
-
-If you want a public benchmark set that does not depend on your own clips, see [benchmarks/README.md](benchmarks/README.md) and run either:
-
-- `benchmarks/scripts/prepare_public_benchmark.py` for the existing CCPD-only hard-case manifest
-- `benchmarks/scripts/prepare_multisource_benchmark.py --datasets ccpd uc3m-lp` for a more diverse public benchmark that adds UC3M-LP as a European counterweight
-
-The UC3M-LP path uses HTTP range reads against the published Zenodo archive, so the generator can sample real cases without forcing a full archive download before manifest creation.
-
-If you already have local AOLP and UFPR-ALPR datasets under `../datasets/`, you can fold them into the same generator. The generator now resolves catalog-backed aliases such as `AOLP/` and `UFPR-ALPR dataset/` automatically, so you do not need to rename those folders before running the command:
-
-```powershell
-cd traffic-lpr-runtime
-.\.venv\Scripts\python.exe benchmarks\scripts\prepare_multisource_benchmark.py --datasets aolp ufpr-alpr --per-category 12 --ufpr-split testing
-```
-
-That command writes machine-local manifests under `../.runtime/cache/benchmark/manifests/local/multisource/` and materializes any needed UFPR interval videos under `../.runtime/cache/benchmark/datasets/local-multisource/`.
-
-Benchmark preparation now relies on two catalog files:
-
-- `benchmarks/scripts/benchmark_catalog.py` defines the official local and public benchmark sources, root aliases, protected archives, and protected local media such as `../datasets/dev-videos/行車紀錄.mp4`
-- `benchmarks/scripts/audit_dataset_retention.py` emits a non-destructive retention report before any pruning work
-
-Use the retention audit before deleting extracted folders:
-
-```powershell
-cd traffic-lpr-runtime
-.\.venv\Scripts\python.exe benchmarks\scripts\audit_dataset_retention.py
-```
-
-`datasets/dev-videos/` is reserved for local test media and must not be treated as disposable dataset payload.
 
 ## AI Evidence Workflow
 
@@ -158,4 +100,4 @@ Frame and interval analysis now apply reliability gates before auto-accepting a 
 - insufficient multi-frame support for interval results
 - Taiwan-format mismatch when `countryHints` prefer Taiwan
 
-When this happens, diagnostics still include a `selection` block for developer inspection, but the runtime now emits formal `review` and `provenance` payloads directly in the analysis response. The desktop host and benchmark pipeline consume those contract fields instead of re-deriving review state from diagnostics.
+When this happens, diagnostics still include a `selection` block for developer inspection, but the runtime now emits formal `review` and `provenance` payloads directly in the analysis response. The desktop host consumes those contract fields instead of re-deriving review state from diagnostics.

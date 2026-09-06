@@ -190,30 +190,3 @@ class AiEvidenceCommand:
             request_id=_optional_str(payload.get('requestId')),
             raw_payload=dict(payload),
         )
-
-
-@dataclass(frozen=True, slots=True)
-class BenchmarkRunCommand:
-    cases: tuple[dict[str, Any], ...] = ()
-    manifest_path: str | None = None
-    progress_path: str | None = None
-    checkpoint_path: str | None = None
-    run_id: str | None = None
-    artifact_root: str | None = None
-    resume_from_checkpoint: bool = False
-    raw_payload: dict[str, Any] = field(default_factory=dict)
-
-    @classmethod
-    def from_payload(cls, payload: dict[str, Any]) -> 'BenchmarkRunCommand':
-        raw_cases = payload.get('cases') or []
-        cases = tuple(raw_cases) if isinstance(raw_cases, list) else ()
-        return cls(
-            cases=cases,
-            manifest_path=_optional_str(payload.get('manifestPath')),
-            progress_path=_optional_str(payload.get('progressPath')),
-            checkpoint_path=_optional_str(payload.get('checkpointPath')),
-            run_id=_optional_str(payload.get('runId')),
-            artifact_root=_optional_str(payload.get('artifactRoot')),
-            resume_from_checkpoint=bool(payload.get('resumeFromCheckpoint')),
-            raw_payload=dict(payload),
-        )

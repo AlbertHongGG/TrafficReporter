@@ -30,22 +30,6 @@ def cache_root(runtime_root: Path) -> Path:
     return runtime_data_root(runtime_root) / 'cache'
 
 
-def benchmark_workspace_root(runtime_root: Path) -> Path:
-    return cache_root(runtime_root) / 'benchmark'
-
-
-def benchmark_suite_root(runtime_root: Path) -> Path:
-    return benchmark_workspace_root(runtime_root) / 'suites'
-
-
-def benchmark_import_root(runtime_root: Path) -> Path:
-    return benchmark_workspace_root(runtime_root) / 'imports'
-
-
-def benchmark_dataset_cache_root(runtime_root: Path) -> Path:
-    return benchmark_workspace_root(runtime_root) / 'datasets'
-
-
 def vendor_cache_root(runtime_root: Path) -> Path:
     return cache_root(runtime_root) / 'vendor'
 
@@ -72,10 +56,6 @@ def ensure_runtime_layout(runtime_root: Path) -> Path:
         data_root,
         runs_root(runtime_root),
         cache_root(runtime_root),
-        benchmark_workspace_root(runtime_root),
-        benchmark_suite_root(runtime_root),
-        benchmark_import_root(runtime_root),
-        benchmark_dataset_cache_root(runtime_root),
         vendor_cache_root(runtime_root),
     ):
         child.mkdir(parents=True, exist_ok=True)

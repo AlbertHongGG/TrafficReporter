@@ -9,7 +9,6 @@ from traffic_lpr_runtime.domain.interfaces import FrameReader, PlateRecognizer, 
 from traffic_lpr_runtime.domain.models import FrameSample, PlateCandidate, TargetTrack, TrackedRegion
 from traffic_lpr_runtime.domain.text import normalize_plate_text
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect, crop_image
-from traffic_lpr_runtime.application.benchmark_workflow import BenchmarkRunWorkflow
 from traffic_lpr_runtime.application.ai_evidence_workflow import AiEvidenceRuntimeBridge, AiEvidenceWorkflow
 from traffic_lpr_runtime.application.candidate_fusion import CandidateFusionService, apply_reliability_selection
 from traffic_lpr_runtime.application.contract_spec import LprContractRegistry
@@ -94,12 +93,6 @@ class LprRuntimeApplication:
             apply_reliability_selection=_apply_reliability_selection,
             build_track_payload=self._build_track_payload,
         )
-        self._benchmark_run_workflow = BenchmarkRunWorkflow(
-            ensure_ready=self._dependencies.ensure_ready,
-            status=self.status,
-            analyze_frame=self.analyze_frame,
-            analyze_interval=self.analyze_interval,
-        )
         self._ai_evidence_runtime_bridge = AiEvidenceRuntimeBridge(
             detect_targets=self._detect_targets,
             analyze_frame=self.analyze_frame,
@@ -122,14 +115,13 @@ class LprRuntimeApplication:
             CallableRuntimeUseCase(name='ai-evidence', handler=self.ai_evidence),
             CallableRuntimeUseCase(name='analyze-frame', handler=self.analyze_frame),
             CallableRuntimeUseCase(name='analyze-interval', handler=self.analyze_interval),
-            CallableRuntimeUseCase(name='benchmark-run', handler=self.benchmark_run),
         ])
 
     def dispatch(self, subcommand: str, payload: dict[str, Any]) -> dict[str, Any]:
-        if subcommand not in {'status', 'benchmark-run'}:
+        if subcommand != 'status':
             self._contract_registry.validate_request(subcommand, payload)
         result = self._use_case_registry.run(subcommand, payload)
-        if subcommand not in {'status', 'benchmark-run'}:
+        if subcommand != 'status':
             self._contract_registry.validate_response(subcommand, result)
         return result
 
@@ -147,9 +139,6 @@ class LprRuntimeApplication:
 
     def ai_evidence(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._ai_evidence_workflow.run(payload)
-
-    def benchmark_run(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return self._benchmark_run_workflow.run(payload)
 
     def _detect_targets(
         self,

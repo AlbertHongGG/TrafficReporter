@@ -33,7 +33,6 @@ def main() -> int:
 
     application = None
     stdout_noise = io.StringIO()
-    protocol_mode = subcommand == 'benchmark-run'
     request_context = RuntimeRequestContext(protocol_mode=False, protocol_version=None, request_id=None)
 
     try:
@@ -41,7 +40,7 @@ def main() -> int:
         payload, request_context = unwrap_runtime_request(
             raw_payload,
             subcommand,
-            require_protocol=protocol_mode,
+            require_protocol=False,
             accepted_versions=(LPR_RUNTIME_PROTOCOL_VERSION,),
             error_factory=RuntimeFailure,
         )

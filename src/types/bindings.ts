@@ -208,7 +208,7 @@ export type FrameExportRequest = {
 	compressionMode: OutputCompressionModePayload,
 };
 
-export type LprAnalysisIntent = "interactive-short-range" | "interactive-range" | "interactive-dense-range" | "ai-evidence-range" | "benchmark-case";
+export type LprAnalysisIntent = "interactive-short-range" | "interactive-range" | "interactive-dense-range" | "ai-evidence-range";
 
 export type LprAnalysisOptionsPayload = {
 	persistArtifacts: boolean | null,

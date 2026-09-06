@@ -10,7 +10,6 @@ The primary product is now the traffic editor stack:
 - Rust host/runtime broker
 - Python analysis runtime
 - shared contracts and protocol
-- benchmark client
 
 Legacy downloader entrypoints have been removed from the active desktop host. Any remaining historical references should be treated as cleanup debt, not product surface.
 
@@ -40,7 +39,6 @@ Legacy downloader entrypoints have been removed from the active desktop host. An
 - Python runtime owns analysis semantics.
 - Interactive frame analysis must prefer a fast path over heavy restoration/comparison work.
 - Interval analysis must return coverage-aware degraded results before it escalates to hard failure.
-- Benchmark tooling must share runtime protocol semantics with the product runtime.
 - Cross-boundary contracts must originate from `schemas/`.
 
 ## Verification Gates
@@ -48,7 +46,6 @@ Legacy downloader entrypoints have been removed from the active desktop host. An
 - `npm run check:lpr-contracts`
 - `npm run test:vnext:frontend`
 - `npm run test:vnext:runtime`
-- `npm run test:vnext:benchmark`
 - `cargo check --manifest-path src-tauri/Cargo.toml`
 - `cargo test --manifest-path src-tauri/Cargo.toml runtime_broker`
 - `npm run build`

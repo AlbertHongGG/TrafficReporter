@@ -11,7 +11,6 @@ SHORT_INTERVAL_SAMPLE_STEP_MS = 150
 SHORT_INTERVAL_MIN_SAMPLE_BUDGET = 16
 DEFAULT_INTERACTIVE_LATENCY_BUDGET_MS = 30_000
 DEFAULT_AI_EVIDENCE_LATENCY_BUDGET_MS = 45_000
-DEFAULT_BENCHMARK_LATENCY_BUDGET_MS = 30_000
 
 
 KNOWN_INTERVAL_INTENTS = {
@@ -19,7 +18,6 @@ KNOWN_INTERVAL_INTENTS = {
     'interactive-range',
     'interactive-dense-range',
     'ai-evidence-range',
-    'benchmark-case',
 }
 
 
@@ -89,10 +87,6 @@ class AnalysisPolicyResolver:
             max_samples = max(requested_max_samples or 0, min(24, max(12, round(duration_ms / 500) + 1)))
             sample_every_ms = requested_sample_every_ms or max(120, round(duration_ms / max(max_samples, 1)) or 120)
             rules.append('ai-evidence-runtime-owned-grid')
-        elif intent == 'benchmark-case':
-            max_samples = max(4, requested_max_samples or options.max_evidence_sample_count or 18)
-            sample_every_ms = requested_sample_every_ms or max(120, round(duration_ms / max(max_samples, 1)) or 120)
-            rules.append('benchmark-case-grid')
         else:
             max_samples = max(requested_max_samples or 0, 14)
             sample_every_ms = requested_sample_every_ms or max(90, round(duration_ms / 14) or 90)
@@ -120,8 +114,6 @@ def _resolve_intent(payload: dict[str, Any], duration_ms: int) -> str:
     raw_intent = str(payload.get('analysisIntent') or '').strip()
     if raw_intent in KNOWN_INTERVAL_INTENTS:
         return raw_intent
-    if payload.get('benchmarkCaseId') or payload.get('expectedText') or payload.get('acceptedTexts'):
-        return 'benchmark-case'
     if duration_ms <= SHORT_INTERVAL_MAX_MS:
         return 'interactive-short-range'
     return 'interactive-range'
@@ -133,8 +125,6 @@ def _resolve_latency_budget(payload: dict[str, Any], intent: str) -> int:
         return max(1_000, min(explicit_budget, 300_000))
     if intent == 'ai-evidence-range':
         return DEFAULT_AI_EVIDENCE_LATENCY_BUDGET_MS
-    if intent == 'benchmark-case':
-        return DEFAULT_BENCHMARK_LATENCY_BUDGET_MS
     return DEFAULT_INTERACTIVE_LATENCY_BUDGET_MS
 
 

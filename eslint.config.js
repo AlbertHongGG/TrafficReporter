@@ -12,7 +12,6 @@ export default defineConfig([
     'src-tauri/target',
     'src-tauri/gen',
     'traffic-lpr-runtime/**',
-    'traffic-lpr-benchmark/**',
     'src/types/bindings.ts',
   ]),
   {

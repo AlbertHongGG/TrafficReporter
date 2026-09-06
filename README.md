@@ -45,51 +45,17 @@ The new architecture guardrails can be checked independently from the full legac
 ```bash
 npm run test:vnext:frontend
 npm run test:vnext:runtime
-npm run test:vnext:benchmark
 npm run check:vnext
 ```
 
-### Independent Benchmark Tool
-
-The benchmark workflow now has its own repo-level entrance and does not live inside the desktop app UI:
-
-```bash
-npm run benchmark -- init-workspace
-npm run benchmark -- validate --suite .runtime/cache/benchmark/suites/sample-template.json
-npm run benchmark -- doctor --suite .runtime/cache/benchmark/suites/sample-template.json
-npm run benchmark -- run --suite .runtime/cache/benchmark/suites/smoke-one.json --run-id smoke-gate --min-exact-rate 1.0 --min-top3-rate 1.0 --max-mean-cer 0.0 --min-plate-iou 1.0 --max-p95-latency-ms 60000
-npm run benchmark -- profile-sweep --suite .runtime/cache/benchmark/suites/smoke-one.json --profiles balanced precision recovery
-npm run benchmark -- validate-profile-catalog --file src/shared/config/lpr-analysis-profiles.json
-npm run benchmark:test
-```
-
-Longer benchmark runs now emit resumable `progress.json` / `checkpoint.json` artifacts under `.runtime/runs/<run-id>/benchmark/` and can enforce benchmark gates directly from the CLI. Runtime-backed reports also include `analysis.json` / `analysis.md` so AOLP and UFPR results can be read by dataset, split, category, and broad failure source instead of only by merged averages.
-
-Shared benchmark and LPR profile schemas now live under `schemas/` so the benchmark tool and runtime-facing JSON assets can evolve from one repo-level source of truth.
-
-The architecture cut line, dataset policy, artifact policy, and cross-layer dependency rules are documented in `docs/lpr-architecture-boundaries.md`.
-
-The LPR request/response contract is now generated from `schemas/lpr/lpr-contracts.json`. Regenerate the checked-in TypeScript and Rust payload definitions with:
-
-```bash
-npm run generate:lpr-contracts
-npm run check:lpr-contracts
-```
-
-`npm run dev`, `npm run build`, and `npm test` now refresh those generated contracts automatically before running. `npm run check:lpr-contracts` is the non-mutating drift check for CI or pre-merge verification.
-
 ### Local Data Layout
 
-Local datasets and local evaluation media now belong under `datasets/` instead of the repository root:
+Local test media belongs under `datasets/` instead of the repository root:
 
 ```text
 datasets/
-    aolp/
-    ufpr-alpr/
     dev-videos/
 ```
-
-`schemas/` stays at the repo root because it is shared by the frontend, Rust host, Python runtime, and benchmark tool. The old root-level `scripts/` folder is not needed for a single LPR contract generator, so that generator lives next to its owning LPR schema files instead.
 
 ### Runtime Data Layout
 
@@ -101,13 +67,7 @@ All generated runtime data now lives under the repo-root `.runtime/` tree:
         <run-id>/
             ai-evidence/
             analysis/
-            benchmark/
     cache/
-        benchmark/
-            suites/
-            imports/
-            datasets/
-            manifests/
         vendor/
 ```
 
