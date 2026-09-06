@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
@@ -20,7 +20,7 @@ KNOWN_INTERVAL_INTENTS = {
 
 
 @dataclass(frozen=True, slots=True)
-class ResolvedIntervalAnalysisPolicy:
+class ResolvedSamplingPolicy:
     intent: str
     duration_ms: int
     short_interval: bool
@@ -56,8 +56,14 @@ class ResolvedIntervalAnalysisPolicy:
         }
 
 
-class AnalysisPolicyResolver:
-    def resolve_interval(self, payload: dict[str, Any], options: AnalysisOptions) -> ResolvedIntervalAnalysisPolicy:
+# Type alias for backwards compatibility if needed
+ResolvedIntervalAnalysisPolicy = ResolvedSamplingPolicy
+
+
+class IntervalSamplingPolicy:
+    """Calculates adaptive frame sampling rate and sample budget for interval analysis."""
+
+    def resolve_interval(self, payload: dict[str, Any], options: AnalysisOptions) -> ResolvedSamplingPolicy:
         interval = payload.get('interval') or {}
         start_ms = _safe_int(interval.get('startMs'), 0)
         end_ms = _safe_int(interval.get('endMs'), start_ms)
@@ -94,7 +100,7 @@ class AnalysisPolicyResolver:
         sample_every_ms = max(1, int(sample_every_ms))
         latency_budget_ms = _resolve_latency_budget(payload, intent)
 
-        return ResolvedIntervalAnalysisPolicy(
+        return ResolvedSamplingPolicy(
             intent=intent,
             duration_ms=duration_ms,
             short_interval=duration_ms <= SHORT_INTERVAL_MAX_MS,
@@ -106,6 +112,10 @@ class AnalysisPolicyResolver:
             analysis_profile_id=options.analysis_profile_id,
             rules=tuple(rules),
         )
+
+
+# Class alias
+AnalysisPolicyResolver = IntervalSamplingPolicy
 
 
 def _resolve_intent(payload: dict[str, Any], duration_ms: int) -> str:

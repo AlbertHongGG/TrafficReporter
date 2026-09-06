@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
 from typing import Any
 
 from .value_objects import NormalizedRect
@@ -148,3 +149,168 @@ class FrameSample:
             'temporalSupport': self.temporal_support,
             'diagnostics': self.diagnostics,
         }
+
+
+@dataclass(slots=True)
+class AnalysisProvenance:
+    command: str
+    request_id: str | None = None
+    analysis_profile_id: str | None = None
+    developer_diagnostics_enabled: bool = False
+    runtime_version: str | None = None
+    restoration_mode: str | None = None
+    recognizer_backend: str | None = None
+    temporal_evidence_mode: str | None = None
+    sequence_review_mode: str | None = None
+    emitted_at_ms: int = 0
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            'requestId': self.request_id,
+            'command': self.command,
+            'analysisProfileId': self.analysis_profile_id,
+            'developerDiagnosticsEnabled': self.developer_diagnostics_enabled,
+            'runtimeVersion': self.runtime_version,
+            'restorationMode': self.restoration_mode,
+            'recognizerBackend': self.recognizer_backend,
+            'temporalEvidenceMode': self.temporal_evidence_mode,
+            'sequenceReviewMode': self.sequence_review_mode,
+            'emittedAtMs': self.emitted_at_ms,
+        }
+
+    @classmethod
+    def create(
+        cls,
+        command: str,
+        payload: dict[str, Any],
+        runtime_status: dict[str, Any],
+        analysis_options: dict[str, Any] | None = None,
+    ) -> AnalysisProvenance:
+        resolved_options = dict(analysis_options or payload.get('analysisOptions') or {})
+
+        def _str(val: Any) -> str | None:
+            return val if isinstance(val, str) and val else None
+
+        return cls(
+            command=command,
+            request_id=_str(payload.get('requestId')),
+            analysis_profile_id=_str(payload.get('analysisProfileId')),
+            developer_diagnostics_enabled=bool(payload.get('enableDeveloperDiagnostics')),
+            runtime_version=_str(runtime_status.get('version')),
+            restoration_mode=_str(resolved_options.get('restorationMode')),
+            recognizer_backend=_str(resolved_options.get('recognizerBackend')),
+            temporal_evidence_mode=_str(resolved_options.get('temporalEvidenceMode')),
+            sequence_review_mode=_str(resolved_options.get('sequenceReviewMode')),
+            emitted_at_ms=time.time_ns() // 1_000_000,
+        )
+
+
+@dataclass(slots=True)
+class ReviewState:
+    status: str
+    accepted_candidate_id: str | None = None
+    suggested_candidate_id: str | None = None
+    reasons: list[str] = field(default_factory=list)
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            'status': self.status,
+            'acceptedCandidateId': self.accepted_candidate_id,
+            'suggestedCandidateId': self.suggested_candidate_id,
+            'reasons': self.reasons,
+        }
+
+    @classmethod
+    def evaluate(
+        cls,
+        candidates: list[PlateCandidate],
+        accepted_candidate_id: str | None = None,
+        selection_diagnostics: dict[str, Any] | None = None,
+    ) -> ReviewState:
+        selection = selection_diagnostics or {}
+
+        def _str(val: Any) -> str | None:
+            return val if isinstance(val, str) and val else None
+
+        suggested_candidate_id = _str(selection.get('suggestedCandidateId')) or (
+            candidates[0].id if candidates else None
+        )
+        reasons = [value for value in selection.get('reasons') or [] if isinstance(value, str)]
+        resolved_accepted_id = accepted_candidate_id or _str(selection.get('acceptedCandidateId'))
+        review_required = bool(selection.get('reviewRequired'))
+
+        if not candidates:
+            if not reasons:
+                reasons = ['no-candidate']
+            status = 'no-candidate'
+        elif review_required:
+            status = 'review-required'
+        else:
+            status = 'accepted'
+
+        return cls(
+            status=status,
+            accepted_candidate_id=resolved_accepted_id,
+            suggested_candidate_id=suggested_candidate_id,
+            reasons=reasons,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class StageTiming:
+    tracking_ms: float
+    sample_analysis_ms: float
+    temporal_support_ms: float
+    fusion_ms: float
+    total_ms: float
+    temporal_support_budget: int
+    temporal_support_samples_used: int
+
+    def to_payload(self) -> dict[str, float | int]:
+        return {
+            'trackingMs': self.tracking_ms,
+            'sampleAnalysisMs': self.sample_analysis_ms,
+            'temporalSupportMs': self.temporal_support_ms,
+            'fusionMs': self.fusion_ms,
+            'totalMs': self.total_ms,
+            'temporalSupportBudget': self.temporal_support_budget,
+            'temporalSupportSamplesUsed': self.temporal_support_samples_used,
+        }
+
+
+RuntimeStageTiming = StageTiming
+
+
+@dataclass(frozen=True, slots=True)
+class AnalysisDiagnostics:
+    analysis_options: dict[str, Any]
+    analysis_policy: Any
+    artifact_root: str | None
+    tracker: dict[str, Any]
+    tracking_summary: dict[str, Any]
+    sequence: dict[str, Any]
+    fusion: dict[str, Any]
+    selection: dict[str, Any]
+    timing: StageTiming
+
+    def to_payload(self) -> dict[str, Any]:
+        policy_payload = (
+            self.analysis_policy.to_payload()
+            if hasattr(self.analysis_policy, 'to_payload')
+            else self.analysis_policy
+        )
+        return {
+            'analysisOptions': self.analysis_options,
+            'analysisPolicy': policy_payload,
+            'artifactRoot': self.artifact_root,
+            'tracker': self.tracker,
+            'trackingSummary': self.tracking_summary,
+            'sequence': self.sequence,
+            'fusion': self.fusion,
+            'selection': self.selection,
+            'timing': self.timing.to_payload(),
+        }
+
+
+IntervalAnalysisDiagnostics = AnalysisDiagnostics
+

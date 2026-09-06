@@ -6,13 +6,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from traffic_lpr_runtime.application.services.analysis.policy import AnalysisPolicyResolver
+from traffic_lpr_runtime.application.services.analysis.sampling_strategy import (
+    AnalysisPolicyResolver,
+    IntervalSamplingPolicy,
+)
 from traffic_lpr_runtime.domain.analysis_options import AnalysisOptions
 
 
 class AnalysisPolicyTests(unittest.TestCase):
     def test_short_interval_policy_normalizes_legacy_ui_sampling(self) -> None:
-        policy = AnalysisPolicyResolver().resolve_interval(
+        policy = IntervalSamplingPolicy().resolve_interval(
             {
                 'interval': {'startMs': 0, 'endMs': 3000},
                 'analysisIntent': 'interactive-range',

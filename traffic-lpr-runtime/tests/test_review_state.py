@@ -7,9 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from traffic_lpr_runtime.application.services.analysis.provenance import build_analysis_provenance
-from traffic_lpr_runtime.application.services.analysis.review_state import build_review_state
-from traffic_lpr_runtime.domain.models import PlateCandidate
+from traffic_lpr_runtime.domain.models import AnalysisProvenance, PlateCandidate, ReviewState
 
 
 def _candidate(candidate_id: str, text: str = 'ABC1234') -> PlateCandidate:
@@ -27,8 +25,8 @@ def _candidate(candidate_id: str, text: str = 'ABC1234') -> PlateCandidate:
 
 
 class ReviewStateTests(unittest.TestCase):
-    def test_build_review_state_marks_accepted_candidate(self) -> None:
-        review = build_review_state(
+    def test_evaluate_review_state_marks_accepted_candidate(self) -> None:
+        state = ReviewState.evaluate(
             [_candidate('candidate-1')],
             'candidate-1',
             {
@@ -39,13 +37,19 @@ class ReviewStateTests(unittest.TestCase):
             },
         )
 
-        self.assertEqual(review['status'], 'accepted')
-        self.assertEqual(review['acceptedCandidateId'], 'candidate-1')
-        self.assertEqual(review['suggestedCandidateId'], 'candidate-1')
-        self.assertEqual(review['reasons'], [])
+        self.assertEqual(state.status, 'accepted')
+        self.assertEqual(state.accepted_candidate_id, 'candidate-1')
+        self.assertEqual(state.suggested_candidate_id, 'candidate-1')
+        self.assertEqual(state.reasons, [])
 
-    def test_build_review_state_marks_review_required(self) -> None:
-        review = build_review_state(
+        payload = state.to_payload()
+        self.assertEqual(payload['status'], 'accepted')
+        self.assertEqual(payload['acceptedCandidateId'], 'candidate-1')
+        self.assertEqual(payload['suggestedCandidateId'], 'candidate-1')
+        self.assertEqual(payload['reasons'], [])
+
+    def test_evaluate_review_state_marks_review_required(self) -> None:
+        state = ReviewState.evaluate(
             [_candidate('candidate-1'), _candidate('candidate-2', text='ABD1234')],
             None,
             {
@@ -55,13 +59,19 @@ class ReviewStateTests(unittest.TestCase):
             },
         )
 
-        self.assertEqual(review['status'], 'review-required')
-        self.assertIsNone(review['acceptedCandidateId'])
-        self.assertEqual(review['suggestedCandidateId'], 'candidate-2')
-        self.assertEqual(review['reasons'], ['low-margin'])
+        self.assertEqual(state.status, 'review-required')
+        self.assertIsNone(state.accepted_candidate_id)
+        self.assertEqual(state.suggested_candidate_id, 'candidate-2')
+        self.assertEqual(state.reasons, ['low-margin'])
 
-    def test_build_review_state_keeps_accepted_candidate_when_review_is_still_required(self) -> None:
-        review = build_review_state(
+        payload = state.to_payload()
+        self.assertEqual(payload['status'], 'review-required')
+        self.assertIsNone(payload['acceptedCandidateId'])
+        self.assertEqual(payload['suggestedCandidateId'], 'candidate-2')
+        self.assertEqual(payload['reasons'], ['low-margin'])
+
+    def test_evaluate_review_state_keeps_accepted_candidate_when_review_is_still_required(self) -> None:
+        state = ReviewState.evaluate(
             [_candidate('candidate-1'), _candidate('candidate-2', text='ABD1234')],
             'candidate-1',
             {
@@ -72,22 +82,22 @@ class ReviewStateTests(unittest.TestCase):
             },
         )
 
-        self.assertEqual(review['status'], 'review-required')
-        self.assertEqual(review['acceptedCandidateId'], 'candidate-1')
-        self.assertEqual(review['suggestedCandidateId'], 'candidate-1')
-        self.assertEqual(review['reasons'], ['tracking-ambiguity'])
+        self.assertEqual(state.status, 'review-required')
+        self.assertEqual(state.accepted_candidate_id, 'candidate-1')
+        self.assertEqual(state.suggested_candidate_id, 'candidate-1')
+        self.assertEqual(state.reasons, ['tracking-ambiguity'])
 
-    def test_build_review_state_marks_no_candidate_when_runtime_returns_none(self) -> None:
-        review = build_review_state([], None, None)
+    def test_evaluate_review_state_marks_no_candidate_when_runtime_returns_none(self) -> None:
+        state = ReviewState.evaluate([], None, None)
 
-        self.assertEqual(review['status'], 'no-candidate')
-        self.assertIsNone(review['acceptedCandidateId'])
-        self.assertIsNone(review['suggestedCandidateId'])
-        self.assertEqual(review['reasons'], ['no-candidate'])
+        self.assertEqual(state.status, 'no-candidate')
+        self.assertIsNone(state.accepted_candidate_id)
+        self.assertIsNone(state.suggested_candidate_id)
+        self.assertEqual(state.reasons, ['no-candidate'])
 
-    def test_build_analysis_provenance_uses_runtime_and_request_context(self) -> None:
+    def test_create_analysis_provenance_uses_runtime_and_request_context(self) -> None:
         before = time.time_ns() // 1_000_000
-        provenance = build_analysis_provenance(
+        provenance = AnalysisProvenance.create(
             'analyze-frame',
             {
                 'requestId': 'req-001',
@@ -98,16 +108,23 @@ class ReviewStateTests(unittest.TestCase):
         )
         after = time.time_ns() // 1_000_000
 
-        self.assertEqual(provenance['requestId'], 'req-001')
-        self.assertEqual(provenance['command'], 'analyze-frame')
-        self.assertEqual(provenance['analysisProfileId'], 'precision')
-        self.assertTrue(provenance['developerDiagnosticsEnabled'])
-        self.assertEqual(provenance['runtimeVersion'], 'runtime-1.2.3')
-        self.assertGreaterEqual(provenance['emittedAtMs'], before)
-        self.assertLessEqual(provenance['emittedAtMs'], after)
+        self.assertEqual(provenance.request_id, 'req-001')
+        self.assertEqual(provenance.command, 'analyze-frame')
+        self.assertEqual(provenance.analysis_profile_id, 'precision')
+        self.assertTrue(provenance.developer_diagnostics_enabled)
+        self.assertEqual(provenance.runtime_version, 'runtime-1.2.3')
+        self.assertGreaterEqual(provenance.emitted_at_ms, before)
+        self.assertLessEqual(provenance.emitted_at_ms, after)
 
-    def test_build_analysis_provenance_includes_resolved_runtime_options(self) -> None:
-        provenance = build_analysis_provenance(
+        payload = provenance.to_payload()
+        self.assertEqual(payload['requestId'], 'req-001')
+        self.assertEqual(payload['command'], 'analyze-frame')
+        self.assertEqual(payload['analysisProfileId'], 'precision')
+        self.assertTrue(payload['developerDiagnosticsEnabled'])
+        self.assertEqual(payload['runtimeVersion'], 'runtime-1.2.3')
+
+    def test_create_analysis_provenance_includes_resolved_runtime_options(self) -> None:
+        provenance = AnalysisProvenance.create(
             'analyze-interval',
             {'requestId': 'req-002'},
             {'version': 'runtime-1.2.3'},
@@ -119,11 +136,16 @@ class ReviewStateTests(unittest.TestCase):
             },
         )
 
-        self.assertEqual(provenance['restorationMode'], 'classical')
-        self.assertEqual(provenance['recognizerBackend'], 'hybrid')
-        self.assertEqual(provenance['temporalEvidenceMode'], 'motion-aware')
-        self.assertEqual(provenance['sequenceReviewMode'], 'strict')
+        self.assertEqual(provenance.restoration_mode, 'classical')
+        self.assertEqual(provenance.recognizer_backend, 'hybrid')
+        self.assertEqual(provenance.temporal_evidence_mode, 'motion-aware')
+        self.assertEqual(provenance.sequence_review_mode, 'strict')
 
+        payload = provenance.to_payload()
+        self.assertEqual(payload['restorationMode'], 'classical')
+        self.assertEqual(payload['recognizerBackend'], 'hybrid')
+        self.assertEqual(payload['temporalEvidenceMode'], 'motion-aware')
+        self.assertEqual(payload['sequenceReviewMode'], 'strict')
 
 
 if __name__ == '__main__':

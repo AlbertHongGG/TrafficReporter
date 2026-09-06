@@ -34,14 +34,20 @@ from traffic_lpr_runtime.application.services.tracking.evidence_frames import (
 from traffic_lpr_runtime.domain.analysis_options import AnalysisOptions
 from traffic_lpr_runtime.domain.errors import RuntimeFailure
 from traffic_lpr_runtime.domain.interfaces import ProgressSink
-from traffic_lpr_runtime.domain.models import FrameSample, PlateCandidate, TargetTrack, TrackedRegion
+from traffic_lpr_runtime.domain.models import (
+    AnalysisDiagnostics,
+    AnalysisProvenance,
+    FrameSample,
+    PlateCandidate,
+    ReviewState,
+    StageTiming,
+    TargetTrack,
+    TrackedRegion,
+)
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect
 from traffic_lpr_runtime.infrastructure.ipc import IpcProgressSink
 from traffic_lpr_runtime.infrastructure.storage import RuntimeStorageLayout
-from .diagnostics import IntervalAnalysisDiagnostics, RuntimeStageTiming
-from .policy import AnalysisPolicyResolver
-from .provenance import build_analysis_provenance
-from .review_state import build_review_state
+from .sampling_strategy import IntervalSamplingPolicy
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,9 +67,9 @@ class IntervalAnalysisDependencies:
 
 
 class IntervalAnalysisService:
-    def __init__(self, dependencies: IntervalAnalysisDependencies, policy_resolver: AnalysisPolicyResolver | None = None) -> None:
+    def __init__(self, dependencies: IntervalAnalysisDependencies, sampling_policy: IntervalSamplingPolicy | None = None) -> None:
         self._dependencies = dependencies
-        self._policy_resolver = policy_resolver or AnalysisPolicyResolver()
+        self._sampling_policy = sampling_policy or IntervalSamplingPolicy()
 
     def run(self, payload: dict[str, Any]) -> dict[str, Any]:
         self._dependencies.ensure_ready()
@@ -75,7 +81,7 @@ class IntervalAnalysisService:
 
         run_started = perf_counter()
         options = build_analysis_options_from_payload(payload)
-        analysis_policy = self._policy_resolver.resolve_interval(payload, options)
+        analysis_policy = self._sampling_policy.resolve_interval(payload, options)
         payload = analysis_policy.apply_to_payload(payload)
         artifact_root = storage.resolve_artifact_dir(
             options,
@@ -352,7 +358,7 @@ class IntervalAnalysisService:
         analysis_track = analysis_tracks[0].to_payload() if analysis_tracks else None
         decision = _build_decision_trace(candidates, accepted_candidate_id, selection_diagnostics, samples, sequence_summary)
         total_ms = (perf_counter() - run_started) * 1000.0
-        diagnostics = IntervalAnalysisDiagnostics(
+        diagnostics = AnalysisDiagnostics(
             analysis_options=options.to_payload(),
             analysis_policy=analysis_policy,
             artifact_root=str(artifact_root) if artifact_root else None,
@@ -361,7 +367,7 @@ class IntervalAnalysisService:
             sequence=sequence_summary,
             fusion=fusion_diagnostics,
             selection=selection_diagnostics,
-            timing=RuntimeStageTiming(
+            timing=StageTiming(
                 tracking_ms=tracking_ms,
                 sample_analysis_ms=sample_analysis_ms,
                 temporal_support_ms=temporal_support_ms,
@@ -377,9 +383,9 @@ class IntervalAnalysisService:
             'samples': [sample.to_payload() for sample in samples],
             'candidates': [candidate.to_payload() for candidate in candidates],
             'acceptedCandidateId': accepted_candidate_id,
-            'review': build_review_state(candidates, accepted_candidate_id, selection_diagnostics),
+            'review': ReviewState.evaluate(candidates, accepted_candidate_id, selection_diagnostics).to_payload(),
             'sequence': sequence_summary,
-            'provenance': build_analysis_provenance('analyze-interval', payload, runtime_status, options.to_payload()),
+            'provenance': AnalysisProvenance.create('analyze-interval', payload, runtime_status, options.to_payload()).to_payload(),
             'decision': decision,
             'summary': summary,
             'runtime': runtime_status,

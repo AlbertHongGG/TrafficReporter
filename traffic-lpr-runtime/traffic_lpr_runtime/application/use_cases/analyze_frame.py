@@ -4,13 +4,17 @@ from pathlib import Path
 from typing import Any, Callable
 
 from traffic_lpr_runtime.application.contracts.commands import AnalyzeFrameCommand
-from traffic_lpr_runtime.application.services.analysis.provenance import build_analysis_provenance
-from traffic_lpr_runtime.application.services.analysis.review_state import build_review_state
 from traffic_lpr_runtime.application.services.fusion.review_decision import _build_decision_trace, _request_run_id
 from traffic_lpr_runtime.domain.analysis_options import AnalysisOptions
 from traffic_lpr_runtime.domain.enums import EvidenceReason
 from traffic_lpr_runtime.domain.interfaces import ProgressSink
-from traffic_lpr_runtime.domain.models import FrameSample, PlateCandidate, TrackedRegion
+from traffic_lpr_runtime.domain.models import (
+    AnalysisProvenance,
+    FrameSample,
+    PlateCandidate,
+    ReviewState,
+    TrackedRegion,
+)
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect
 from traffic_lpr_runtime.infrastructure.ipc import IpcProgressSink
 from traffic_lpr_runtime.infrastructure.storage import RuntimeStorageLayout
@@ -94,8 +98,8 @@ class AnalyzeFrameUseCase:
             'sample': sample.to_payload(),
             'candidates': [candidate.to_payload() for candidate in candidates[:8]],
             'acceptedCandidateId': accepted_candidate_id,
-            'review': build_review_state(candidates, accepted_candidate_id, selection_diagnostics),
-            'provenance': build_analysis_provenance('analyze-frame', payload, runtime_status, options.to_payload()),
+            'review': ReviewState.evaluate(candidates, accepted_candidate_id, selection_diagnostics).to_payload(),
+            'provenance': AnalysisProvenance.create('analyze-frame', payload, runtime_status, options.to_payload()).to_payload(),
             'decision': decision,
             'runtime': runtime_status,
             'jobStatus': 'completed',
