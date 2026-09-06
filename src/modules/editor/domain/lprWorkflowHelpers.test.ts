@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { LprPlateCandidate } from '../../../shared/contracts';
+import type { LprPlateCandidate } from './lprState';
 import {
   formatLprReviewReason,
   buildLprCompletionDetail,

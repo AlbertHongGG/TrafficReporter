@@ -4,9 +4,9 @@ import type {
   LprSessionState,
   EditorWorkspaceState,
   EditorWorkspacePayload,
+  LprRuntimeStatus,
   VideoMarkerRect,
 } from '../domain/model';
-import type { LprRuntimeStatus } from '../../../shared/contracts';
 import {
   buildDefaultWorkspaceState,
   buildEditorFileState,

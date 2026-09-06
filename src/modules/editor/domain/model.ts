@@ -1,43 +1,141 @@
+import { buildDefaultAnalysisState, type EditorAnalysisState } from './analysisState';
+import type {
+  EditorAsset,
+  LprDecisionTrace,
+  LprJobStatus,
+  LprLegibilityLevel,
+  LprTrackingTier,
+  LprVehicleKind,
+} from '../../../types/bindings';
 import type {
   AudioBitrateKbps,
-  LprTrackedRegion,
-  LprTargetTrack,
-  MediaProbeResult,
+  ExportFormat,
+  OutputCompressionMode,
   RenderProfile,
-  TimelineClip,
-  TimelineTrack,
-  VideoMarkerRect,
-} from '../../../shared/contracts';
-import { buildDefaultAnalysisState, type EditorAnalysisState } from './analysisState';
-import type { EditorAsset } from '../../../types/bindings';
+  VideoQuality,
+} from '../../export/domain/model';
+import type { LprTargetTrack, LprTrackedRegion } from './lprState';
 
-export type { AudioBitrateKbps, VideoQuality } from '../../../shared/contracts';
+// Core Timeline & Media Entities
+export interface VideoMarkerRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
-export type { LprAnalysisProfileId, LprVehicleKind, LprWorkflowMode } from '../../../shared/contracts';
+export interface TimelineIntervalSelection {
+  startMs: number;
+  endMs: number;
+}
+
+export interface TimelineClip {
+  id: string;
+  assetId: string;
+  trackId: string;
+  startMs: number;
+  inPointMs: number;
+  outPointMs: number;
+  muted: boolean;
+}
+
+export interface TimelineTrack {
+  id: string;
+  name: string;
+  order: number;
+}
+
+export interface MediaProbeResult {
+  durationMs: number;
+  hasVideo: boolean;
+  hasAudio: boolean;
+  fps?: number;
+  audioBitrateKbps?: number;
+  width?: number;
+  height?: number;
+}
+
+export type MediaKind = 'video';
+
+export interface MediaAssetRecord extends MediaProbeResult {
+  id: string;
+  name: string;
+  path: string;
+  kind: MediaKind;
+}
+
+export type OperationFeedbackScope = 'import' | 'workspace' | 'export' | 'playback';
+
+export interface OperationFeedback {
+  scope: OperationFeedbackScope;
+  message: string;
+}
+
+// Re-exports for Export Domain
+export type { AudioBitrateKbps, ExportFormat, OutputCompressionMode, RenderProfile, VideoQuality };
+
+// Re-exports for LPR Domain
+export type {
+  LprAnalysisProfileCatalog,
+  LprAnalysisProfileDefinition,
+  LprAnalysisProfileId,
+} from './lprProfiles';
 
 export type {
-  AiEvidenceJobState,
-  AiEvidenceResponse,
-  AiEvidenceSessionState,
-  LprDecisionTrace,
+  LprAnalysisProvenance,
+  LprEvidenceExportRequest,
+  LprEvidenceExportResponse,
+  LprFrameAnalysisRequest,
+  LprFrameAnalysisResponse,
   LprFrameSample,
+  LprIntervalAnalysisRequest,
+  LprIntervalAnalysisResponse,
   LprJobState,
   LprPlateCandidate,
+  LprProgress,
+  LprProgressPayload,
+  LprQualityMetrics,
   LprResultHistoryEntry,
+  LprReviewState,
+  LprRuntimeStatus,
   LprSessionState,
   LprTargetAnchor,
+  LprTargetScanRequest,
+  LprTargetScanResponse,
   LprTargetTrack,
-  TimelineIntervalSelection,
-  MediaProbeResult,
-  MediaAssetRecord,
-  RenderProfile,
-  TimelineClip,
-  TimelineTrack,
-  VideoMarkerRect,
-} from '../../../shared/contracts';
+  LprTrackedRegion,
+  LprWorkflowMode,
+} from './lprState';
+
+// Re-exports for AI Evidence Domain
+export type {
+  AiEvidenceJobState,
+  AiEvidenceKeyframe,
+  AiEvidenceOverlayBox,
+  AiEvidencePixelBox,
+  AiEvidenceProgress,
+  AiEvidenceProgressKind,
+  AiEvidenceProgressPayload,
+  AiEvidenceRequest,
+  AiEvidenceResponse,
+  AiEvidenceSessionState,
+  AiEvidenceSharedProjection,
+  AiEvidenceTargetSelection,
+  AiEvidenceTimelineFrameRef,
+  AiEvidenceToolCall,
+} from './aiEvidenceState';
+
+// Re-exports from Specta Bindings
+export type {
+  EditorAsset,
+  LprDecisionTrace,
+  LprJobStatus,
+  LprLegibilityLevel,
+  LprTrackingTier,
+  LprVehicleKind,
+};
 
 export type AssetStatus = 'ready' | 'missing';
-export type { EditorAsset };
 
 export interface EditorFilePayload {
   id: string;

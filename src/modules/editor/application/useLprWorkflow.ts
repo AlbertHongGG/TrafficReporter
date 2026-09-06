@@ -22,8 +22,8 @@ import type {
   LprSessionState,
   LprTargetTrack,
   TimelineIntervalSelection,
-} from '../../../shared/contracts';
-import { EDITOR_ENV } from '../../../shared/config/editorEnv';
+} from '../domain/model';
+import { EDITOR_ENV } from '../config/editorEnv';
 import {
   buildLprCompletionDetail,
   buildTargetTracksFromDetections,

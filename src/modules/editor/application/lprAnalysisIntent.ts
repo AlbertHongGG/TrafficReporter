@@ -1,4 +1,4 @@
-import type { LprAnalysisIntent } from '../../../shared/contracts';
+import type { LprAnalysisIntent } from '../../../types/bindings';
 
 export const INTERACTIVE_RANGE_LATENCY_BUDGET_MS = 30_000;
 

@@ -1,5 +1,6 @@
-import type { AiEvidenceSessionState, LprRuntimeStatus, LprSessionState } from '../../../shared/contracts';
+import type { AiEvidenceSessionState } from './aiEvidenceState';
 import { buildDefaultAiEvidenceState } from './aiEvidenceState';
+import type { LprRuntimeStatus, LprSessionState } from './lprState';
 import { buildDefaultLprState } from './lprState';
 
 export interface EditorAnalysisState {

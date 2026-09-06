@@ -1,5 +1,5 @@
-import type { AiEvidenceSessionState, LprRuntimeStatus, LprSessionState } from '../../../shared/contracts';
-import type { RevisionedWindowSnapshot } from '../../../shared/windowing';
+import type { AiEvidenceSessionState, LprRuntimeStatus, LprSessionState } from '../domain/model';
+import type { RevisionedWindowSnapshot } from '../../../app/windowing';
 
 export const MAIN_WINDOW_LABEL = 'main';
 export const AI_PANEL_WINDOW_LABEL = 'ai-panel';

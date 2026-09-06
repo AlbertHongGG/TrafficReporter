@@ -17,7 +17,7 @@ import {
   createRevisionedWindowSnapshot,
   focusExistingWindow,
   waitForWindowCreation,
-} from '../../../shared/windowing';
+} from '../../../app/windowing';
 
 export async function openPlateWindow() {
   const existingWindow = await focusExistingWindow(PLATE_WINDOW_LABEL);

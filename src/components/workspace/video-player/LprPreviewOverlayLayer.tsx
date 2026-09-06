@@ -1,7 +1,7 @@
 import React, { useMemo, useSyncExternalStore } from 'react';
 import { clampNormalizedRect, findClosestTrackFrame, resolveTrackFrameAtPlayhead } from '../../../modules/editor/domain/model';
-import { EDITOR_ENV } from '../../../shared/config/editorEnv';
-import type { LprTargetTrack, LprTrackedRegion } from '../../../shared/contracts';
+import { EDITOR_ENV } from '../../../modules/editor/config/editorEnv';
+import type { LprTargetTrack, LprTrackedRegion } from '../../../modules/editor/domain/lprState';
 import type { LiveTransportStore } from '../../../modules/editor/application/liveTransport';
 import type { PreviewViewport } from './useVideoViewport';
 import styles from '../MainWorkspace.module.css';

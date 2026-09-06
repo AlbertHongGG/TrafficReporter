@@ -16,7 +16,7 @@ import type {
   LprSessionState,
   LprTargetTrack,
   LprVehicleKind,
-} from '../../../shared/contracts';
+} from '../domain/model';
 
 const log = createLogger('useAiEvidenceWorkflow');
 

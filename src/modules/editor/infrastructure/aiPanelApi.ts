@@ -16,7 +16,7 @@ import {
   createRevisionedWindowSnapshot,
   focusExistingWindow,
   waitForWindowCreation,
-} from '../../../shared/windowing';
+} from '../../../app/windowing';
 
 export async function openAiPanelWindow() {
   const existingWindow = await focusExistingWindow(AI_PANEL_WINDOW_LABEL);

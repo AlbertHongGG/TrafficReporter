@@ -1,5 +1,4 @@
-import type { LprJobState } from '../domain/model'
-import type { LprProgress } from '../../../shared/contracts'
+import type { LprJobState, LprProgress } from '../domain/model';
 
 export function shouldApplyLprProgress(
   activeRequestId: string | null,

@@ -1,9 +1,11 @@
 import type {
+  LprAnalysisProvenance,
   LprDecisionTrace,
   LprFrameSample,
   LprJobState,
   LprPlateCandidate,
   LprResultHistoryEntry,
+  LprReviewState,
   LprSessionState,
   LprTargetAnchor,
   LprTargetTrack,
@@ -11,7 +13,6 @@ import type {
   LprWorkflowMode,
   TimelineIntervalSelection,
 } from '../domain/model';
-import type { LprAnalysisProvenance, LprReviewState } from '../../../shared/contracts';
 import { buildDefaultLprState, buildLprTargetAnchor } from '../domain/lprState';
 
 export type LprSessionAction =

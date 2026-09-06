@@ -1,9 +1,21 @@
-import rawCatalog from './config/lpr-analysis-profiles.json';
-import type {
-  LprAnalysisProfileCatalog,
-  LprAnalysisProfileDefinition,
-  LprAnalysisProfileId,
-} from './contracts';
+import rawCatalog from './lpr-analysis-profiles.json';
+import type { LprAnalysisOptionsPayload } from '../../../types/bindings';
+
+export type LprAnalysisProfileId = string;
+
+export interface LprAnalysisProfileDefinition {
+  id: LprAnalysisProfileId;
+  label: string;
+  description: string;
+  options: LprAnalysisOptionsPayload;
+}
+
+export interface LprAnalysisProfileCatalog {
+  version: number;
+  defaultProfileId: LprAnalysisProfileId;
+  developerDiagnosticsOptions?: LprAnalysisOptionsPayload | null;
+  profiles: LprAnalysisProfileDefinition[];
+}
 
 const catalog = rawCatalog as LprAnalysisProfileCatalog;
 

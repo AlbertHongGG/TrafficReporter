@@ -9,7 +9,7 @@ import type {
   LprRuntimeStatus,
   LprTargetScanRequest,
   LprTargetScanResponse,
-} from '../../../shared/contracts';
+} from '../domain/lprState';
 
 async function unwrap<T>(promise: Promise<{ status: 'ok'; data: T } | { status: 'error'; error: string }>): Promise<T> {
   const res = await promise;

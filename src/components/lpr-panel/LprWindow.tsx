@@ -38,10 +38,10 @@ import { buildJobTimingSnapshot, formatElapsedDuration } from '../../modules/edi
 import { requestPlateWindowSession, sendPlateWindowAction } from '../../modules/editor/infrastructure/plateWindowApi';
 import { clamp, formatRulerLabel, formatRulerLabelWithMilliseconds } from '../../modules/editor/domain/model';
 import { buildDefaultLprState } from '../../modules/editor/domain/lprState';
-import type { LprFrameSample, LprJobState, LprPlateCandidate, LprReviewState, LprTargetTrack, TimelineIntervalSelection } from '../../shared/contracts';
-import { getLprAnalysisProfileLabel, getLprAnalysisProfiles } from '../../shared/lprAnalysisProfiles';
+import type { LprFrameSample, LprJobState, LprPlateCandidate, LprReviewState, LprTargetTrack, TimelineIntervalSelection } from '../../modules/editor/domain/model';
+import { getLprAnalysisProfileLabel, getLprAnalysisProfiles } from '../../modules/editor/domain/lprProfiles';
 import { createLogger, getErrorSummary, serializeError } from '../../utils/logger';
-import { shouldApplyRevisionedWindowSnapshot, unwrapRevisionedWindowSnapshot } from '../../shared/windowing';
+import { shouldApplyRevisionedWindowSnapshot, unwrapRevisionedWindowSnapshot } from '../../app/windowing';
 import { LprDashboard } from './LprDashboard';
 import { LprDataViewer } from './LprDataViewer';
 import styles from './LprWindow.module.css';

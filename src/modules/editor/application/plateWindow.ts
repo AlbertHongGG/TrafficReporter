@@ -5,8 +5,8 @@ import type {
   LprRuntimeStatus,
   LprSessionState,
   TimelineIntervalSelection,
-} from '../../../shared/contracts';
-import type { RevisionedWindowSnapshot } from '../../../shared/windowing';
+} from '../domain/model';
+import type { RevisionedWindowSnapshot } from '../../../app/windowing';
 import { resolveEffectivePlayheadMs, type LiveTransportSnapshot } from './liveTransport';
 
 export const MAIN_WINDOW_LABEL = 'main';

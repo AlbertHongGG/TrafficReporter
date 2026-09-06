@@ -1,18 +1,273 @@
 import type {
+  LprAnalysisIntent,
+  LprAnalysisOptionsPayload,
   LprDecisionTrace,
-  LprAnalysisProvenance,
-  LprFrameSample,
-  LprJobState,
-  LprPlateCandidate,
-  LprReviewState,
-  LprResultHistoryEntry,
-  LprSessionState,
-  LprTargetAnchor,
-  LprTargetTrack,
+  LprJobStatus,
+  LprLegibilityLevel,
+  LprOcrInput,
+  LprReviewStatus,
+  LprSampleSelection,
+  LprTemporalSupport,
+  LprTrackingTier,
   LprVehicleKind,
-  TimelineIntervalSelection,
-} from '../../../shared/contracts';
-import { defaultLprAnalysisProfileId } from '../../../shared/lprAnalysisProfiles';
+} from '../../../types/bindings';
+import type { TimelineIntervalSelection, VideoMarkerRect } from './model';
+import { defaultLprAnalysisProfileId, type LprAnalysisProfileId } from './lprProfiles';
+import type { OutputCompressionMode } from '../../export/domain/model';
+
+export interface LprReviewState {
+  status: LprReviewStatus;
+  acceptedCandidateId: string | null;
+  suggestedCandidateId: string | null;
+  reasons: string[];
+}
+
+export interface LprAnalysisProvenance {
+  requestId: string | null;
+  command: string;
+  analysisProfileId: LprAnalysisProfileId | null;
+  developerDiagnosticsEnabled: boolean;
+  runtimeVersion: string | null;
+  restorationMode?: string | null;
+  recognizerBackend?: string | null;
+  temporalEvidenceMode?: string | null;
+  sequenceReviewMode?: string | null;
+  emittedAtMs: number;
+}
+
+export interface LprRuntimeStatus {
+  available: boolean;
+  pythonExecutable: string | null;
+  runtimeScript: string | null;
+  version: string | null;
+  missingPackages: string[];
+  installedPackages: string[];
+  detail: string;
+}
+
+export interface LprProgressPayload {
+  progress: number;
+  stage: string;
+  detail: string;
+  done: boolean;
+  failed: boolean;
+  requestId: string | null;
+  reasonCode?: string | null;
+  trackingTier?: LprTrackingTier | null;
+  coverageRatio?: number | null;
+}
+export type LprProgress = LprProgressPayload;
+
+export type LprWorkflowMode = 'idle' | 'range' | 'target' | 'review';
+
+export interface LprQualityMetrics {
+  sharpness: number;
+  contrast: number;
+  plateArea: number;
+  angleScore: number;
+  occlusionScore: number;
+  glareScore: number;
+  legibilityScore: number;
+  overallScore: number;
+  legibilityLevel: LprLegibilityLevel;
+}
+
+export interface LprTrackedRegion {
+  id: string;
+  timeMs: number;
+  box: VideoMarkerRect;
+  confidence: number;
+  className: string;
+  diagnostics?: any | null;
+}
+
+export interface LprTargetTrack {
+  id: string;
+  className: string;
+  label: string;
+  confidence: number;
+  frames: LprTrackedRegion[];
+  diagnostics?: any | null;
+}
+
+export interface LprPlateCandidate {
+  id: string;
+  text: string;
+  confidence: number;
+  source: string;
+  frameTimeMs: number | null;
+  countryCode: string | null;
+  box: VideoMarkerRect | null;
+  quality: LprQualityMetrics | null;
+  diagnostics?: any | null;
+}
+
+export interface LprFrameSample {
+  id: string;
+  timeMs: number;
+  targetBox?: VideoMarkerRect | null;
+  plateBox?: VideoMarkerRect | null;
+  quality?: LprQualityMetrics | null;
+  selection?: LprSampleSelection | null;
+  ocrInput?: LprOcrInput | null;
+  temporalSupport?: LprTemporalSupport | null;
+  diagnostics?: any | null;
+  imagePath?: string | null;
+  candidates: LprPlateCandidate[];
+}
+
+export interface LprJobState {
+  status: LprJobStatus;
+  progress: number;
+  stage: string;
+  detail: string;
+  requestId: string | null;
+  error: string | null;
+  reasonCode: string | null;
+  startedAt: string | null;
+  stageStartedAt: string | null;
+  updatedAt: string | null;
+  trackingTier?: LprTrackingTier | null;
+  coverageRatio?: number | null;
+}
+
+export interface LprTargetAnchor {
+  trackId: string;
+  className: string;
+  timeMs: number;
+  box: VideoMarkerRect;
+}
+
+export interface LprResultHistoryEntry {
+  id: string;
+  createdAt: string;
+  interval: TimelineIntervalSelection | null;
+  targetTrackId: string | null;
+  acceptedCandidateId: string | null;
+  analysisProfileId: LprAnalysisProfileId | null;
+  developerDiagnosticsEnabled: boolean;
+  candidates: LprPlateCandidate[];
+  summary: string;
+}
+
+export interface LprSessionState {
+  workflowMode: LprWorkflowMode;
+  interval: TimelineIntervalSelection | null;
+  selectedAnalysisProfileId: LprAnalysisProfileId;
+  showDeveloperDiagnostics: boolean;
+  targetVehicleKind: LprVehicleKind;
+  useDenseSampling: boolean;
+  countryHints: string[];
+  job: LprJobState;
+  targetTracks: LprTargetTrack[];
+  selectedTargetTrackId: string | null;
+  selectedTargetAnchor: LprTargetAnchor | null;
+  analysisTrack: LprTargetTrack | null;
+  samples: LprFrameSample[];
+  candidates: LprPlateCandidate[];
+  review: LprReviewState | null;
+  lastAnalysisProvenance: LprAnalysisProvenance | null;
+  decision: LprDecisionTrace | null;
+  acceptedCandidateId: string | null;
+  history: LprResultHistoryEntry[];
+}
+
+export interface LprTargetScanRequest {
+  sourcePath: string;
+  timeMs: number;
+  markerRect: VideoMarkerRect | null;
+  targetVehicleKind: LprVehicleKind;
+  requestId?: string | null;
+}
+
+export interface LprTargetScanResponse {
+  detections: LprTrackedRegion[];
+  runtime: LprRuntimeStatus;
+}
+
+export interface LprFrameAnalysisRequest {
+  sourcePath: string;
+  timeMs: number;
+  markerRect: VideoMarkerRect | null;
+  targetVehicleKind: LprVehicleKind;
+  selectedTargetBox?: VideoMarkerRect | null;
+  countryHints: string[];
+  analysisProfileId?: LprAnalysisProfileId | null;
+  enableDeveloperDiagnostics?: boolean;
+  analysisOptions?: LprAnalysisOptionsPayload | null;
+  requestId?: string | null;
+}
+
+export interface LprFrameAnalysisResponse {
+  detections: LprTrackedRegion[];
+  sample: LprFrameSample | null;
+  candidates: LprPlateCandidate[];
+  acceptedCandidateId: string | null;
+  review: LprReviewState;
+  provenance: LprAnalysisProvenance;
+  decision: LprDecisionTrace | null;
+  runtime: LprRuntimeStatus;
+  jobStatus: LprJobStatus | null;
+  diagnostics?: any | null;
+}
+
+export interface LprIntervalAnalysisRequest {
+  sourcePath: string;
+  interval: TimelineIntervalSelection;
+  anchorTimeMs: number;
+  targetVehicleKind: LprVehicleKind;
+  selectedTargetBox?: VideoMarkerRect | null;
+  selectedTargetTrackId?: string | null;
+  countryHints: string[];
+  sampleEveryMs?: number | null;
+  maxSamples?: number | null;
+  analysisIntent?: LprAnalysisIntent | null;
+  latencyBudgetMs?: number | null;
+  analysisProfileId?: LprAnalysisProfileId | null;
+  enableDeveloperDiagnostics?: boolean | null;
+  analysisOptions?: LprAnalysisOptionsPayload | null;
+  requestId?: string | null;
+}
+
+export interface LprIntervalAnalysisResponse {
+  targetTracks: LprTargetTrack[];
+  analysisTrack: LprTargetTrack | null;
+  samples: LprFrameSample[];
+  candidates: LprPlateCandidate[];
+  acceptedCandidateId: string | null;
+  review: LprReviewState;
+  provenance: LprAnalysisProvenance;
+  decision: LprDecisionTrace | null;
+  summary: string;
+  runtime: LprRuntimeStatus;
+  jobStatus: LprJobStatus | null;
+  tracking?: any | null;
+  sequence?: any | null;
+  diagnostics?: any | null;
+}
+
+export interface LprEvidenceExportRequest {
+  outputPath: string;
+  sourcePath: string;
+  timeMs: number;
+  markerRect: VideoMarkerRect | null;
+  compressionMode: OutputCompressionMode;
+  interval?: TimelineIntervalSelection | null;
+  targetTrack?: LprTargetTrack | null;
+  acceptedCandidate?: LprPlateCandidate | null;
+  candidates: LprPlateCandidate[];
+  samples: LprFrameSample[];
+  review?: LprReviewState | null;
+  provenance?: LprAnalysisProvenance | null;
+}
+
+export interface LprEvidenceExportResponse {
+  jsonPath: string;
+  imagePath: string;
+  bundleDir: string;
+  exportedFileCount: number;
+  decisionFrameCount: number;
+}
 
 export const DEFAULT_LPR_JOB_STATE: LprJobState = {
   status: 'idle',

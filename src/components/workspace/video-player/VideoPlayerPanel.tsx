@@ -4,7 +4,7 @@ import { useEditorContext } from '../EditorContext';
 import { LprPreviewOverlayLayer } from './LprPreviewOverlayLayer';
 import type { PlaybackPreviewState } from '../../../modules/editor/application/usePlaybackController';
 import type { LiveTransportStore } from '../../../modules/editor/application/liveTransport';
-import type { LprSessionState, LprTargetTrack } from '../../../shared/contracts';
+import type { LprSessionState, LprTargetTrack } from '../../../modules/editor/domain/model';
 import type { PreviewViewport } from './useVideoViewport';
 import styles from '../MainWorkspace.module.css';
 

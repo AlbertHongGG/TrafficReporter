@@ -8,7 +8,7 @@ import {
   focusExistingWindow,
   waitForWindowCreation,
   type RevisionedWindowSnapshot,
-} from '../../../shared/windowing';
+} from '../../../app/windowing';
 import {
   EXPORT_SESSION_REQUEST_EVENT,
   EXPORT_SESSION_UPDATED_EVENT,

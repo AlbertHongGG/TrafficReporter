@@ -1,10 +1,10 @@
-﻿import type {
+import type { TimelineIntervalSelection } from './model';
+import type {
   LprPlateCandidate,
   LprReviewState,
   LprTargetTrack,
   LprTrackedRegion,
-  TimelineIntervalSelection,
-} from '../../../shared/contracts';
+} from './lprState';
 
 export type StageTimedJobLike = {
   status: string;

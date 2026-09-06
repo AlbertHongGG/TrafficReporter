@@ -25,7 +25,7 @@ import type {
   LprRuntimeStatus,
   LprSessionState,
   LprTargetAnchor,
-} from '../../../shared/contracts';
+} from '../domain/model';
 import { createLogger, getErrorSummary, serializeError } from '../../../utils/logger';
 
 const log = createLogger('useWindowCoordinator');
