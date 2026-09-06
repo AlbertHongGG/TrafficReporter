@@ -1,5 +1,5 @@
 import type { AiEvidenceSessionState, LprRuntimeStatus, LprSessionState } from '../domain/model';
-import type { RevisionedWindowSnapshot } from '../../../app/windowing';
+import type { VersionedPayload } from '../../../platform/desktop';
 
 export const MAIN_WINDOW_LABEL = 'main';
 export const AI_PANEL_WINDOW_LABEL = 'ai-panel';
@@ -18,7 +18,7 @@ export interface AiPanelSessionSnapshot {
   playheadMs: number;
 }
 
-export type RevisionedAiPanelSessionSnapshot = RevisionedWindowSnapshot<AiPanelSessionSnapshot>;
+export type RevisionedAiPanelSessionSnapshot = VersionedPayload<AiPanelSessionSnapshot>;
 
 export type AiPanelAction =
   | { type: 'run-analysis'; prompt: string }

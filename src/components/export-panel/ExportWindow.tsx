@@ -26,10 +26,9 @@ import type {
 } from '../../modules/export/application/exportTypes';
 import { formatTransportTime } from '../../modules/editor/domain/model';
 import {
-  shouldApplyRevisionedWindowSnapshot,
-  unwrapRevisionedWindowSnapshot,
-  type RevisionedWindowSnapshot,
-} from '../../app/windowing';
+  shouldApplyVersion,
+  type VersionedPayload,
+} from '../../platform/desktop';
 import { EXPORT_SESSION_UPDATED_EVENT } from '../../modules/export/application/exportWindow';
 import styles from './ExportWindow.module.css';
 import { Select } from '../common/Select/Select';
@@ -177,19 +176,35 @@ export const ExportWindow: React.FC = () => {
     setErrorMessage(null);
   }, []);
 
-  const applySessionUpdate = React.useCallback((payload: ExportSnapshot | RevisionedWindowSnapshot<ExportSnapshot> | null) => {
+  const applySessionUpdate = React.useCallback((payload: ExportSnapshot | VersionedPayload<ExportSnapshot> | { revision: number; snapshot: ExportSnapshot } | null) => {
     if (!payload) {
       applySnapshot(null);
       return;
     }
 
-    const envelope = unwrapRevisionedWindowSnapshot(payload);
-    if (!shouldApplyRevisionedWindowSnapshot(latestRevisionRef.current, envelope.revision)) {
+    let version = 0;
+    let data: ExportSnapshot;
+    if (typeof payload === 'object') {
+      const candidate = payload as Record<string, unknown>;
+      if ('version' in candidate && 'payload' in candidate) {
+        version = Number(candidate.version) || 0;
+        data = candidate.payload as ExportSnapshot;
+      } else if ('revision' in candidate && 'snapshot' in candidate) {
+        version = Number(candidate.revision) || 0;
+        data = candidate.snapshot as ExportSnapshot;
+      } else {
+        data = payload as ExportSnapshot;
+      }
+    } else {
+      data = payload as ExportSnapshot;
+    }
+
+    if (!shouldApplyVersion(latestRevisionRef.current, version)) {
       return;
     }
 
-    latestRevisionRef.current = envelope.revision;
-    applySnapshot(envelope.snapshot);
+    latestRevisionRef.current = version;
+    applySnapshot(data);
   }, [applySnapshot]);
 
   const handleFormatChange = React.useCallback((nextFormat: ExportFormat) => {
@@ -205,7 +220,7 @@ export const ExportWindow: React.FC = () => {
     setStatus('loading');
     setErrorMessage(null);
 
-    void listen<ExportSnapshot | RevisionedWindowSnapshot<ExportSnapshot>>(EXPORT_SESSION_UPDATED_EVENT, (event) => {
+    void listen<ExportSnapshot | VersionedPayload<ExportSnapshot>>(EXPORT_SESSION_UPDATED_EVENT, (event) => {
       if (disposed) return;
       applySessionUpdate(event.payload);
     }).then((unlisten) => {

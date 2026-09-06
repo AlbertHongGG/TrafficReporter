@@ -1,20 +1,11 @@
-import { emitTo } from '@tauri-apps/api/event';
 import { commands } from '../../../types/bindings';
-import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { ExportSnapshot, TimelineExportRequest } from '../application/exportTypes';
 import { createLogger } from '../../../utils/logger';
-import {
-  createRevisionedWindowSnapshot,
-  focusExistingWindow,
-  waitForWindowCreation,
-  type RevisionedWindowSnapshot,
-} from '../../../app/windowing';
+import { desktopWindowManager } from '../../../platform/desktop';
 import {
   EXPORT_SESSION_REQUEST_EVENT,
   EXPORT_SESSION_UPDATED_EVENT,
   EXPORT_WINDOW_LABEL,
-  EXPORT_WINDOW_URL,
-  MAIN_WINDOW_LABEL,
 } from '../application/exportWindow';
 
 const log = createLogger('ExportWindowApi');
@@ -26,12 +17,11 @@ export async function processTimelineExport(request: TimelineExportRequest): Pro
 }
 
 export function syncExportWindowSession(snapshot: ExportSnapshot, revision = 0) {
-  const payload: RevisionedWindowSnapshot<ExportSnapshot> = createRevisionedWindowSnapshot(snapshot, revision);
-  return emitTo(EXPORT_WINDOW_LABEL, EXPORT_SESSION_UPDATED_EVENT, payload);
+  return desktopWindowManager.broadcast(EXPORT_WINDOW_LABEL, EXPORT_SESSION_UPDATED_EVENT, snapshot, revision);
 }
 
 export function requestExportWindowSession() {
-  return emitTo(MAIN_WINDOW_LABEL, EXPORT_SESSION_REQUEST_EVENT);
+  return desktopWindowManager.sendToMain(EXPORT_SESSION_REQUEST_EVENT, null);
 }
 
 export async function openExportWindow(snapshot: ExportSnapshot, revision = 0) {
@@ -42,25 +32,5 @@ export async function openExportWindow(snapshot: ExportSnapshot, revision = 0) {
   });
 
   await syncExportWindowSession(snapshot, revision);
-
-  const existingWindow = await focusExistingWindow(EXPORT_WINDOW_LABEL);
-  if (existingWindow) {
-    return existingWindow;
-  }
-
-  const exportWindow = new WebviewWindow(EXPORT_WINDOW_LABEL, {
-    url: EXPORT_WINDOW_URL,
-    title: 'Export Settings',
-    width: 800,
-    height: 720,
-    minWidth: 700,
-    minHeight: 680,
-    center: true,
-    resizable: true,
-    focus: true,
-    decorations: false,
-    transparent: true,
-  });
-
-  return waitForWindowCreation(exportWindow);
+  return desktopWindowManager.open(EXPORT_WINDOW_LABEL);
 }

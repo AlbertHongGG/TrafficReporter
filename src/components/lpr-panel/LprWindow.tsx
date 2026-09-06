@@ -41,7 +41,7 @@ import { buildDefaultLprState } from '../../modules/editor/domain/lprState';
 import type { LprFrameSample, LprJobState, LprPlateCandidate, LprReviewState, LprTargetTrack, TimelineIntervalSelection } from '../../modules/editor/domain/model';
 import { getLprAnalysisProfileLabel, getLprAnalysisProfiles } from '../../modules/editor/domain/lprProfiles';
 import { createLogger, getErrorSummary, serializeError } from '../../utils/logger';
-import { shouldApplyRevisionedWindowSnapshot, unwrapRevisionedWindowSnapshot } from '../../app/windowing';
+import { shouldApplyVersion, type VersionedPayload } from '../../platform/desktop';
 import { LprDashboard } from './LprDashboard';
 import { LprDataViewer } from './LprDataViewer';
 import styles from './LprWindow.module.css';
@@ -460,15 +460,32 @@ export const PlateWindow: React.FC = () => {
     let removeSessionListener: (() => void) | undefined;
     let removeLiveTransportListener: (() => void) | undefined;
 
-    void listen<PlateWindowSessionSnapshot | RevisionedPlateWindowSessionSnapshot>(PLATE_SESSION_UPDATED_EVENT, (event) => {
+    void listen<PlateWindowSessionSnapshot | VersionedPayload<PlateWindowSessionSnapshot>>(PLATE_SESSION_UPDATED_EVENT, (event) => {
       if (disposed) return;
-      const envelope = unwrapRevisionedWindowSnapshot(event.payload);
-      if (!shouldApplyRevisionedWindowSnapshot(latestRevisionRef.current, envelope.revision)) {
+      const payload = event.payload;
+      let version = 0;
+      let data: PlateWindowSessionSnapshot;
+      if (payload && typeof payload === 'object') {
+        const candidate = payload as Record<string, unknown>;
+        if ('version' in candidate && 'payload' in candidate) {
+          version = Number(candidate.version) || 0;
+          data = candidate.payload as PlateWindowSessionSnapshot;
+        } else if ('revision' in candidate && 'snapshot' in candidate) {
+          version = Number(candidate.revision) || 0;
+          data = candidate.snapshot as PlateWindowSessionSnapshot;
+        } else {
+          data = payload as PlateWindowSessionSnapshot;
+        }
+      } else {
+        data = payload as PlateWindowSessionSnapshot;
+      }
+
+      if (!shouldApplyVersion(latestRevisionRef.current, version)) {
         return;
       }
-      latestRevisionRef.current = envelope.revision;
+      latestRevisionRef.current = version;
       setLiveTransport(null);
-      setSnapshot(envelope.snapshot);
+      setSnapshot(data);
       setErrorMessage(null);
     }).then((unlisten) => {
       removeSessionListener = unlisten;

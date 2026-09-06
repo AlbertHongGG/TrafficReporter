@@ -6,7 +6,7 @@ import type {
   LprSessionState,
   TimelineIntervalSelection,
 } from '../domain/model';
-import type { RevisionedWindowSnapshot } from '../../../app/windowing';
+import type { VersionedPayload } from '../../../platform/desktop';
 import { resolveEffectivePlayheadMs, type LiveTransportSnapshot } from './liveTransport';
 
 export const MAIN_WINDOW_LABEL = 'main';
@@ -31,7 +31,7 @@ export interface PlateWindowSessionSnapshot {
   playheadMs: number;
 }
 
-export type RevisionedPlateWindowSessionSnapshot = RevisionedWindowSnapshot<PlateWindowSessionSnapshot>;
+export type RevisionedPlateWindowSessionSnapshot = VersionedPayload<PlateWindowSessionSnapshot>;
 
 export type PlateWindowLiveTransport = LiveTransportSnapshot;
 

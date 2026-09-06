@@ -21,14 +21,13 @@ import {
 import { requestAiPanelWindowSession, saveGeneratedMediaAsset, sendAiPanelAction } from '../../modules/editor/infrastructure/aiPanelApi';
 import {
   AI_PANEL_SESSION_UPDATED_EVENT,
-  type RevisionedAiPanelSessionSnapshot,
   type AiPanelAction,
   type AiPanelSessionSnapshot,
 } from '../../modules/editor/application/aiPanelWindow';
 import { buildJobTimingSnapshot, formatElapsedDuration } from '../../modules/editor/application/jobTiming';
 import { buildDefaultAiEvidenceState } from '../../modules/editor/domain/aiEvidenceState';
 import { formatRulerLabel, formatTransportTime } from '../../modules/editor/domain/model';
-import { shouldApplyRevisionedWindowSnapshot, unwrapRevisionedWindowSnapshot } from '../../app/windowing';
+import { shouldApplyVersion, type VersionedPayload } from '../../platform/desktop';
 import styles from './AiEvidenceWindow.module.css';
 
 function clamp01(value: number | null | undefined) {
@@ -89,14 +88,31 @@ export const AiEvidenceWindow: React.FC = () => {
     let disposed = false;
     let removeSessionListener: (() => void) | undefined;
 
-    void listen<AiPanelSessionSnapshot | RevisionedAiPanelSessionSnapshot>(AI_PANEL_SESSION_UPDATED_EVENT, (event) => {
+    void listen<AiPanelSessionSnapshot | VersionedPayload<AiPanelSessionSnapshot>>(AI_PANEL_SESSION_UPDATED_EVENT, (event) => {
       if (disposed) return;
-      const envelope = unwrapRevisionedWindowSnapshot(event.payload);
-      if (!shouldApplyRevisionedWindowSnapshot(latestRevisionRef.current, envelope.revision)) {
+      const payload = event.payload;
+      let version = 0;
+      let data: AiPanelSessionSnapshot;
+      if (payload && typeof payload === 'object') {
+        const candidate = payload as unknown as Record<string, unknown>;
+        if ('version' in candidate && 'payload' in candidate) {
+          version = Number(candidate.version) || 0;
+          data = candidate.payload as AiPanelSessionSnapshot;
+        } else if ('revision' in candidate && 'snapshot' in candidate) {
+          version = Number(candidate.revision) || 0;
+          data = candidate.snapshot as AiPanelSessionSnapshot;
+        } else {
+          data = payload as AiPanelSessionSnapshot;
+        }
+      } else {
+        data = payload as AiPanelSessionSnapshot;
+      }
+
+      if (!shouldApplyVersion(latestRevisionRef.current, version)) {
         return;
       }
-      latestRevisionRef.current = envelope.revision;
-      setSnapshot(envelope.snapshot);
+      latestRevisionRef.current = version;
+      setSnapshot(data);
       setErrorMessage(null);
     }).then((unlisten) => {
       removeSessionListener = unlisten;
