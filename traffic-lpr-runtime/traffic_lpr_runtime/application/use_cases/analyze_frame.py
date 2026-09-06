@@ -8,6 +8,7 @@ from traffic_lpr_runtime.application.provenance import build_analysis_provenance
 from traffic_lpr_runtime.application.review_state import build_review_state
 from traffic_lpr_runtime.application.services.fusion.review_decision import _build_decision_trace, _request_run_id
 from traffic_lpr_runtime.domain.analysis_options import AnalysisOptions
+from traffic_lpr_runtime.domain.enums import EvidenceReason
 from traffic_lpr_runtime.domain.models import FrameSample, PlateCandidate, TrackedRegion
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect
 from traffic_lpr_runtime.protocol import emit_runtime_progress
@@ -50,7 +51,7 @@ class AnalyzeFrameUseCase:
         self._ensure_ready()
         command = AnalyzeFrameCommand.from_payload(payload)
         time_ms = command.time_ms
-        options = command.options
+        options = command.options.for_interactive_frame()
         artifact_root = options.resolve_artifact_root(self._runtime_root(), f'frame-{time_ms}', command.request_id)
         marker_rect = command.marker_rect
         selected_target_box = command.selected_target_box
@@ -83,7 +84,7 @@ class AnalyzeFrameUseCase:
             options,
             False,
         )
-        sample.selection = {'selected': True, 'priority': 1.0, 'reasons': ['anchor']}
+        sample.selection = {'selected': True, 'priority': 1.0, 'reasons': [EvidenceReason.ANCHOR.value]}
         sample.diagnostics = {
             **(sample.diagnostics or {}),
             'selection': selection_diagnostics,

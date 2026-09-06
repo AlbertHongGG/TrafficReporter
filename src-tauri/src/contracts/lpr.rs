@@ -160,32 +160,54 @@ pub type LprDiagnostics = Value;
 #[serde(rename_all = "kebab-case")]
 pub enum LprArtifactStage {
     Raw,
+    Original,
     Rectified,
     Enhanced,
+    Restored,
+    TemporalRestored,
     Fused,
 }
 impl_enum_as_str_and_display!(LprArtifactStage {
     Raw => "raw",
+    Original => "original",
     Rectified => "rectified",
     Enhanced => "enhanced",
+    Restored => "restored",
+    TemporalRestored => "temporal-restored",
     Fused => "fused",
 });
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "kebab-case")]
 pub enum LprEvidenceReason {
+    Anchor,
     AnchorFrame,
+    IntervalStart,
+    IntervalEnd,
+    ScheduledSample,
+    TemporalBurst,
+    MotionHotspot,
+    HighConfidence,
     HighestConfidence,
     HighestResolution,
     Representative,
     TemporalSupport,
+    SharpnessPeak,
 }
 impl_enum_as_str_and_display!(LprEvidenceReason {
+    Anchor => "anchor",
     AnchorFrame => "anchor-frame",
+    IntervalStart => "interval-start",
+    IntervalEnd => "interval-end",
+    ScheduledSample => "scheduled-sample",
+    TemporalBurst => "temporal-burst",
+    MotionHotspot => "motion-hotspot",
+    HighConfidence => "high-confidence",
     HighestConfidence => "highest-confidence",
     HighestResolution => "highest-resolution",
     Representative => "representative",
     TemporalSupport => "temporal-support",
+    SharpnessPeak => "sharpness-peak",
 });
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -195,12 +217,22 @@ pub enum LprDecisionSource {
     TemporalFusion,
     CrossFrameVote,
     UserSelected,
+    FusedImage,
+    FusedChar,
+    TemporalRestored,
+    SupportCarry,
+    LegacyVote,
 }
 impl_enum_as_str_and_display!(LprDecisionSource {
     SingleFrame => "single-frame",
     TemporalFusion => "temporal-fusion",
     CrossFrameVote => "cross-frame-vote",
     UserSelected => "user-selected",
+    FusedImage => "fused-image",
+    FusedChar => "fused-char",
+    TemporalRestored => "temporal-restored",
+    SupportCarry => "support-carry",
+    LegacyVote => "legacy-vote",
 });
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]

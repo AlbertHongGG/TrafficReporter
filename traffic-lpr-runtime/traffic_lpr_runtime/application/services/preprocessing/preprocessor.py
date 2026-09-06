@@ -472,7 +472,10 @@ class PlatePreprocessor:
         )
 
     def _restore_plate(self, plate_image: Any, options: AnalysisOptions) -> tuple[Any | None, dict[str, Any]]:
-        restoration_mode = (options.restoration_mode or 'mambairv2').strip().lower()
+        restoration_mode = (options.restoration_mode or 'off').strip().lower()
+        if restoration_mode == 'off':
+            return None, {'applied': False, 'backend': 'none', 'mode': restoration_mode}
+
         if restoration_mode.startswith('mambairv2'):
             scale = 4 if restoration_mode.endswith('x4') or min(plate_image.shape[:2]) < 40 else 2
             restored_image = self._mambair_restorer.restore(plate_image, scale=scale)
@@ -483,9 +486,6 @@ class PlatePreprocessor:
                     'mode': restoration_mode,
                     'scale': scale,
                 }
-
-        if restoration_mode == 'off':
-            return None, {'applied': False, 'backend': 'none', 'mode': restoration_mode}
 
         restored_image = self._classical_restore_plate(plate_image)
         return restored_image, {

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 from traffic_lpr_runtime.domain.analysis_options import AnalysisOptions
+from traffic_lpr_runtime.domain.enums import DecisionSource, EvidenceReason
 from traffic_lpr_runtime.domain.models import FrameSample, PlateCandidate
 
 def _request_run_id(payload: dict[str, Any]) -> str | None:
@@ -24,8 +25,8 @@ def _build_sample_selection_payload(sample: FrameSample, tracked_frame: TrackedR
         for reason in ((tracked_frame.diagnostics or {}).get('evidenceReasons') or [])
         if isinstance(reason, str)
     ]
-    if sample.quality is not None and sample.quality.sharpness >= 0.72 and 'sharpness-peak' not in reasons:
-        reasons.append('sharpness-peak')
+    if sample.quality is not None and sample.quality.sharpness >= 0.72 and EvidenceReason.SHARPNESS_PEAK.value not in reasons:
+        reasons.append(EvidenceReason.SHARPNESS_PEAK.value)
     return {
         'selected': True,
         'priority': float((tracked_frame.diagnostics or {}).get('evidencePriority') or sample.quality.overall_score if sample.quality is not None else 0.0),
@@ -35,16 +36,16 @@ def _build_sample_selection_payload(sample: FrameSample, tracked_frame: TrackedR
 
 def _decision_source_for_candidate(candidate: PlateCandidate, sample: FrameSample | None) -> str:
     if candidate.source.startswith('fused-image:'):
-        return 'fused-image'
+        return DecisionSource.FUSED_IMAGE.value
     if candidate.source == 'fused-char':
-        return 'fused-char'
+        return DecisionSource.FUSED_CHAR.value
     if candidate.source == 'legacy-vote':
-        return 'legacy-vote'
+        return DecisionSource.LEGACY_VOTE.value
     if sample is not None and sample.ocr_input is not None and sample.ocr_input.get('stage') == 'temporal-restored':
-        return 'temporal-restored'
+        return DecisionSource.TEMPORAL_RESTORED.value
     if (candidate.diagnostics or {}).get('bestFrameCarryThrough') is True:
-        return 'support-carry'
-    return 'single-frame'
+        return DecisionSource.SUPPORT_CARRY.value
+    return DecisionSource.SINGLE_FRAME.value
 
 
 def _build_decision_trace(

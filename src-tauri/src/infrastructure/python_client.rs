@@ -121,7 +121,7 @@ where
     TResponse: DeserializeOwned,
 {
     let response: RuntimeWorkerResponse<TResponse> = serde_json::from_str(response_line.trim_end()).map_err(|error| {
-        RuntimeWorkerInvokeError::Recoverable(format!(
+        RuntimeWorkerInvokeError::Unrecoverable(format!(
             "Failed to parse the LPR runtime worker response: {}\n{}",
             error,
             response_line.trim()
@@ -137,7 +137,7 @@ where
     }
 
     if response.protocol_version != protocol_version {
-        return Err(RuntimeWorkerInvokeError::Recoverable(format!(
+        return Err(RuntimeWorkerInvokeError::Unrecoverable(format!(
             "Mismatched LPR runtime worker protocol: expected version {}, received {}.",
             protocol_version,
             response.protocol_version,
@@ -735,5 +735,101 @@ mod tests {
     fn request_timeout_for_non_ai_evidence_keeps_default_timeout() {
         let timeout = request_timeout_for_subcommand_with_ollama_timeout("analyze-interval", Some(900));
         assert_eq!(timeout, DEFAULT_LPR_RUNTIME_REQUEST_TIMEOUT);
+    }
+
+    #[test]
+    fn parse_worker_response_line_deserializes_frame_analysis_with_all_reasons() {
+        let json_line = serde_json::json!({
+            "protocolVersion": 1,
+            "requestId": 10,
+            "ok": true,
+            "result": {
+                "detections": [],
+                "sample": {
+                    "id": "sample-100",
+                    "timeMs": 100.0,
+                    "targetBox": null,
+                    "plateBox": null,
+                    "quality": null,
+                    "candidates": [],
+                    "imagePath": null,
+                    "selection": {
+                        "selected": true,
+                        "priority": 1.0,
+                        "reasons": ["anchor", "sharpness-peak", "interval-start", "temporal-burst"]
+                    },
+                    "ocrInput": {
+                        "stage": "original",
+                        "variant": "original",
+                        "source": "single-frame",
+                        "imagePath": null,
+                        "supportFrameCount": 1
+                    },
+                    "temporalSupport": null,
+                    "diagnostics": null
+                },
+                "candidates": [],
+                "acceptedCandidateId": null,
+                "review": {
+                    "status": "accepted",
+                    "suggestedCandidateId": null,
+                    "acceptedCandidateId": null,
+                    "reviewRequired": false,
+                    "confidence": 0.9,
+                    "margin": 0.2,
+                    "reasons": []
+                },
+                "provenance": {
+                    "requestId": "req-1",
+                    "command": "analyze-frame",
+                    "analysisProfileId": "precision",
+                    "developerDiagnosticsEnabled": false,
+                    "runtimeVersion": "3.12.10",
+                    "restorationMode": "off",
+                    "recognizerBackend": "hybrid",
+                    "temporalEvidenceMode": "motion-aware",
+                    "sequenceReviewMode": "strict",
+                    "emittedAtMs": 1000.0
+                },
+                "decision": {
+                    "source": "single-frame",
+                    "candidateId": null,
+                    "sampleId": "sample-100",
+                    "frameTimeMs": 100.0,
+                    "stage": "original",
+                    "supportFrameCount": 1,
+                    "agreementRatio": null,
+                    "margin": null
+                },
+                "runtime": {
+                    "available": true,
+                    "pythonExecutable": "python.exe",
+                    "runtimeScript": "main.py",
+                    "version": "3.12.10",
+                    "missingPackages": [],
+                    "installedPackages": ["torch"],
+                    "detail": "ok"
+                },
+                "jobStatus": "completed",
+                "diagnostics": null
+            }
+        }).to_string();
+
+        let envelope = parse_worker_response_line::<crate::contracts::lpr::LprFrameAnalysisResponsePayload>(
+            &json_line,
+            10,
+            1,
+        ).expect("should successfully parse frame analysis response with anchor and reasons");
+
+        match envelope {
+            RuntimeWorkerEnvelope::Success(payload) => {
+                let sample = payload.sample.expect("sample should be present");
+                let selection = sample.selection.expect("selection should be present");
+                assert_eq!(selection.reasons.len(), 4);
+                assert_eq!(selection.reasons[0], crate::contracts::lpr::LprEvidenceReason::Anchor);
+                assert_eq!(selection.reasons[1], crate::contracts::lpr::LprEvidenceReason::SharpnessPeak);
+            }
+            _ => panic!("expected success envelope"),
+        }
     }
 }

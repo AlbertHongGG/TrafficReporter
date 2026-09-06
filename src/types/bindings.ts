@@ -256,9 +256,9 @@ export type LprAnalysisProvenancePayload = {
 
 export type LprAnchorStatus = "valid" | "missing-selection" | "outside-interval" | "not-detected" | "mismatched" | "degraded";
 
-export type LprArtifactStage = "raw" | "rectified" | "enhanced" | "fused";
+export type LprArtifactStage = "raw" | "original" | "rectified" | "enhanced" | "restored" | "temporal-restored" | "fused";
 
-export type LprDecisionSource = "single-frame" | "temporal-fusion" | "cross-frame-vote" | "user-selected";
+export type LprDecisionSource = "single-frame" | "temporal-fusion" | "cross-frame-vote" | "user-selected" | "fused-image" | "fused-char" | "temporal-restored" | "support-carry" | "legacy-vote";
 
 export type LprDecisionTrace = {
 	source: LprDecisionSource,
@@ -294,7 +294,7 @@ export type LprEvidenceExportResponsePayload = {
 	decisionFrameCount: number,
 };
 
-export type LprEvidenceReason = "anchor-frame" | "highest-confidence" | "highest-resolution" | "representative" | "temporal-support";
+export type LprEvidenceReason = "anchor" | "anchor-frame" | "interval-start" | "interval-end" | "scheduled-sample" | "temporal-burst" | "motion-hotspot" | "high-confidence" | "highest-confidence" | "highest-resolution" | "representative" | "temporal-support" | "sharpness-peak";
 
 export type LprFrameAnalysisRequestPayload = {
 	sourcePath: string,

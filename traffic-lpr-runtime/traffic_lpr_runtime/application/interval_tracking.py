@@ -9,6 +9,7 @@ from traffic_lpr_runtime.application.analysis_policy import (
     SHORT_INTERVAL_SAMPLE_STEP_MS,
 )
 from traffic_lpr_runtime.application.pipeline_support import AnalysisOptions
+from traffic_lpr_runtime.domain.enums import EvidenceReason
 from traffic_lpr_runtime.domain.models import TargetTrack, TrackedRegion
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect, clamp
 
@@ -526,19 +527,19 @@ class IntervalTrackingService:
                 requested_position = (tracked_frame.time_ms - tracking_times[0]) / max(tracking_times[-1] - tracking_times[0], 1)
             evidence_reasons: list[str] = []
             if index == 0:
-                evidence_reasons.append('interval-start')
+                evidence_reasons.append(EvidenceReason.INTERVAL_START.value)
             if tracked_frame.time_ms == anchor_time_ms:
-                evidence_reasons.append('anchor')
+                evidence_reasons.append(EvidenceReason.ANCHOR.value)
             if tracked_frame.time_ms in evidence_sample_time_set:
-                evidence_reasons.append('scheduled-sample')
+                evidence_reasons.append(EvidenceReason.SCHEDULED_SAMPLE.value)
             if tracked_frame.time_ms in temporal_burst_time_set and tracked_frame.time_ms != anchor_time_ms:
-                evidence_reasons.append('temporal-burst')
+                evidence_reasons.append(EvidenceReason.TEMPORAL_BURST.value)
             if index == len(tracked_frames) - 1:
-                evidence_reasons.append('interval-end')
+                evidence_reasons.append(EvidenceReason.INTERVAL_END.value)
             if is_motion_hotspot:
-                evidence_reasons.append('motion-hotspot')
+                evidence_reasons.append(EvidenceReason.MOTION_HOTSPOT.value)
             if tracked_frame.confidence >= 0.85:
-                evidence_reasons.append('high-confidence')
+                evidence_reasons.append(EvidenceReason.HIGH_CONFIDENCE.value)
             evidence_priority = tracked_frame.confidence
             evidence_priority += local_motion * 2.0
             evidence_priority += 0.75 if tracked_frame.time_ms in evidence_sample_time_set else 0.0

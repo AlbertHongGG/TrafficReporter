@@ -137,6 +137,10 @@ class AnalysisOptions:
             self,
             enable_recognizer_comparison=False,
             enable_secondary_subcrop_ocr=True,
+            restoration_mode='off',
+            persist_artifacts=False,
+            temporal_window_ms=0,
+            temporal_neighbor_count=1,
         )
 
     def for_interval_sample(self, sample_count_hint: int | None = None) -> 'AnalysisOptions':

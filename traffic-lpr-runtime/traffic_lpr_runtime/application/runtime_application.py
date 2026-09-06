@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from traffic_lpr_runtime.domain.enums import ArtifactStage, DecisionSource
 from traffic_lpr_runtime.domain.errors import RuntimeFailure
 from traffic_lpr_runtime.domain.interfaces import FrameReader, PlateRecognizer, TargetDetector
 from traffic_lpr_runtime.domain.models import FrameSample, PlateCandidate, TargetTrack, TrackedRegion
@@ -299,7 +300,7 @@ class LprRuntimeApplication:
         if observation is None:
             return None
         support = observation.temporal_support or {}
-        source = 'temporal-restored' if observation.working_stage == 'temporal-restored' else 'single-frame'
+        source = DecisionSource.TEMPORAL_RESTORED.value if observation.working_stage == ArtifactStage.TEMPORAL_RESTORED.value else DecisionSource.SINGLE_FRAME.value
         return {
             'stage': observation.working_stage,
             'variant': observation.working_stage,
