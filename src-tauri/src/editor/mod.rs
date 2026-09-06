@@ -9,10 +9,10 @@ use tauri::Emitter;
 use crate::infrastructure::python_client::terminate_lpr_runtime_process;
 
 use crate::contracts::{
-    AiEvidenceProgressPayload, AiEvidenceResponsePayload,
+    AiEvidenceProgressKind, AiEvidenceProgressPayload, AiEvidenceResponsePayload,
     FrameExportRequest, LprAnalysisProvenancePayload,
     LprEvidenceExportRequestPayload, LprEvidenceExportResponsePayload,
-    LprProgressPayload,
+    LprProgressPayload, LprTrackingTier,
     OutputCompressionModePayload,
     LprReviewStatePayload,
     MediaProbePayload,
@@ -110,7 +110,7 @@ pub fn emit_ai_evidence_progress(
     detail: impl Into<String>,
     done: bool,
     failed: bool,
-    progress_kind: Option<&str>,
+    progress_kind: Option<AiEvidenceProgressKind>,
     tool_name: Option<&str>,
     tool_label: Option<&str>,
     step_index: Option<u32>,
@@ -124,7 +124,7 @@ pub fn emit_ai_evidence_progress(
             progress,
             stage: stage.to_string(),
             detail: detail.into(),
-            progress_kind: progress_kind.map(|value| value.to_string()),
+            progress_kind,
             tool_name: tool_name.map(|value| value.to_string()),
             tool_label: tool_label.map(|value| value.to_string()),
             step_index,
@@ -150,7 +150,7 @@ pub fn emit_ai_evidence_progress_payload(
         progress.detail,
         progress.done,
         progress.failed,
-        progress.progress_kind.as_deref(),
+        progress.progress_kind,
         progress.tool_name.as_deref(),
         progress.tool_label.as_deref(),
         progress.step_index,
@@ -169,7 +169,7 @@ pub fn emit_lpr_progress(
     done: bool,
     failed: bool,
     reason_code: Option<&str>,
-    tracking_tier: Option<&str>,
+    tracking_tier: Option<LprTrackingTier>,
     coverage_ratio: Option<f64>,
 ) {
     let _ = app_handle.emit(
@@ -182,7 +182,7 @@ pub fn emit_lpr_progress(
             failed,
             request_id: request_id.map(|value| value.to_string()),
             reason_code: reason_code.map(|value| value.to_string()),
-            tracking_tier: tracking_tier.map(|value| value.to_string()),
+            tracking_tier,
             coverage_ratio,
         },
     );
@@ -1021,7 +1021,7 @@ pub async fn export_lpr_evidence(
             "requestId={} profile={} reviewStatus={} output={}",
             log_request_id.as_deref().unwrap_or("-"),
             log_analysis_profile_id.as_deref().unwrap_or("-"),
-            log_review_status.as_deref().unwrap_or("-"),
+            log_review_status.map(|s| s.as_str()).unwrap_or("-"),
             response.bundle_dir,
         ),
     );
@@ -1261,7 +1261,7 @@ mod ai_clip_tests {
 mod tests {
     use super::*;
     use crate::contracts::{
-        LprFrameSamplePayload, LprPlateCandidatePayload, LprQualityMetricsPayload,
+        LprFrameSamplePayload, LprLegibilityLevel, LprPlateCandidatePayload, LprQualityMetricsPayload,
         OutputCompressionModePayload,
     };
 
@@ -1275,7 +1275,7 @@ mod tests {
             glare_score: 0.9,
             legibility_score: 0.8,
             overall_score,
-            legibility_level: "good".to_string(),
+            legibility_level: LprLegibilityLevel::Good,
         }
     }
 

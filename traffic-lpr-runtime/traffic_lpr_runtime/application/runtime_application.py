@@ -25,12 +25,15 @@ from traffic_lpr_runtime.infrastructure.model_runtime import (
     ModelRegistry,
     UltralyticsTargetDetector,
 )
-from traffic_lpr_runtime.vnext import (
-    CallableRuntimeUseCase,
-    RuntimeUseCaseRegistry,
+from traffic_lpr_runtime.infrastructure.container import (
     RuntimeServiceContainer,
     build_default_runtime_service_container,
 )
+from traffic_lpr_runtime.application.use_cases import (
+    CallableRuntimeUseCase,
+    RuntimeUseCaseRegistry,
+)
+
 
 
 HARD_PLATE_SECONDARY_CROP_SPECS = (

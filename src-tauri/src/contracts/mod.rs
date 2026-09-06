@@ -55,7 +55,7 @@ pub struct RenderProfilePayload {
     pub compression_mode: OutputCompressionModePayload,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct VideoMarkerRectPayload {
     pub x: f64,
@@ -64,9 +64,9 @@ pub struct VideoMarkerRectPayload {
     pub height: f64,
 }
 
-mod lpr_generated;
+pub mod lpr;
 
-pub use lpr_generated::*;
+pub use lpr::*;
 
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]

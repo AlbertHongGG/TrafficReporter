@@ -54,13 +54,15 @@ export type AiEvidencePixelBoxPayload = {
 	height: number,
 };
 
+export type AiEvidenceProviderKind = "mock" | "gemini" | "local";
+
 export type AiEvidenceRequestPayload = {
 	sourcePath: string,
 	description: string,
 	markerRect: VideoMarkerRectPayload | null,
 	compressionMode: OutputCompressionModePayload,
 	audioBitrateKbps: number | null,
-	targetVehicleKind: string,
+	targetVehicleKind: LprVehicleKind,
 	countryHints: string[],
 	analysisProfileId: string | null,
 	enableDeveloperDiagnostics: boolean | null,
@@ -75,7 +77,7 @@ export type AiEvidenceResponsePayload = {
 	requestId: string | null,
 	description: string,
 	summary: string,
-	provider: string,
+	provider: AiEvidenceProviderKind,
 	interval: TimelineIntervalSelectionPayload | null,
 	plateNumber: string | null,
 	plateCandidate: LprPlateCandidatePayload | null,
@@ -206,6 +208,8 @@ export type FrameExportRequest = {
 	compressionMode: OutputCompressionModePayload,
 };
 
+export type LprAnalysisIntent = "interactive-short-range" | "interactive-range" | "interactive-dense-range" | "ai-evidence-range" | "benchmark-case";
+
 export type LprAnalysisOptionsPayload = {
 	persistArtifacts: boolean | null,
 	artifactDir: string | null,
@@ -250,12 +254,18 @@ export type LprAnalysisProvenancePayload = {
 	emittedAtMs: number | null,
 };
 
+export type LprAnchorStatus = "valid" | "missing-selection" | "outside-interval" | "not-detected" | "mismatched" | "degraded";
+
+export type LprArtifactStage = "raw" | "rectified" | "enhanced" | "fused";
+
+export type LprDecisionSource = "single-frame" | "temporal-fusion" | "cross-frame-vote" | "user-selected";
+
 export type LprDecisionTrace = {
-	source: string,
+	source: LprDecisionSource,
 	candidateId: string | null,
 	sampleId: string | null,
 	frameTimeMs: number | null,
-	stage: string | null,
+	stage: LprArtifactStage | null,
 	supportFrameCount: number,
 	agreementRatio: number | null,
 	margin: number | null,
@@ -284,11 +294,13 @@ export type LprEvidenceExportResponsePayload = {
 	decisionFrameCount: number,
 };
 
+export type LprEvidenceReason = "anchor-frame" | "highest-confidence" | "highest-resolution" | "representative" | "temporal-support";
+
 export type LprFrameAnalysisRequestPayload = {
 	sourcePath: string,
 	timeMs: number | null,
 	markerRect: VideoMarkerRectPayload | null,
-	targetVehicleKind: string,
+	targetVehicleKind: LprVehicleKind,
 	selectedTargetBox: VideoMarkerRectPayload | null,
 	countryHints: string[],
 	analysisProfileId: string | null,
@@ -306,7 +318,7 @@ export type LprFrameAnalysisResponsePayload = {
 	provenance: LprAnalysisProvenancePayload,
 	decision: LprDecisionTrace | null,
 	runtime: LprRuntimeStatusPayload,
-	jobStatus: string | null,
+	jobStatus: LprJobStatus | null,
 	diagnostics: any | null,
 };
 
@@ -328,13 +340,13 @@ export type LprIntervalAnalysisRequestPayload = {
 	sourcePath: string,
 	interval: TimelineIntervalSelectionPayload,
 	anchorTimeMs: number | null,
-	targetVehicleKind: string,
+	targetVehicleKind: LprVehicleKind,
 	selectedTargetBox: VideoMarkerRectPayload | null,
 	selectedTargetTrackId: string | null,
 	countryHints: string[],
 	sampleEveryMs: number | null,
 	maxSamples: number | null,
-	analysisIntent: string | null,
+	analysisIntent: LprAnalysisIntent | null,
 	latencyBudgetMs: number | null,
 	analysisProfileId: string | null,
 	enableDeveloperDiagnostics: boolean | null,
@@ -353,16 +365,20 @@ export type LprIntervalAnalysisResponsePayload = {
 	decision: LprDecisionTrace | null,
 	summary: string,
 	runtime: LprRuntimeStatusPayload,
-	jobStatus: string | null,
+	jobStatus: LprJobStatus | null,
 	tracking: LprTrackingSummary | null,
 	sequence: LprSequenceSummary | null,
 	diagnostics: any | null,
 };
 
+export type LprJobStatus = "idle" | "queued" | "running" | "completed" | "failed" | "cancelled" | "degraded";
+
+export type LprLegibilityLevel = "perfect" | "good" | "poor" | "illegible" | "unknown";
+
 export type LprOcrInput = {
-	stage: string,
+	stage: LprArtifactStage,
 	variant: string,
-	source: string,
+	source: LprDecisionSource,
 	imagePath: string | null,
 	supportFrameCount: number,
 };
@@ -388,15 +404,17 @@ export type LprQualityMetricsPayload = {
 	glareScore: number | null,
 	legibilityScore: number | null,
 	overallScore: number | null,
-	legibilityLevel: string,
+	legibilityLevel: LprLegibilityLevel,
 };
 
 export type LprReviewStatePayload = {
-	status: string,
+	status: LprReviewStatus,
 	acceptedCandidateId: string | null,
 	suggestedCandidateId: string | null,
 	reasons: string[],
 };
+
+export type LprReviewStatus = "accepted" | "review-required" | "no-candidate";
 
 export type LprRuntimeStatusPayload = {
 	available: boolean,
@@ -411,11 +429,11 @@ export type LprRuntimeStatusPayload = {
 export type LprSampleSelection = {
 	selected: boolean,
 	priority: number | null,
-	reasons: string[],
+	reasons: LprEvidenceReason[],
 };
 
 export type LprSequenceSummary = {
-	sequenceTier: string,
+	sequenceTier: LprSequenceTier,
 	dominantText: string | null,
 	persistenceRatio: number | null,
 	supportFrameCount: number,
@@ -426,11 +444,13 @@ export type LprSequenceSummary = {
 	characterConsistencyMean: number | null,
 };
 
+export type LprSequenceTier = "stable" | "drifting" | "gapped" | "fragmented";
+
 export type LprTargetScanRequestPayload = {
 	sourcePath: string,
 	timeMs: number | null,
 	markerRect: VideoMarkerRectPayload | null,
-	targetVehicleKind: string,
+	targetVehicleKind: LprVehicleKind,
 	requestId: string | null,
 };
 
@@ -456,8 +476,8 @@ export type LprTemporalSupport = {
 	supportTimes: (number | null)[],
 	meanAlignmentScore: number | null,
 	meanQualityScore: number | null,
-	sourceStage: string,
-	selectedStage: string,
+	sourceStage: LprArtifactStage,
+	selectedStage: LprArtifactStage,
 };
 
 export type LprTrackedRegionPayload = {
@@ -470,14 +490,18 @@ export type LprTrackedRegionPayload = {
 };
 
 export type LprTrackingSummary = {
-	trackingTier: string,
-	anchorStatus: string,
+	trackingTier: LprTrackingTier,
+	anchorStatus: LprAnchorStatus,
 	coverageRatio: number | null,
 	trackedFrameCount: number,
 	requestedFrameCount: number,
 	degradedReason: string | null,
 	terminatedEarly: boolean,
 };
+
+export type LprTrackingTier = "full" | "partial" | "detection-fallback" | "anchor-only" | "anchor-invalid";
+
+export type LprVehicleKind = "any" | "vehicle" | "motorcycle" | "car" | "truck" | "bus";
 
 export type MediaProbePayload = {
 	durationMs: number | null,

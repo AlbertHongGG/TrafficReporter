@@ -11,4 +11,4 @@ export type {
   RenderProfile,
   TimelineExportRequest,
   VideoQuality,
-} from '../../../shared/contracts/export';
+} from '../../../shared/contracts';

@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-from .models import PlateCandidate, TrackedRegion
+from .analysis_options import AnalysisOptions
+from .models import PlateCandidate, QualityMetrics, TrackedRegion
 from .value_objects import NormalizedRect
+
 
 
 class FrameReader(Protocol):
@@ -36,3 +38,43 @@ class PlateRecognizer(Protocol):
         country_hints: list[str] | None = None,
         model_names: list[str] | None = None,
     ) -> list[PlateCandidate]: ...
+
+
+class PlateRestorer(Protocol):
+    def restore_plate(
+        self,
+        image: Any,
+        options: AnalysisOptions,
+    ) -> tuple[Any | None, dict[str, Any]]: ...
+
+
+class QualityScorer(Protocol):
+    def score(
+        self,
+        image: Any,
+        box: NormalizedRect | None,
+    ) -> QualityMetrics: ...
+
+
+class VisionChatImage(Protocol):
+    frame_id: str
+    label: str
+    image_base64: str
+
+
+class VisionLlmProvider(Protocol):
+    kind: str
+
+    def describe(self) -> dict[str, object]: ...
+
+    def generate_json(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        images: Any,
+        timeout_s: int = 1200,
+        request_metadata: dict[str, Any] | None = None,
+        progress_callback: Any | None = None,
+    ) -> dict[str, object]: ...
+

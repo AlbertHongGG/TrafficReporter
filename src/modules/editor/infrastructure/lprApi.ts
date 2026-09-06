@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { commands } from '../../../types/bindings';
 import type {
   LprEvidenceExportRequest,
   LprEvidenceExportResponse,
@@ -11,26 +11,34 @@ import type {
   LprTargetScanResponse,
 } from '../../../shared/contracts';
 
-export function getLprRuntimeStatus() {
-  return invoke<LprRuntimeStatus>('get_lpr_runtime_status');
+async function unwrap<T>(promise: Promise<{ status: 'ok'; data: T } | { status: 'error'; error: string }>): Promise<T> {
+  const res = await promise;
+  if (res.status === 'ok') {
+    return res.data;
+  }
+  throw new Error(res.error);
 }
 
-export function cancelLprRuntimeJob() {
-  return invoke<boolean>('cancel_lpr_runtime_job');
+export function getLprRuntimeStatus(): Promise<LprRuntimeStatus> {
+  return unwrap(commands.getLprRuntimeStatus()) as unknown as Promise<LprRuntimeStatus>;
 }
 
-export function scanLprTargets(request: LprTargetScanRequest) {
-  return invoke<LprTargetScanResponse>('scan_lpr_targets', { request });
+export function cancelLprRuntimeJob(): Promise<boolean> {
+  return unwrap(commands.cancelLprRuntimeJob());
 }
 
-export function analyzeLprFrame(request: LprFrameAnalysisRequest) {
-  return invoke<LprFrameAnalysisResponse>('analyze_lpr_frame', { request });
+export function scanLprTargets(request: LprTargetScanRequest): Promise<LprTargetScanResponse> {
+  return unwrap(commands.scanLprTargets(request as any)) as unknown as Promise<LprTargetScanResponse>;
 }
 
-export function analyzeLprInterval(request: LprIntervalAnalysisRequest) {
-  return invoke<LprIntervalAnalysisResponse>('analyze_lpr_interval', { request });
+export function analyzeLprFrame(request: LprFrameAnalysisRequest): Promise<LprFrameAnalysisResponse> {
+  return unwrap(commands.analyzeLprFrame(request as any)) as unknown as Promise<LprFrameAnalysisResponse>;
 }
 
-export function exportLprEvidence(request: LprEvidenceExportRequest) {
-  return invoke<LprEvidenceExportResponse>('export_lpr_evidence', { request });
+export function analyzeLprInterval(request: LprIntervalAnalysisRequest): Promise<LprIntervalAnalysisResponse> {
+  return unwrap(commands.analyzeLprInterval(request as any)) as unknown as Promise<LprIntervalAnalysisResponse>;
+}
+
+export function exportLprEvidence(request: LprEvidenceExportRequest): Promise<LprEvidenceExportResponse> {
+  return unwrap(commands.exportLprEvidence(request as any)) as unknown as Promise<LprEvidenceExportResponse>;
 }

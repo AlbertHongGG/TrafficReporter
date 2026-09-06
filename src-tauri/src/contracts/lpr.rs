@@ -1,34 +1,209 @@
-// This file is auto-generated from schemas/lpr/lpr-contracts.json.
-// Do not edit manually.
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use super::{OutputCompressionModePayload, VideoMarkerRectPayload};
 
-pub type LprJobStatus = String;
+macro_rules! impl_enum_as_str_and_display {
+    ($enum_type:ident { $($variant:ident => $str_val:literal),+ $(,)? }) => {
+        impl $enum_type {
+            pub fn as_str(&self) -> &'static str {
+                match self {
+                    $(Self::$variant => $str_val,)+
+                }
+            }
 
-pub type LprTrackingTier = String;
+            pub fn from_str_opt(s: &str) -> Option<Self> {
+                match s {
+                    $($str_val => Some(Self::$variant),)+
+                    _ => None,
+                }
+            }
+        }
+        impl std::fmt::Display for $enum_type {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "{}", self.as_str())
+            }
+        }
+    };
+}
 
-pub type LprAnchorStatus = String;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "kebab-case")]
+pub enum LprWorkflowMode {
+    Idle,
+    Range,
+    Target,
+    Review,
+}
+impl_enum_as_str_and_display!(LprWorkflowMode {
+    Idle => "idle",
+    Range => "range",
+    Target => "target",
+    Review => "review",
+});
 
-pub type LprVehicleKind = String;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "kebab-case")]
+pub enum LprJobStatus {
+    Idle,
+    Queued,
+    Running,
+    Completed,
+    Failed,
+    Cancelled,
+    Degraded,
+}
+impl_enum_as_str_and_display!(LprJobStatus {
+    Idle => "idle",
+    Queued => "queued",
+    Running => "running",
+    Completed => "completed",
+    Failed => "failed",
+    Cancelled => "cancelled",
+    Degraded => "degraded",
+});
 
-pub type LprLegibilityLevel = String;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "kebab-case")]
+pub enum LprTrackingTier {
+    Full,
+    Partial,
+    DetectionFallback,
+    AnchorOnly,
+    AnchorInvalid,
+}
+impl_enum_as_str_and_display!(LprTrackingTier {
+    Full => "full",
+    Partial => "partial",
+    DetectionFallback => "detection-fallback",
+    AnchorOnly => "anchor-only",
+    AnchorInvalid => "anchor-invalid",
+});
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "kebab-case")]
+pub enum LprAnchorStatus {
+    Valid,
+    MissingSelection,
+    OutsideInterval,
+    NotDetected,
+    Mismatched,
+    Degraded,
+}
+impl_enum_as_str_and_display!(LprAnchorStatus {
+    Valid => "valid",
+    MissingSelection => "missing-selection",
+    OutsideInterval => "outside-interval",
+    NotDetected => "not-detected",
+    Mismatched => "mismatched",
+    Degraded => "degraded",
+});
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "kebab-case")]
+pub enum LprVehicleKind {
+    Any,
+    Vehicle,
+    Motorcycle,
+    Car,
+    Truck,
+    Bus,
+}
+impl_enum_as_str_and_display!(LprVehicleKind {
+    Any => "any",
+    Vehicle => "vehicle",
+    Motorcycle => "motorcycle",
+    Car => "car",
+    Truck => "truck",
+    Bus => "bus",
+});
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "kebab-case")]
+pub enum LprLegibilityLevel {
+    Perfect,
+    Good,
+    Poor,
+    Illegible,
+    Unknown,
+}
+impl_enum_as_str_and_display!(LprLegibilityLevel {
+    Perfect => "perfect",
+    Good => "good",
+    Poor => "poor",
+    Illegible => "illegible",
+    Unknown => "unknown",
+});
 
 pub type LprAnalysisProfileId = String;
 
-pub type LprAnalysisIntent = String;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "kebab-case")]
+pub enum LprAnalysisIntent {
+    InteractiveShortRange,
+    InteractiveRange,
+    InteractiveDenseRange,
+    AiEvidenceRange,
+    BenchmarkCase,
+}
+impl_enum_as_str_and_display!(LprAnalysisIntent {
+    InteractiveShortRange => "interactive-short-range",
+    InteractiveRange => "interactive-range",
+    InteractiveDenseRange => "interactive-dense-range",
+    AiEvidenceRange => "ai-evidence-range",
+    BenchmarkCase => "benchmark-case",
+});
 
 pub type LprRecognitionSource = String;
-
 pub type LprDiagnostics = Value;
 
-pub type LprArtifactStage = String;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "kebab-case")]
+pub enum LprArtifactStage {
+    Raw,
+    Rectified,
+    Enhanced,
+    Fused,
+}
+impl_enum_as_str_and_display!(LprArtifactStage {
+    Raw => "raw",
+    Rectified => "rectified",
+    Enhanced => "enhanced",
+    Fused => "fused",
+});
 
-pub type LprEvidenceReason = String;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "kebab-case")]
+pub enum LprEvidenceReason {
+    AnchorFrame,
+    HighestConfidence,
+    HighestResolution,
+    Representative,
+    TemporalSupport,
+}
+impl_enum_as_str_and_display!(LprEvidenceReason {
+    AnchorFrame => "anchor-frame",
+    HighestConfidence => "highest-confidence",
+    HighestResolution => "highest-resolution",
+    Representative => "representative",
+    TemporalSupport => "temporal-support",
+});
 
-pub type LprDecisionSource = String;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "kebab-case")]
+pub enum LprDecisionSource {
+    SingleFrame,
+    TemporalFusion,
+    CrossFrameVote,
+    UserSelected,
+}
+impl_enum_as_str_and_display!(LprDecisionSource {
+    SingleFrame => "single-frame",
+    TemporalFusion => "temporal-fusion",
+    CrossFrameVote => "cross-frame-vote",
+    UserSelected => "user-selected",
+});
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprSampleSelection {
     pub selected: bool,
@@ -36,7 +211,7 @@ pub struct LprSampleSelection {
     pub reasons: Vec<LprEvidenceReason>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprTemporalSupport {
     pub strategy: String,
@@ -50,7 +225,7 @@ pub struct LprTemporalSupport {
     pub selected_stage: LprArtifactStage,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprOcrInput {
     pub stage: LprArtifactStage,
@@ -60,7 +235,7 @@ pub struct LprOcrInput {
     pub support_frame_count: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprDecisionTrace {
     pub source: LprDecisionSource,
@@ -73,7 +248,7 @@ pub struct LprDecisionTrace {
     pub margin: Option<f64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprAnalysisOptionsPayload {
     pub persist_artifacts: Option<bool>,
@@ -106,9 +281,20 @@ pub struct LprAnalysisOptionsPayload {
     pub anchor_burst_count: Option<u32>,
 }
 
-pub type LprReviewStatus = String;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "kebab-case")]
+pub enum LprReviewStatus {
+    Accepted,
+    ReviewRequired,
+    NoCandidate,
+}
+impl_enum_as_str_and_display!(LprReviewStatus {
+    Accepted => "accepted",
+    ReviewRequired => "review-required",
+    NoCandidate => "no-candidate",
+});
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprReviewStatePayload {
     pub status: LprReviewStatus,
@@ -117,7 +303,7 @@ pub struct LprReviewStatePayload {
     pub reasons: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprAnalysisProvenancePayload {
     pub request_id: Option<String>,
@@ -132,14 +318,14 @@ pub struct LprAnalysisProvenancePayload {
     pub emitted_at_ms: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct TimelineIntervalSelectionPayload {
     pub start_ms: f64,
     pub end_ms: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprQualityMetricsPayload {
     pub sharpness: f64,
@@ -153,7 +339,7 @@ pub struct LprQualityMetricsPayload {
     pub legibility_level: LprLegibilityLevel,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprTrackedRegionPayload {
     pub id: String,
@@ -165,7 +351,7 @@ pub struct LprTrackedRegionPayload {
     pub diagnostics: Option<LprDiagnostics>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprTargetTrackPayload {
     pub id: String,
@@ -177,7 +363,7 @@ pub struct LprTargetTrackPayload {
     pub diagnostics: Option<LprDiagnostics>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprPlateCandidatePayload {
     pub id: String,
@@ -192,7 +378,7 @@ pub struct LprPlateCandidatePayload {
     pub diagnostics: Option<LprDiagnostics>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprFrameSamplePayload {
     pub id: String,
@@ -209,7 +395,7 @@ pub struct LprFrameSamplePayload {
     pub diagnostics: Option<LprDiagnostics>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprProgressPayload {
     pub progress: f64,
@@ -223,7 +409,7 @@ pub struct LprProgressPayload {
     pub coverage_ratio: Option<f64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprTrackingSummary {
     pub tracking_tier: LprTrackingTier,
@@ -235,9 +421,22 @@ pub struct LprTrackingSummary {
     pub terminated_early: bool,
 }
 
-pub type LprSequenceTier = String;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "kebab-case")]
+pub enum LprSequenceTier {
+    Stable,
+    Drifting,
+    Gapped,
+    Fragmented,
+}
+impl_enum_as_str_and_display!(LprSequenceTier {
+    Stable => "stable",
+    Drifting => "drifting",
+    Gapped => "gapped",
+    Fragmented => "fragmented",
+});
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprSequenceSummary {
     pub sequence_tier: LprSequenceTier,
@@ -251,7 +450,7 @@ pub struct LprSequenceSummary {
     pub character_consistency_mean: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprRuntimeStatusPayload {
     pub available: bool,
@@ -263,7 +462,7 @@ pub struct LprRuntimeStatusPayload {
     pub detail: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprTargetScanRequestPayload {
     pub source_path: String,
@@ -273,14 +472,14 @@ pub struct LprTargetScanRequestPayload {
     pub request_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprTargetScanResponsePayload {
     pub detections: Vec<LprTrackedRegionPayload>,
     pub runtime: LprRuntimeStatusPayload,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprFrameAnalysisRequestPayload {
     pub source_path: String,
@@ -295,7 +494,7 @@ pub struct LprFrameAnalysisRequestPayload {
     pub request_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprFrameAnalysisResponsePayload {
     pub detections: Vec<LprTrackedRegionPayload>,
@@ -311,7 +510,7 @@ pub struct LprFrameAnalysisResponsePayload {
     pub diagnostics: Option<LprDiagnostics>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprIntervalAnalysisRequestPayload {
     pub source_path: String,
@@ -331,7 +530,7 @@ pub struct LprIntervalAnalysisRequestPayload {
     pub request_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprIntervalAnalysisResponsePayload {
     pub target_tracks: Vec<LprTargetTrackPayload>,
@@ -351,7 +550,7 @@ pub struct LprIntervalAnalysisResponsePayload {
     pub diagnostics: Option<LprDiagnostics>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprEvidenceExportRequestPayload {
     pub output_path: String,
@@ -368,7 +567,7 @@ pub struct LprEvidenceExportRequestPayload {
     pub provenance: Option<LprAnalysisProvenancePayload>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LprEvidenceExportResponsePayload {
     pub json_path: String,
@@ -378,11 +577,31 @@ pub struct LprEvidenceExportResponsePayload {
     pub decision_frame_count: u32,
 }
 
-pub type AiEvidenceProviderKind = String;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "kebab-case")]
+pub enum AiEvidenceProviderKind {
+    Mock,
+    Gemini,
+    Local,
+}
+impl_enum_as_str_and_display!(AiEvidenceProviderKind {
+    Mock => "mock",
+    Gemini => "gemini",
+    Local => "local",
+});
 
-pub type AiEvidenceProgressKind = String;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "kebab-case")]
+pub enum AiEvidenceProgressKind {
+    HostStep,
+    ToolCall,
+}
+impl_enum_as_str_and_display!(AiEvidenceProgressKind {
+    HostStep => "host-step",
+    ToolCall => "tool-call",
+});
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AiEvidenceProgressPayload {
     pub progress: f64,
@@ -400,7 +619,7 @@ pub struct AiEvidenceProgressPayload {
     pub request_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AiEvidencePixelBoxPayload {
     pub x: u32,
@@ -409,7 +628,7 @@ pub struct AiEvidencePixelBoxPayload {
     pub height: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AiEvidenceOverlayBoxPayload {
     pub normalized_box: Option<VideoMarkerRectPayload>,
@@ -418,7 +637,7 @@ pub struct AiEvidenceOverlayBoxPayload {
     pub frame_height: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AiEvidenceTimelineFrameRefPayload {
     pub frame_id: String,
@@ -430,7 +649,7 @@ pub struct AiEvidenceTimelineFrameRefPayload {
     pub frame_height: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AiEvidenceToolCallPayload {
     pub stage: String,
@@ -442,7 +661,7 @@ pub struct AiEvidenceToolCallPayload {
     pub success: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AiEvidenceTargetSelectionPayload {
     pub anchor_frame_id: String,
@@ -453,7 +672,7 @@ pub struct AiEvidenceTargetSelectionPayload {
     pub selected_box: Option<AiEvidenceOverlayBoxPayload>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AiEvidenceKeyframePayload {
     pub frame: AiEvidenceTimelineFrameRefPayload,
@@ -466,7 +685,7 @@ pub struct AiEvidenceKeyframePayload {
     pub is_valid_for_user_facing_output: Option<bool>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AiEvidenceSharedProjectionPayload {
     pub interval: Option<TimelineIntervalSelectionPayload>,
@@ -481,7 +700,7 @@ pub struct AiEvidenceSharedProjectionPayload {
     pub decision: Option<LprDecisionTrace>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AiEvidenceResponsePayload {
     pub request_id: Option<String>,
@@ -501,7 +720,7 @@ pub struct AiEvidenceResponsePayload {
     pub runtime: LprRuntimeStatusPayload,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AiEvidenceRequestPayload {
     pub source_path: String,
@@ -518,4 +737,22 @@ pub struct AiEvidenceRequestPayload {
     pub fine_window_padding_ms: Option<f64>,
     pub max_keyframes: Option<u32>,
     pub request_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LprAnalysisProfileDefinition {
+    pub id: LprAnalysisProfileId,
+    pub label: String,
+    pub description: String,
+    pub options: LprAnalysisOptionsPayload,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LprAnalysisProfileCatalog {
+    pub version: u32,
+    pub default_profile_id: LprAnalysisProfileId,
+    pub developer_diagnostics_options: Option<LprAnalysisOptionsPayload>,
+    pub profiles: Vec<LprAnalysisProfileDefinition>,
 }

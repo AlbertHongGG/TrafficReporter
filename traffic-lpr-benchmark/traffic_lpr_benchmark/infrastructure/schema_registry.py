@@ -5,9 +5,10 @@ from pathlib import Path
 from typing import Any
 
 
-SCHEMA_ROOT = Path(__file__).resolve().parents[3] / 'schemas'
+SCHEMA_ROOT = Path(__file__).resolve().parent.parent / 'schemas'
 
 
 def load_shared_schema(*parts: str) -> dict[str, Any]:
-    path = SCHEMA_ROOT.joinpath(*parts)
+    filename = parts[-1]
+    path = SCHEMA_ROOT / filename
     return json.loads(path.read_text(encoding='utf-8'))

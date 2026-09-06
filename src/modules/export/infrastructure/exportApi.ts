@@ -1,5 +1,5 @@
 import { emitTo } from '@tauri-apps/api/event';
-import { invoke } from '@tauri-apps/api/core';
+import { commands } from '../../../types/bindings';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { ExportSnapshot, TimelineExportRequest } from '../application/exportTypes';
 import { createLogger, getErrorMessage, serializeError } from '../../../utils/logger';
@@ -14,8 +14,10 @@ import {
 
 const log = createLogger('ExportWindowApi');
 
-export function processTimelineExport(request: TimelineExportRequest) {
-  return invoke<void>('process_timeline_export', { request });
+export async function processTimelineExport(request: TimelineExportRequest): Promise<void> {
+  const res = await commands.processTimelineExport(request as any);
+  if (res.status === 'ok') return;
+  throw new Error(res.error);
 }
 
 export async function syncExportWindowSession(snapshot: ExportSnapshot, revision = 0) {

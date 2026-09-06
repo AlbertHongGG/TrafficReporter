@@ -1,6 +1,10 @@
-import { invoke } from '@tauri-apps/api/core';
-import type { AiEvidenceResponse, AiEvidenceRequest } from '../../../shared/contracts';
+import { commands } from '../../../types/bindings';
+import type { AiEvidenceRequest, AiEvidenceResponse } from '../../../shared/contracts';
 
-export function analyzeAiEvidence(request: AiEvidenceRequest) {
-  return invoke<AiEvidenceResponse>('analyze_ai_evidence', { request });
+export async function analyzeAiEvidence(request: AiEvidenceRequest): Promise<AiEvidenceResponse> {
+  const res = await commands.analyzeAiEvidence(request as any);
+  if (res.status === 'ok') {
+    return res.data as unknown as AiEvidenceResponse;
+  }
+  throw new Error(res.error);
 }

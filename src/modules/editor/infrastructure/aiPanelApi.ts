@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { commands } from '../../../types/bindings';
 import { emitTo } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import {
@@ -103,6 +103,8 @@ export function sendAiPanelAction(action: AiPanelAction) {
   return emitTo(MAIN_WINDOW_LABEL, AI_PANEL_ACTION_EVENT, action);
 }
 
-export function saveGeneratedMediaAsset(sourcePath: string, outputPath: string) {
-  return invoke<void>('save_generated_media_asset', { sourcePath, outputPath });
+export async function saveGeneratedMediaAsset(sourcePath: string, outputPath: string): Promise<void> {
+  const res = await commands.saveGeneratedMediaAsset(sourcePath, outputPath);
+  if (res.status === 'ok') return;
+  throw new Error(res.error);
 }

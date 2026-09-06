@@ -215,7 +215,7 @@ impl RuntimeBroker {
                     progress.done,
                     progress.failed,
                     progress.reason_code.as_deref(),
-                    progress.tracking_tier.as_deref(),
+                    progress.tracking_tier,
                     progress.coverage_ratio,
                 );
             },

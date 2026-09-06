@@ -36,7 +36,41 @@ class IntervalAnalysisService:
         self._policy_resolver = policy_resolver or AnalysisPolicyResolver()
 
     def run(self, payload: dict[str, Any]) -> dict[str, Any]:
-        from traffic_lpr_runtime.application import workflows as helpers
+        from traffic_lpr_runtime.protocol import emit_runtime_progress
+        from traffic_lpr_runtime.application.services.tracking.calibration import (
+            _anchor_status,
+            _build_tracking_summary,
+            _resolve_analysis_target_box,
+            _resolve_interval_anchor_box,
+            _selected_target_track_id,
+            _tracking_advisory_reasons,
+            _tracking_identity_review_reasons,
+        )
+        from traffic_lpr_runtime.application.services.tracking.evidence_frames import (
+            _resolve_temporal_support_budget,
+            _resolve_temporal_support_reason,
+            _select_interval_evidence_frames,
+            _select_temporal_support_frames,
+        )
+        from traffic_lpr_runtime.application.services.fusion.review_decision import (
+            _build_decision_trace,
+            _build_sample_selection_payload,
+            _merge_reasons,
+            _request_run_id,
+            _safe_int,
+            _sequence_advisory_reasons,
+            _sequence_hard_review_reasons,
+        )
+
+        def _emit_progress(progress: float, stage: str, detail: str, **kwargs: Any) -> None:
+            emit_runtime_progress({
+                'progress': progress,
+                'stage': stage,
+                'detail': detail,
+                'done': False,
+                'failed': False,
+                **kwargs,
+            })
 
         self._dependencies.ensure_ready()
         run_started = perf_counter()
@@ -46,7 +80,7 @@ class IntervalAnalysisService:
         artifact_root = options.resolve_artifact_root(
             self._dependencies.runtime_root(),
             'interval',
-            helpers._request_run_id(payload),
+            _request_run_id(payload),
         )
         interval = payload['interval']
         anchor_time_ms = int(payload['anchorTimeMs'])
@@ -59,7 +93,7 @@ class IntervalAnalysisService:
             raise RuntimeFailure('Range analysis requires the selected target anchor to stay inside the requested interval.')
         requested_frame_count = max(1, analysis_policy.max_samples)
 
-        helpers._emit_progress(0.1, 'Interval', 'Validating the anchor frame and starting interval tracking.')
+        _emit_progress(0.1, 'Interval', 'Validating the anchor frame and starting interval tracking.')
         tracking_started = perf_counter()
         tracked_frames, track_diagnostics = self._dependencies.track_target_across_interval(
             payload['sourcePath'],
@@ -74,10 +108,10 @@ class IntervalAnalysisService:
         )
         requested_tracking_frame_count = max(
             requested_frame_count,
-            helpers._safe_int(track_diagnostics.get('requestedTrackingFrameCount'), len(tracked_frames)),
+            _safe_int(track_diagnostics.get('requestedTrackingFrameCount'), len(tracked_frames)),
             1,
         )
-        canonical_target_track_id = helpers._selected_target_track_id(payload, track_diagnostics)
+        canonical_target_track_id = _selected_target_track_id(payload, track_diagnostics)
         if canonical_target_track_id is not None:
             track_diagnostics = {
                 **track_diagnostics,
@@ -88,15 +122,15 @@ class IntervalAnalysisService:
             anchor_time_ms,
             selected_target_box,
         )
-        resolved_anchor_box = helpers._resolve_interval_anchor_box(
+        resolved_anchor_box = _resolve_interval_anchor_box(
             tracked_frames,
             calibrated_target_boxes,
             anchor_time_ms,
             selected_target_box,
         )
-        anchor_status = helpers._anchor_status(selected_target_box, anchor_time_ms, start_ms, end_ms, resolved_anchor_box)
+        anchor_status = _anchor_status(selected_target_box, anchor_time_ms, start_ms, end_ms, resolved_anchor_box)
         anchor_ok = anchor_status == 'valid'
-        tracking = helpers._build_tracking_summary(
+        tracking = _build_tracking_summary(
             track_diagnostics,
             len(tracked_frames),
             requested_tracking_frame_count,
@@ -104,7 +138,7 @@ class IntervalAnalysisService:
             anchor_status,
         )
         tracking_ms = (perf_counter() - tracking_started) * 1000.0
-        helpers._emit_progress(
+        _emit_progress(
             0.32,
             'Interval',
             'Interval tracking finished. Preparing sample analysis.',
@@ -115,20 +149,20 @@ class IntervalAnalysisService:
             raise RuntimeFailure('Range analysis lost the selected target at the anchor frame. Reselect the vehicle on the intended frame and retry.')
 
         sample_options = options.for_interval_sample(sample_count_hint=len(tracked_frames))
-        evidence_frames = helpers._select_interval_evidence_frames(tracked_frames, options)
+        evidence_frames = _select_interval_evidence_frames(tracked_frames, options)
 
         samples: list[FrameSample] = []
         observations: list[PlateObservation] = []
         observation_cache: dict[int, PlateObservation | None] = {}
         sample_count = len(evidence_frames)
-        temporal_support_budget = helpers._resolve_temporal_support_budget(len(tracked_frames), sample_count, sample_options)
+        temporal_support_budget = _resolve_temporal_support_budget(len(tracked_frames), sample_count, sample_options)
         temporal_support_samples_used = 0
         sample_analysis_ms = 0.0
         temporal_support_ms = 0.0
         for index, tracked_frame in enumerate(evidence_frames, start=1):
             raw_tracking_box = tracked_frame.box
             calibrated_target_box = calibrated_target_boxes.get(tracked_frame.time_ms)
-            analysis_target_box, analysis_box_source = helpers._resolve_analysis_target_box(
+            analysis_target_box, analysis_box_source = _resolve_analysis_target_box(
                 raw_tracking_box,
                 calibrated_target_box,
                 selected_target_box,
@@ -136,7 +170,7 @@ class IntervalAnalysisService:
                 anchor_time_ms,
             )
             sample_progress = 0.35 if sample_count == 0 else 0.35 + (0.35 * (index - 1) / sample_count)
-            helpers._emit_progress(
+            _emit_progress(
                 sample_progress,
                 'Interval',
                 f'Analyzing tracked sample {index}/{sample_count}.',
@@ -157,7 +191,7 @@ class IntervalAnalysisService:
             sample_analysis_ms += (perf_counter() - sample_started) * 1000.0
             observation_cache[tracked_frame.time_ms] = base_observation
 
-            temporal_support_reason = helpers._resolve_temporal_support_reason(sample, tracked_frame, sample_options)
+            temporal_support_reason = _resolve_temporal_support_reason(sample, tracked_frame, sample_options)
             temporal_support_skipped_reason: str | None = None
             temporal_support_applied = False
             final_observation = base_observation
@@ -168,14 +202,14 @@ class IntervalAnalysisService:
                     temporal_support_skipped_reason = 'budget-exhausted'
                 else:
                     support_started = perf_counter()
-                    for support_frame in helpers._select_temporal_support_frames(tracked_frames, tracked_frame.time_ms, sample_options):
+                    for support_frame in _select_temporal_support_frames(tracked_frames, tracked_frame.time_ms, sample_options):
                         if support_frame.time_ms in observation_cache:
                             cached_support = observation_cache[support_frame.time_ms]
                             if cached_support is not None:
                                 support_observations.append(cached_support)
                             continue
                         support_calibrated_box = calibrated_target_boxes.get(support_frame.time_ms)
-                        support_target_box, _ = helpers._resolve_analysis_target_box(
+                        support_target_box, _ = _resolve_analysis_target_box(
                             support_frame.box,
                             support_calibrated_box,
                             selected_target_box,
@@ -225,7 +259,7 @@ class IntervalAnalysisService:
                 }
                 if analysis_box_source == 'calibrated':
                     tracked_frame.box = calibrated_target_box
-            sample.selection = helpers._build_sample_selection_payload(sample, tracked_frame)
+            sample.selection = _build_sample_selection_payload(sample, tracked_frame)
             sample.diagnostics = {
                 **(sample.diagnostics or {}),
                 'analysisTargetBox': analysis_target_box.to_payload() if analysis_target_box else None,
@@ -255,7 +289,7 @@ class IntervalAnalysisService:
             artifact_root,
         )
         sequence_summary = dict(fusion_diagnostics.get('sequence') or {})
-        helpers._emit_progress(0.78, 'Interval', 'Fusing candidates across interval samples.', trackingTier=tracking['trackingTier'], coverageRatio=tracking['coverageRatio'])
+        _emit_progress(0.78, 'Interval', 'Fusing candidates across interval samples.', trackingTier=tracking['trackingTier'], coverageRatio=tracking['coverageRatio'])
         candidates, accepted_candidate_id, selection_diagnostics = self._dependencies.apply_reliability_selection(
             candidates,
             samples,
@@ -264,21 +298,21 @@ class IntervalAnalysisService:
             True,
         )
         fusion_ms = (perf_counter() - fusion_started) * 1000.0
-        identity_review_reasons = helpers._tracking_identity_review_reasons(track_diagnostics)
-        sequence_hard_review_reasons = helpers._sequence_hard_review_reasons(sequence_summary, options)
-        sequence_advisory_reasons = helpers._sequence_advisory_reasons(sequence_summary, options)
-        tracking_advisory_reasons = helpers._tracking_advisory_reasons(track_diagnostics, tracking)
+        identity_review_reasons = _tracking_identity_review_reasons(track_diagnostics)
+        sequence_hard_review_reasons = _sequence_hard_review_reasons(sequence_summary, options)
+        sequence_advisory_reasons = _sequence_advisory_reasons(sequence_summary, options)
+        tracking_advisory_reasons = _tracking_advisory_reasons(track_diagnostics, tracking)
         selection_review_reasons = [reason for reason in selection_diagnostics.get('reasons') or [] if isinstance(reason, str)]
-        hard_review_reasons = helpers._merge_reasons(
+        hard_review_reasons = _merge_reasons(
             selection_review_reasons,
             [*identity_review_reasons, *sequence_hard_review_reasons],
         )
         if tracking['trackingTier'] == 'anchor-invalid':
-            hard_review_reasons = helpers._merge_reasons(
+            hard_review_reasons = _merge_reasons(
                 hard_review_reasons,
                 [str(tracking.get('degradedReason') or 'anchor validation drifted away from the selected target')],
             )
-        advisory_reasons = helpers._merge_reasons(
+        advisory_reasons = _merge_reasons(
             sequence_advisory_reasons,
             tracking_advisory_reasons,
         )
@@ -288,7 +322,7 @@ class IntervalAnalysisService:
             'reviewRequired': bool(hard_review_reasons),
             'hardReviewReasons': hard_review_reasons,
             'advisoryReasons': advisory_reasons,
-            'reasons': helpers._merge_reasons(hard_review_reasons, advisory_reasons),
+            'reasons': _merge_reasons(hard_review_reasons, advisory_reasons),
             'tracking': track_diagnostics,
             'sequence': sequence_summary,
         }
@@ -311,12 +345,12 @@ class IntervalAnalysisService:
         if sequence_summary.get('sequenceTier') and sequence_summary['sequenceTier'] != 'stable':
             summary = f'{summary} Sequence {sequence_summary["sequenceTier"]}.'
 
-        helpers._emit_progress(0.92, 'Interval', 'Finalizing the interval analysis result.', trackingTier=tracking['trackingTier'], coverageRatio=tracking['coverageRatio'])
+        _emit_progress(0.92, 'Interval', 'Finalizing the interval analysis result.', trackingTier=tracking['trackingTier'], coverageRatio=tracking['coverageRatio'])
         runtime_status = self._dependencies.status()
         job_status = 'degraded' if tracking['trackingTier'] != 'full' else 'completed'
         analysis_tracks = self._dependencies.build_track_payload(tracked_frames, track_diagnostics)
         analysis_track = analysis_tracks[0].to_payload() if analysis_tracks else None
-        decision = helpers._build_decision_trace(candidates, accepted_candidate_id, selection_diagnostics, samples, sequence_summary)
+        decision = _build_decision_trace(candidates, accepted_candidate_id, selection_diagnostics, samples, sequence_summary)
         total_ms = (perf_counter() - run_started) * 1000.0
         diagnostics = IntervalAnalysisDiagnostics(
             analysis_options=options.to_payload(),

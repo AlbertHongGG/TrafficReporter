@@ -6,7 +6,8 @@ use crate::contracts::{
     LprRuntimeStatusPayload, LprTargetScanRequestPayload, LprTargetScanResponsePayload,
     LprFrameAnalysisRequestPayload, LprFrameAnalysisResponsePayload,
     LprIntervalAnalysisRequestPayload, LprIntervalAnalysisResponsePayload,
-    AiEvidenceRequestPayload, AiEvidenceResponsePayload, AiEvidenceProgressPayload
+    AiEvidenceRequestPayload, AiEvidenceResponsePayload, AiEvidenceProgressPayload,
+    AiEvidenceProgressKind,
 };
 use crate::editor::{
     emit_app_log, emit_lpr_request_log, emit_lpr_result_log, emit_lpr_progress,
@@ -92,7 +93,7 @@ impl LprService {
         request: AiEvidenceRequestPayload,
     ) -> Result<AiEvidenceResponsePayload, String> {
         let request_id = request.request_id.clone();
-        emit_ai_evidence_progress(&app_handle, request_id.as_deref(), 0.05, "prepare", "Preparing AI evidence workflow.", false, false, Some("host-step"), None, None, Some(1), Some(AI_EVIDENCE_WORKFLOW_STEP_COUNT), Some(1), Some(1));
+        emit_ai_evidence_progress(&app_handle, request_id.as_deref(), 0.05, "prepare", "Preparing AI evidence workflow.", false, false, Some(AiEvidenceProgressKind::HostStep), None, None, Some(1), Some(AI_EVIDENCE_WORKFLOW_STEP_COUNT), Some(1), Some(1));
         
         emit_app_log(
             &app_handle,
@@ -115,12 +116,12 @@ impl LprService {
             let request_folder = response.request_id.clone().or_else(|| request.request_id.clone()).unwrap_or_else(|| format!("ai-evidence-{}", SystemTime::now().duration_since(UNIX_EPOCH).map(|value| value.as_millis()).unwrap_or(0)));
             let clip_path = runtime_run_root(&request_folder)?.join("ai-evidence").join("clip.mp4");
             
-            emit_ai_evidence_progress(&app_handle, response.request_id.as_deref(), 0.8, "export-clip", "Exporting resolved AI evidence clip.", false, false, Some("host-step"), None, None, Some(10), Some(AI_EVIDENCE_WORKFLOW_STEP_COUNT), Some(1), Some(1));
+            emit_ai_evidence_progress(&app_handle, response.request_id.as_deref(), 0.8, "export-clip", "Exporting resolved AI evidence clip.", false, false, Some(AiEvidenceProgressKind::HostStep), None, None, Some(10), Some(AI_EVIDENCE_WORKFLOW_STEP_COUNT), Some(1), Some(1));
             export_ai_evidence_clip(&request.source_path, interval.start_ms, interval.end_ms, &clip_path, request.compression_mode, request.audio_bitrate_kbps)?;
             response.clip_path = Some(clip_path.to_string_lossy().to_string());
         }
 
-        emit_ai_evidence_progress(&app_handle, payload_request_id(&response.request_id, &request_id), 1.0, "completed", "AI evidence workflow completed.", true, false, Some("host-step"), None, None, Some(11), Some(AI_EVIDENCE_WORKFLOW_STEP_COUNT), Some(1), Some(1));
+        emit_ai_evidence_progress(&app_handle, payload_request_id(&response.request_id, &request_id), 1.0, "completed", "AI evidence workflow completed.", true, false, Some(AiEvidenceProgressKind::HostStep), None, None, Some(11), Some(AI_EVIDENCE_WORKFLOW_STEP_COUNT), Some(1), Some(1));
         emit_app_log(&app_handle, "info", "AiEvidenceResult", format!("requestId={} plate={} clip={} keyframes={}", payload_request_id(&response.request_id, &request_id).unwrap_or("-"), response.plate_number.as_deref().unwrap_or("-"), response.clip_path.as_deref().unwrap_or("-"), response.keyframes.len()));
         
         Ok(response)
