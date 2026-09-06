@@ -8,6 +8,7 @@ pub mod domain;
 pub mod infrastructure;
 pub mod application;
 pub mod commands;
+pub mod ai;
 
 pub use commands::create_builder;
 
