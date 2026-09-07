@@ -8,7 +8,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from traffic_lpr_runtime.application.services.tracking import IntervalTrackingService
 from traffic_lpr_runtime.domain.analysis_options import AnalysisOptions
-from traffic_lpr_runtime.application.services.tracking.tracker import TargetCentricTracker, _detection_fallback_score_margin
+from traffic_lpr_runtime.application.services.tracking.tracker_engine import TargetCentricTracker
+from traffic_lpr_runtime.application.services.tracking.tracker_identity import _detection_fallback_score_margin
 from traffic_lpr_runtime.domain.models import TrackedRegion
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect
 

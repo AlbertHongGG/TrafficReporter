@@ -10,10 +10,8 @@ use crate::contracts::{
     LprIntervalAnalysisResponsePayload, LprProgressPayload,
     TimelineIntervalSelectionPayload, VideoMarkerRectPayload,
 };
-use crate::editor::{
-    emit_ai_evidence_progress, export_ai_evidence_clip, finalize_ai_keyframe_artifacts,
-    AI_EVIDENCE_WORKFLOW_STEP_COUNT,
-};
+use crate::editor::{emit_ai_evidence_progress, AI_EVIDENCE_WORKFLOW_STEP_COUNT};
+use crate::media::{export_ai_evidence_clip, finalize_ai_keyframe_artifacts};
 use crate::infrastructure::python_client::invoke_lpr_runtime_with_progress;
 
 use super::types::{StoryboardFrameItem, StoryboardFramesResponse};

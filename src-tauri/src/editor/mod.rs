@@ -8,7 +8,3 @@ pub use crate::events::{
 };
 pub use session::runtime_run_root;
 pub(crate) use jobs::terminate_runtime_for_app_exit;
-
-// Phase6-B: MEDIA-REGION 已搬入 crate::media（probe/compress/export）。
-// 此處僅留相容重出口（ai/workflow 經 editor 取用），不得加回任何邏輯。
-pub use crate::media::{export_ai_evidence_clip, finalize_ai_keyframe_artifacts};

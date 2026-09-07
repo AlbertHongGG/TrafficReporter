@@ -9,7 +9,7 @@ from traffic_lpr_runtime.domain.interfaces import PlateRecognizer, QualityScorer
 from traffic_lpr_runtime.domain.models import FrameSample, PlateCandidate
 from traffic_lpr_runtime.domain.text import normalize_plate_text
 from traffic_lpr_runtime.domain.value_objects import NormalizedRect, crop_image
-from traffic_lpr_runtime.application.services.fusion.candidate_fusion import CandidateFusionService
+from traffic_lpr_runtime.application.services.fusion.fusion_strategies import CandidateFusionService
 from traffic_lpr_runtime.application.services.preprocessing import PlateObservation, PlatePreprocessor
 
 HARD_PLATE_SECONDARY_CROP_SPECS = (

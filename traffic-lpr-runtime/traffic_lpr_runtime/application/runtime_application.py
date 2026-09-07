@@ -18,10 +18,8 @@ from traffic_lpr_runtime.application.services.analysis import (
     IntervalAnalysisService,
     PlateAnalysisService,
 )
-from traffic_lpr_runtime.application.services.fusion.candidate_fusion import (
-    CandidateFusionService,
-    apply_reliability_selection,
-)
+from traffic_lpr_runtime.application.services.fusion.fusion_strategies import CandidateFusionService
+from traffic_lpr_runtime.application.services.fusion.reliability_selection import apply_reliability_selection
 from traffic_lpr_runtime.application.services.preprocessing import (
     PlateObservation,
     PlatePreprocessor,

@@ -7,12 +7,12 @@ from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from traffic_lpr_runtime.application.services.fusion.candidate_fusion import (
-    CandidateFusionService,
+from traffic_lpr_runtime.application.services.fusion.candidate_scoring import _candidate_weight
+from traffic_lpr_runtime.application.services.fusion.fusion_strategies import (
     MAX_INTERVAL_FUSION_OBSERVATIONS,
-    apply_reliability_selection,
-    _candidate_weight,
+    CandidateFusionService,
 )
+from traffic_lpr_runtime.application.services.fusion.reliability_selection import apply_reliability_selection
 from traffic_lpr_runtime.domain.analysis_options import AnalysisOptions
 from traffic_lpr_runtime.application.services.preprocessing import PlateObservation
 from traffic_lpr_runtime.domain.models import FrameSample, PlateCandidate, QualityMetrics
