@@ -2,11 +2,11 @@ import type {
   LprFrameSample,
   LprPlateCandidate,
   LprReviewState,
-  LprRuntimeStatus,
   LprSessionState,
   TimelineIntervalSelection,
 } from '../domain/model';
 import type { VersionedPayload } from '../../../platform/desktop';
+import type { WorkspaceRuntimeSnapshot } from '../../../platform/transport/types';
 import { resolveEffectivePlayheadMs, type LiveTransportSnapshot } from './liveTransport';
 
 export const MAIN_WINDOW_LABEL = 'main';
@@ -17,19 +17,20 @@ export const PLATE_SESSION_REQUEST_EVENT = 'editor/plate-session-request';
 export const PLATE_ACTION_EVENT = 'editor/plate-action';
 export const PLATE_LIVE_TRANSPORT_EVENT = 'editor/plate-live-transport';
 
-export interface PlateWindowSessionSnapshot {
-  workspaceName: string;
-  activeFileName: string | null;
-  hasActiveFile: boolean;
-  runtimeStatus: LprRuntimeStatus | null;
-  lpr: LprSessionState;
-  explicitInterval: TimelineIntervalSelection | null;
-  effectiveInterval: TimelineIntervalSelection | null;
-  canAnalyzeRange: boolean;
-  topCandidate: LprPlateCandidate | null;
-  anchorTimeMs: number;
-  playheadMs: number;
-}
+/**
+ * Plate 快照＝共用 WorkspaceRuntimeSnapshot 基底＋plate 自身欄位（Blueprint §5.3）。
+ * liveTransport 在 plate 以獨立 live 通道傳遞，主視窗 builder 不攜帶，
+ * 故此處以可選保留（缺席視為無 live 疊加），其餘共用欄位語義不變。
+ */
+export type PlateWindowSessionSnapshot = Omit<WorkspaceRuntimeSnapshot, 'liveTransport'> & {
+  readonly liveTransport?: LiveTransportSnapshot | null;
+  readonly lpr: LprSessionState;
+  readonly explicitInterval: TimelineIntervalSelection | null;
+  readonly effectiveInterval: TimelineIntervalSelection | null;
+  readonly canAnalyzeRange: boolean;
+  readonly topCandidate: LprPlateCandidate | null;
+  readonly anchorTimeMs: number;
+};
 
 export type RevisionedPlateWindowSessionSnapshot = VersionedPayload<PlateWindowSessionSnapshot>;
 

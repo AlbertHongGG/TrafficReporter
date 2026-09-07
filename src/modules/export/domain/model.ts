@@ -1,4 +1,6 @@
 import type { OutputCompressionModePayload, VideoMarkerRectPayload } from '../../../domain/ipc/bindings';
+import type { WorkspaceRuntimeSnapshot } from '../../../platform/transport/types';
+import type { LiveTransportSnapshot } from '../../editor/application/liveTransport';
 
 export type ExportFormat = 'mp4' | 'mkv';
 export type VideoQuality = 'source' | '2160p' | '1440p' | '1080p' | '720p' | '480p';
@@ -46,10 +48,17 @@ export interface ExportClip {
   muted: boolean;
 }
 
-export interface ExportSnapshot {
+/**
+ * Phase 5-D 絞殺：快照型別收斂到 WorkspaceRuntimeSnapshot 交叉 export 自身欄位。
+ * 共用欄位（workspaceName / activeFileName / hasActiveFile / runtimeStatus /
+ * playheadMs）由基底提供；其餘為 export 自身欄位。
+ * exportContract.liveEvent 為 `editor/export-progress`（Rust 進度推送通道），
+ * 主視窗 builder 不攜帶 live 疊加，故 liveTransport 收斂為可選（缺席視為無）。
+ */
+export type ExportSnapshot = Omit<WorkspaceRuntimeSnapshot, 'liveTransport'> & {
+  liveTransport?: LiveTransportSnapshot | null;
   fileId: string;
   fileName: string;
-  workspaceName: string;
   suggestedName: string;
   timelineDurationMs: number;
   hasVideo: boolean;
@@ -60,7 +69,7 @@ export interface ExportSnapshot {
   tracks: ExportTrack[];
   clips: ExportClip[];
   renderProfile: RenderProfile;
-}
+};
 
 export interface TimelineExportRequest {
   outputPath: string;

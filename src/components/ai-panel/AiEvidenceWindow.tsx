@@ -1,5 +1,4 @@
 import React from 'react';
-import { listen } from '@tauri-apps/api/event';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { save } from '@tauri-apps/plugin-dialog';
@@ -20,14 +19,15 @@ import {
 } from 'lucide-react';
 import { requestAiPanelWindowSession, saveGeneratedMediaAsset, sendAiPanelAction } from '../../modules/editor/infrastructure/aiPanelApi';
 import {
-  AI_PANEL_SESSION_UPDATED_EVENT,
+  AI_PANEL_WINDOW_LABEL,
   type AiPanelAction,
   type AiPanelSessionSnapshot,
 } from '../../modules/editor/application/aiPanelWindow';
 import { buildJobTimingSnapshot, formatElapsedDuration } from '../../modules/editor/application/jobTiming';
 import { buildDefaultAiEvidenceState } from '../../modules/editor/domain/aiEvidenceState';
 import { formatRulerLabel, formatTransportTime } from '../../modules/editor/domain/model';
-import { shouldApplyVersion, type VersionedPayload } from '../../platform/desktop';
+import { aiPanelContract } from '../../platform/transport/contracts';
+import { registerListener, sendError } from '../../platform/transport/runtime';
 import styles from './AiEvidenceWindow.module.css';
 
 function clamp01(value: number | null | undefined) {
@@ -61,7 +61,6 @@ export const AiEvidenceWindow: React.FC = () => {
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const [isFocused, setIsFocused] = React.useState(false);
   const [clockNowMs, setClockNowMs] = React.useState(() => Date.now());
-  const latestRevisionRef = React.useRef(0);
 
   const aiState = snapshot?.ai ?? buildDefaultAiEvidenceState();
   const result = aiState.result;
@@ -88,30 +87,12 @@ export const AiEvidenceWindow: React.FC = () => {
     let disposed = false;
     let removeSessionListener: (() => void) | undefined;
 
-    void listen<AiPanelSessionSnapshot | VersionedPayload<AiPanelSessionSnapshot>>(AI_PANEL_SESSION_UPDATED_EVENT, (event) => {
+    // Phase 5-C 絞殺：經 transport runtime 註冊版本化監聽（內部以
+    // parseTransportEnvelope＋shouldApplyVersion 取代手寫三式包絡解析；
+    // wire 事件名字串不變）。aiPanelContract.liveEvent 為 null，本視窗
+    // 無 live 類監聽，故無 live 遷移、保持原樣。
+    void registerListener(aiPanelContract.event, (data: AiPanelSessionSnapshot) => {
       if (disposed) return;
-      const payload = event.payload;
-      let version = 0;
-      let data: AiPanelSessionSnapshot;
-      if (payload && typeof payload === 'object') {
-        const candidate = payload as unknown as Record<string, unknown>;
-        if ('version' in candidate && 'payload' in candidate) {
-          version = Number(candidate.version) || 0;
-          data = candidate.payload as AiPanelSessionSnapshot;
-        } else if ('revision' in candidate && 'snapshot' in candidate) {
-          version = Number(candidate.revision) || 0;
-          data = candidate.snapshot as AiPanelSessionSnapshot;
-        } else {
-          data = payload as AiPanelSessionSnapshot;
-        }
-      } else {
-        data = payload as AiPanelSessionSnapshot;
-      }
-
-      if (!shouldApplyVersion(latestRevisionRef.current, version)) {
-        return;
-      }
-      latestRevisionRef.current = version;
       setSnapshot(data);
       setErrorMessage(null);
     }).then((unlisten) => {
@@ -150,7 +131,19 @@ export const AiEvidenceWindow: React.FC = () => {
       setErrorMessage(null);
       await sendAiPanelAction(action);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to send the latest AI panel action.');
+      const reason = error instanceof Error ? error.message : 'Unable to send the latest AI panel action.';
+      setErrorMessage(reason);
+      try {
+        await sendError({
+          code: 'AI_PANEL_ACTION_FAILED',
+          reason,
+          sourceWindow: AI_PANEL_WINDOW_LABEL,
+          actionType: action.type,
+        });
+      } catch (reportError) {
+        const reportReason = reportError instanceof Error ? reportError.message : 'Unable to report the AI panel action failure.';
+        setErrorMessage(`${reason} (${reportReason})`);
+      }
     }
   }, []);
 

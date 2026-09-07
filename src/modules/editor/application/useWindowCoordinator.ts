@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { listen } from '@tauri-apps/api/event';
 import type { EditorWorkspaceState, EditorFileState } from '../domain/model';
 import { useEditorStore } from './store/store';
 import { editorWorkspaceTransport } from './session/editorSessionSync';
@@ -7,18 +6,19 @@ import { openPlateWindow, emitPlateWindowSession } from '../infrastructure/plate
 import { openAiPanelWindow, emitAiPanelWindowSession } from '../infrastructure/aiPanelApi';
 import { openExportWindow, syncExportWindowSession } from '../../export/infrastructure/exportApi';
 import { preparePendingExportSession } from '../../export/application/exportSession';
-import { EXPORT_SESSION_REQUEST_EVENT } from '../../export/application/exportWindow';
 import {
-  AI_PANEL_ACTION_EVENT,
-  AI_PANEL_SESSION_REQUEST_EVENT,
-  type AiPanelAction,
-  type AiPanelSessionSnapshot,
+  aiPanelContract,
+  exportContract,
+  plateContract,
+} from '../../../platform/transport/contracts';
+import { registerErrorListener, registerListener } from '../../../platform/transport/runtime';
+import type {
+  AiPanelAction,
+  AiPanelSessionSnapshot,
 } from './aiPanelWindow';
-import {
-  PLATE_ACTION_EVENT,
-  PLATE_SESSION_REQUEST_EVENT,
-  type PlateWindowAction,
-  type PlateWindowSessionSnapshot,
+import type {
+  PlateWindowAction,
+  PlateWindowSessionSnapshot,
 } from './plateWindow';
 import type {
   AiEvidenceSessionState,
@@ -30,6 +30,27 @@ import type {
 import { createLogger, getErrorSummary, serializeError } from '../../../utils/logger';
 
 const log = createLogger('useWindowCoordinator');
+
+/**
+ * Phase 5-D：契約 action 的型別安全分發（取代舊分支表）。
+ * handler 表以 action type 為鍵、逐項承接原分發語義；
+ * 執行期未知 type 沿用原 default 行為直接忽略。
+ */
+async function dispatchContractAction<Action extends { readonly type: string }>(
+  action: Action,
+  handlers: {
+    [Key in Action['type']]: (action: Extract<Action, { type: Key }>) => Promise<void> | void;
+  },
+): Promise<void> {
+  // 相關聯合（correlated union）分發：handler 表以 type 為鍵完備覆蓋；
+  // 未知 type 沿用原 default 語義忽略。經 unknown 中轉為 TS 已知限制下的寫法。
+  const table = handlers as unknown as Record<string, ((action: Action) => Promise<void> | void) | undefined>;
+  const handler = table[action.type];
+  if (handler === undefined) {
+    return;
+  }
+  await handler(action);
+}
 
 export interface UseWindowCoordinatorOptions {
   state: EditorWorkspaceState;
@@ -182,6 +203,7 @@ export function useWindowCoordinator({
     handleSelectTargetTrack,
     handleRunAiEvidence,
     handleCancelAiJob,
+    setWorkspaceFeedback,
     buildPlateWindowSnapshot,
     buildAiPanelWindowSnapshot,
     state,
@@ -205,6 +227,7 @@ export function useWindowCoordinator({
       handleSelectTargetTrack,
       handleRunAiEvidence,
       handleCancelAiJob,
+      setWorkspaceFeedback,
       buildPlateWindowSnapshot,
       buildAiPanelWindowSnapshot,
       state,
@@ -215,175 +238,186 @@ export function useWindowCoordinator({
     };
   });
 
-  // Listen to Plate Window events
+  // Phase 5-D：聲明式 contract glue —— 註冊 contract list（plate / ai-panel /
+  // export 三契約＋errorReport），action 分發走 typed handler map（原分發
+  // 逐項搬遷、語義一字不差）；session 同步發送走各視窗 emit（經
+  // runtime.sendSession）；open 系仍走 DesktopWindowManager（經各視窗 open*
+  // 函式）。本 effect 內無舊分支表、手寫包絡解析、直接傳輸調用。
   useEffect(() => {
     let disposed = false;
-    let actionCleanup: (() => void) | undefined;
-    let requestCleanup: (() => void) | undefined;
+    const cleanups: Array<() => void> = [];
+    const trackRegistration = (registration: Promise<() => void>): void => {
+      void registration.then((unlisten) => {
+        cleanups.push(unlisten);
+      });
+    };
 
-    void listen<PlateWindowAction>(PLATE_ACTION_EVENT, async (event) => {
-      if (disposed) {
-        return;
-      }
+    const reportActionFailure = (sourceWindow: string, error: unknown): void => {
+      log.error(`Failed to handle ${sourceWindow} window action.`, {
+        error: serializeError(error),
+      });
+      actionsRef.current.setWorkspaceFeedback(
+        getErrorSummary(error, `Failed to handle ${sourceWindow} window action.`),
+      );
+    };
 
-      const actions = actionsRef.current;
-      const action = event.payload;
-      const store = useEditorStore.getState();
+    const plateActionHandlers: {
+      [Key in PlateWindowAction['type']]: (
+        action: Extract<PlateWindowAction, { type: Key }>,
+      ) => Promise<void> | void;
+    } = {
+      'refresh-runtime': async () => {
+        await actionsRef.current.refreshLprRuntimeStatus();
+      },
+      'cancel-job': async () => {
+        await actionsRef.current.handleCancelLprJob();
+      },
+      'use-clip-interval': () => {
+        actionsRef.current.handleUseClipInterval();
+      },
+      'set-interval-boundary': (action) => {
+        actionsRef.current.handleSetIntervalBoundary(action.boundary);
+      },
+      'clear-interval': () => {
+        useEditorStore.getState().clearLprInterval();
+      },
+      'set-analysis-profile': (action) => {
+        useEditorStore.getState().setLprAnalysisProfile(action.analysisProfileId);
+      },
+      'set-country-hints': (action) => {
+        latestCountryHintDraftRef.current = action.value;
+        actionsRef.current.applyCountryHints(action.value);
+      },
+      'scan-targets': async () => {
+        await actionsRef.current.handleScanLprTargets();
+      },
+      'analyze-frame': async () => {
+        await actionsRef.current.handleAnalyzeLprFrame();
+      },
+      'analyze-range': async () => {
+        await actionsRef.current.handleAnalyzeLprInterval();
+      },
+      'toggle-dense-sampling': () => {
+        useEditorStore.getState().setLprToggles({ useDenseSampling: !actionsRef.current.lprState.useDenseSampling });
+      },
+      'toggle-developer-diagnostics': () => {
+        useEditorStore.getState().setLprToggles({ showDeveloperDiagnostics: !actionsRef.current.lprState.showDeveloperDiagnostics });
+      },
+      'export-evidence': async () => {
+        await actionsRef.current.handleExportLprEvidence();
+      },
+      'clear-results': () => {
+        useEditorStore.getState().clearLprResults();
+      },
+      'select-target-track': (action) => {
+        actionsRef.current.handleSelectTargetTrack(action.targetTrackId, action.anchorTimeMs);
+      },
+      'accept-candidate': (action) => {
+        useEditorStore.getState().acceptLprCandidate(action.candidateId);
+      },
+      'seek-to-sample': (action) => {
+        useEditorStore.getState().setPlayhead(Math.max(0, Math.round(action.timeMs)));
+        if (actionsRef.current.currentIsPlaying) {
+          useEditorStore.getState().setPlaying(false);
+        }
+      },
+    };
 
-      switch (action.type) {
-        case 'refresh-runtime':
-          await actions.refreshLprRuntimeStatus();
-          break;
-        case 'cancel-job':
-          await actions.handleCancelLprJob();
-          break;
-        case 'use-clip-interval':
-          actions.handleUseClipInterval();
-          break;
-        case 'set-interval-boundary':
-          actions.handleSetIntervalBoundary(action.boundary);
-          break;
-        case 'clear-interval':
-          store.clearLprInterval();
-          break;
-        case 'set-analysis-profile':
-          store.setLprAnalysisProfile(action.analysisProfileId);
-          break;
-        case 'set-country-hints':
-          latestCountryHintDraftRef.current = action.value;
-          actions.applyCountryHints(action.value);
-          break;
-        case 'scan-targets':
-          await actions.handleScanLprTargets();
-          break;
-        case 'analyze-frame':
-          await actions.handleAnalyzeLprFrame();
-          break;
-        case 'analyze-range':
-          await actions.handleAnalyzeLprInterval();
-          break;
-        case 'toggle-dense-sampling':
-          store.setLprToggles({ useDenseSampling: !actions.lprState.useDenseSampling });
-          break;
-        case 'toggle-developer-diagnostics':
-          store.setLprToggles({ showDeveloperDiagnostics: !actions.lprState.showDeveloperDiagnostics });
-          break;
-        case 'export-evidence':
-          await actions.handleExportLprEvidence();
-          break;
-        case 'clear-results':
-          store.clearLprResults();
-          break;
-        case 'select-target-track':
-          actions.handleSelectTargetTrack(action.targetTrackId, action.anchorTimeMs);
-          break;
-        case 'accept-candidate':
-          store.acceptLprCandidate(action.candidateId);
-          break;
-        case 'seek-to-sample':
-          store.setPlayhead(Math.max(0, Math.round(action.timeMs)));
-          if (actions.currentIsPlaying) {
-            store.setPlaying(false);
-          }
-          break;
-        default:
-          break;
-      }
-    }).then((unlisten) => {
-      actionCleanup = unlisten;
-    });
+    const aiPanelActionHandlers: {
+      [Key in AiPanelAction['type']]: (
+        action: Extract<AiPanelAction, { type: Key }>,
+      ) => Promise<void> | void;
+    } = {
+      'run-analysis': async (action) => {
+        await actionsRef.current.handleRunAiEvidence(action.prompt);
+      },
+      'cancel-job': async () => {
+        await actionsRef.current.handleCancelAiJob();
+      },
+      'seek-to-time': (action) => {
+        useEditorStore.getState().setPlayhead(Math.max(0, Math.round(action.timeMs)));
+        if (actionsRef.current.currentIsPlaying) {
+          useEditorStore.getState().setPlaying(false);
+        }
+      },
+      'reset-session': () => {
+        if (actionsRef.current.activeFile) {
+          useEditorStore.getState().resetAiSession(actionsRef.current.activeFile.id);
+        }
+      },
+    };
 
-    void listen(PLATE_SESSION_REQUEST_EVENT, async () => {
+    // action 通道：僅具 actionEvent 的契約註冊（export 無 action 通道，契約驅動略過）。
+    if (plateContract.actionEvent !== null) {
+      const plateActionChannel = plateContract.actionEvent;
+      trackRegistration(registerListener(plateActionChannel, (action: PlateWindowAction) => {
+        if (disposed) {
+          return;
+        }
+        void dispatchContractAction(action, plateActionHandlers).catch((error: unknown) => {
+          reportActionFailure('plate', error);
+        });
+      }));
+    }
+
+    if (aiPanelContract.actionEvent !== null) {
+      const aiPanelActionChannel = aiPanelContract.actionEvent;
+      trackRegistration(registerListener(aiPanelActionChannel, (action: AiPanelAction) => {
+        if (disposed) {
+          return;
+        }
+        void dispatchContractAction(action, aiPanelActionHandlers).catch((error: unknown) => {
+          reportActionFailure('ai-panel', error);
+        });
+      }));
+    }
+
+    // session-request 三通道：契約 requestEvent 註冊（原三 listen 合併）。
+    trackRegistration(registerListener(plateContract.requestEvent, () => {
       if (disposed) {
         return;
       }
       plateWindowLiveSyncEnabledRef.current = true;
       const actions = actionsRef.current;
-      await emitPlateWindowSession(actions.buildPlateWindowSnapshot(), actions.sessionRevision).catch(() => undefined);
-    }).then((unlisten) => {
-      requestCleanup = unlisten;
-    });
+      void emitPlateWindowSession(actions.buildPlateWindowSnapshot(), actions.sessionRevision).catch(() => undefined);
+    }));
 
-    return () => {
-      disposed = true;
-      actionCleanup?.();
-      requestCleanup?.();
-    };
-  }, [latestCountryHintDraftRef, plateWindowLiveSyncEnabledRef]);
-
-  // Listen to AI Panel & Export Window events
-  useEffect(() => {
-    let disposed = false;
-    let exportRequestCleanup: (() => void) | undefined;
-    let actionCleanup: (() => void) | undefined;
-    let requestCleanup: (() => void) | undefined;
-
-    void listen<AiPanelAction>(AI_PANEL_ACTION_EVENT, async (event) => {
-      if (disposed) {
-        return;
-      }
-
-      const actions = actionsRef.current;
-      const action = event.payload;
-      const store = useEditorStore.getState();
-
-      switch (action.type) {
-        case 'run-analysis':
-          await actions.handleRunAiEvidence(action.prompt);
-          break;
-        case 'cancel-job':
-          await actions.handleCancelAiJob();
-          break;
-        case 'seek-to-time':
-          store.setPlayhead(Math.max(0, Math.round(action.timeMs)));
-          if (actions.currentIsPlaying) {
-            store.setPlaying(false);
-          }
-          break;
-        case 'reset-session':
-          if (actions.activeFile) {
-            store.resetAiSession(actions.activeFile.id);
-          }
-          break;
-        default:
-          break;
-      }
-    }).then((unlisten) => {
-      actionCleanup = unlisten;
-    });
-
-    void listen(AI_PANEL_SESSION_REQUEST_EVENT, async () => {
+    trackRegistration(registerListener(aiPanelContract.requestEvent, () => {
       if (disposed) {
         return;
       }
       const actions = actionsRef.current;
-      await emitAiPanelWindowSession(actions.buildAiPanelWindowSnapshot(), actions.sessionRevision).catch(() => undefined);
-    }).then((unlisten) => {
-      requestCleanup = unlisten;
-    });
+      void emitAiPanelWindowSession(actions.buildAiPanelWindowSnapshot(), actions.sessionRevision).catch(() => undefined);
+    }));
 
-    void listen(EXPORT_SESSION_REQUEST_EVENT, async () => {
+    trackRegistration(registerListener(exportContract.requestEvent, () => {
       if (disposed) {
         return;
       }
       const actions = actionsRef.current;
       try {
         const snapshot = preparePendingExportSession(actions.state);
-        await syncExportWindowSession(snapshot, actions.sessionRevision).catch(() => undefined);
+        void syncExportWindowSession(snapshot, actions.sessionRevision).catch(() => undefined);
       } catch {
         // Ignore export-session requests when no exportable timeline is available.
       }
-    }).then((unlisten) => {
-      exportRequestCleanup = unlisten;
-    });
+    }));
+
+    // 結構化錯誤通道：主視窗可達，落 workspace feedback。
+    trackRegistration(registerErrorListener((report) => {
+      if (disposed) {
+        return;
+      }
+      actionsRef.current.setWorkspaceFeedback(report.reason);
+    }));
 
     return () => {
       disposed = true;
-      exportRequestCleanup?.();
-      actionCleanup?.();
-      requestCleanup?.();
+      for (const unlisten of cleanups) {
+        unlisten();
+      }
     };
-  }, []);
+  }, [latestCountryHintDraftRef, plateWindowLiveSyncEnabledRef]);
 
   // Periodic/Snapshot update synchronization
   useEffect(() => {

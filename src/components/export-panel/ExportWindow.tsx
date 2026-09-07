@@ -1,5 +1,4 @@
 import React from 'react';
-import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { save } from '@tauri-apps/plugin-dialog';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -25,11 +24,9 @@ import type {
   VideoQuality,
 } from '../../modules/export/application/exportTypes';
 import { formatTransportTime } from '../../modules/editor/domain/model';
-import {
-  shouldApplyVersion,
-  type VersionedPayload,
-} from '../../platform/desktop';
-import { EXPORT_SESSION_UPDATED_EVENT } from '../../modules/export/application/exportWindow';
+import { EXPORT_WINDOW_LABEL } from '../../modules/export/application/exportWindow';
+import { exportContract } from '../../platform/transport/contracts';
+import { registerListener, sendError } from '../../platform/transport/runtime';
 import styles from './ExportWindow.module.css';
 import { Select } from '../common/Select/Select';
 
@@ -152,14 +149,12 @@ export const ExportWindow: React.FC = () => {
   const [progress, setProgress] = React.useState<ExportProgressPayload>(DEFAULT_PROGRESS);
   const [status, setStatus] = React.useState<ExportStatus>('loading');
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
-  const latestRevisionRef = React.useRef(0);
 
   const usesAudioBitrate = true;
   const videoQualityOptions = React.useMemo(() => buildVideoQualityOptions(snapshot), [snapshot]);
 
   const applySnapshot = React.useCallback((nextSnapshot: ExportSnapshot | null) => {
     if (!nextSnapshot) {
-      latestRevisionRef.current = 0;
       setSnapshot(null);
       setStatus('error');
       setErrorMessage('No timeline is queued for export yet.');
@@ -176,37 +171,6 @@ export const ExportWindow: React.FC = () => {
     setErrorMessage(null);
   }, []);
 
-  const applySessionUpdate = React.useCallback((payload: ExportSnapshot | VersionedPayload<ExportSnapshot> | { revision: number; snapshot: ExportSnapshot } | null) => {
-    if (!payload) {
-      applySnapshot(null);
-      return;
-    }
-
-    let version = 0;
-    let data: ExportSnapshot;
-    if (typeof payload === 'object') {
-      const candidate = payload as Record<string, unknown>;
-      if ('version' in candidate && 'payload' in candidate) {
-        version = Number(candidate.version) || 0;
-        data = candidate.payload as ExportSnapshot;
-      } else if ('revision' in candidate && 'snapshot' in candidate) {
-        version = Number(candidate.revision) || 0;
-        data = candidate.snapshot as ExportSnapshot;
-      } else {
-        data = payload as ExportSnapshot;
-      }
-    } else {
-      data = payload as ExportSnapshot;
-    }
-
-    if (!shouldApplyVersion(latestRevisionRef.current, version)) {
-      return;
-    }
-
-    latestRevisionRef.current = version;
-    applySnapshot(data);
-  }, [applySnapshot]);
-
   const handleFormatChange = React.useCallback((nextFormat: ExportFormat) => {
     setFormat(nextFormat);
     setOutputPath((currentPath) => (currentPath ? replaceOutputExtension(currentPath, nextFormat) : currentPath));
@@ -220,52 +184,69 @@ export const ExportWindow: React.FC = () => {
     setStatus('loading');
     setErrorMessage(null);
 
-    void listen<ExportSnapshot | VersionedPayload<ExportSnapshot>>(EXPORT_SESSION_UPDATED_EVENT, (event) => {
+    // Phase 5-D 絞殺：經 transport runtime 註冊版本化監聽（內部以
+    // parseTransportEnvelope＋shouldApplyVersion 取代手寫三式包絡解析；
+    // wire 事件名字串不變）。進度通道走 exportContract.liveEvent。
+    void registerListener<ExportSnapshot>(exportContract.event, (data) => {
       if (disposed) return;
-      applySessionUpdate(event.payload);
+      applySnapshot(data);
     }).then((unlisten) => {
       removeSessionListener = unlisten;
     });
 
-    void requestExportWindowSession().catch((error: unknown) => {
+    void requestExportWindowSession().catch(async (error: unknown) => {
       if (disposed) {
         return;
       }
 
       log.error('Failed to request the latest export session.', serializeError(error));
+      const reason = getErrorMessage(error, 'Failed to request the latest export session.');
       setStatus('error');
-      setErrorMessage(getErrorMessage(error, 'Failed to request the latest export session.'));
+      setErrorMessage(reason);
+      try {
+        await sendError({
+          code: 'EXPORT_SESSION_REQUEST_FAILED',
+          reason,
+          sourceWindow: EXPORT_WINDOW_LABEL,
+          actionType: null,
+        });
+      } catch (reportError) {
+        log.error('Failed to report the export session request error.', serializeError(reportError));
+      }
     });
 
-    void listen<ExportProgressPayload>('editor/export-progress', (event) => {
-      if (disposed) return;
-      const nextProgress = {
-        ...event.payload,
-        progress: Math.max(0, Math.min(1, event.payload.progress)),
-      };
-      setProgress(nextProgress);
+    const progressChannel = exportContract.liveEvent;
+    if (progressChannel !== null) {
+      void registerListener<ExportProgressPayload>(progressChannel, (nextPayload) => {
+        if (disposed) return;
+        const nextProgress = {
+          ...nextPayload,
+          progress: Math.max(0, Math.min(1, nextPayload.progress)),
+        };
+        setProgress(nextProgress);
 
-      if (nextProgress.failed) {
-        setStatus('error');
-        setErrorMessage(nextProgress.detail);
-        return;
-      }
-      if (nextProgress.done) {
-        setStatus('done');
-        setErrorMessage(null);
-        return;
-      }
-      setStatus('running');
-    }).then((unlisten) => {
-      removeProgressListener = unlisten;
-    });
+        if (nextProgress.failed) {
+          setStatus('error');
+          setErrorMessage(nextProgress.detail);
+          return;
+        }
+        if (nextProgress.done) {
+          setStatus('done');
+          setErrorMessage(null);
+          return;
+        }
+        setStatus('running');
+      }).then((unlisten) => {
+        removeProgressListener = unlisten;
+      });
+    }
 
     return () => {
       disposed = true;
       removeSessionListener?.();
       removeProgressListener?.();
     };
-  }, [applySessionUpdate]);
+  }, [applySnapshot]);
 
   const pickOutputPath = React.useCallback(async () => {
     const selectedPath = await save({

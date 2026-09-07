@@ -36,9 +36,13 @@ export function preparePendingExportSession(state: EditorWorkspaceState): Export
   const suggestedName = sanitizeSuggestedName(activeFile.asset.name.replace(/\.[^.]+$/, ''));
 
   return {
+    workspaceName: state.workspaceName,
+    activeFileName: activeFile.asset.name,
+    hasActiveFile: true,
+    runtimeStatus: null,
+    playheadMs: Math.max(0, Math.round(activeFile.playheadMs)),
     fileId: activeFile.id,
     fileName: activeFile.asset.name,
-    workspaceName: state.workspaceName,
     suggestedName,
     timelineDurationMs: Math.round(getTimelineDuration(activeFile.clips)),
     hasVideo: activeFile.asset.hasVideo,

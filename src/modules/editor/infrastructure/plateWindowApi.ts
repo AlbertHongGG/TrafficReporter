@@ -1,9 +1,13 @@
 import { desktopWindowManager } from '../../../platform/desktop';
+import { plateContract } from '../../../platform/transport/contracts';
 import {
-  PLATE_ACTION_EVENT,
-  PLATE_LIVE_TRANSPORT_EVENT,
-  PLATE_SESSION_REQUEST_EVENT,
-  PLATE_SESSION_UPDATED_EVENT,
+  requestSession,
+  sendAction,
+  sendLive,
+  sendSession,
+  type TransportBackend,
+} from '../../../platform/transport/runtime';
+import {
   PLATE_WINDOW_LABEL,
   type PlateWindowLiveTransport,
   type PlateWindowAction,
@@ -14,18 +18,41 @@ export async function openPlateWindow() {
   return desktopWindowManager.open(PLATE_WINDOW_LABEL);
 }
 
-export function emitPlateWindowSession(snapshot: PlateWindowSessionSnapshot, revision = 0) {
-  return desktopWindowManager.broadcast(PLATE_WINDOW_LABEL, PLATE_SESSION_UPDATED_EVENT, snapshot, revision);
+/**
+ * 主視窗 → plate：版本化 session 快照（單一寫入源為 main window）。
+ * 走 transport runtime（plateContract.event），wire 事件名字串不變。
+ */
+export function emitPlateWindowSession(
+  snapshot: PlateWindowSessionSnapshot,
+  revision = 0,
+  backend?: TransportBackend,
+) {
+  return sendSession(plateContract, snapshot, revision, backend);
 }
 
-export function emitPlateWindowLiveTransport(transport: PlateWindowLiveTransport) {
-  return desktopWindowManager.send(PLATE_WINDOW_LABEL, PLATE_LIVE_TRANSPORT_EVENT, transport);
+/**
+ * 主視窗 → plate：低延遲 live 傳輸（非版本化）。
+ * 走 transport runtime（plateContract.liveEvent），wire 事件名字串不變。
+ */
+export function emitPlateWindowLiveTransport(
+  transport: PlateWindowLiveTransport,
+  backend?: TransportBackend,
+) {
+  return sendLive(plateContract, transport, backend);
 }
 
-export function requestPlateWindowSession() {
-  return desktopWindowManager.sendToMain(PLATE_SESSION_REQUEST_EVENT, null);
+/**
+ * plate → 主視窗：索取最新 session（payload 恆為 null，只讀＋request，不寫 snapshot）。
+ * 走 transport runtime（plateContract.requestEvent），wire 事件名字串不變。
+ */
+export function requestPlateWindowSession(backend?: TransportBackend) {
+  return requestSession(plateContract.requestEvent, backend);
 }
 
-export function sendPlateWindowAction(action: PlateWindowAction) {
-  return desktopWindowManager.sendToMain(PLATE_ACTION_EVENT, action);
+/**
+ * plate → 主視窗：回傳 action。
+ * 走 transport runtime（plateContract.actionEvent），wire 事件名字串不變。
+ */
+export function sendPlateWindowAction(action: PlateWindowAction, backend?: TransportBackend) {
+  return sendAction(plateContract, action, backend);
 }

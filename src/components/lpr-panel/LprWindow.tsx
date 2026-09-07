@@ -1,7 +1,6 @@
 // @ts-nocheck
 ﻿// @ts-nocheck
 import React from 'react';
-import { listen } from '@tauri-apps/api/event';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
@@ -25,13 +24,10 @@ import {
 } from 'lucide-react';
 import { Select } from '../common/Select/Select';
 import {
-  PLATE_LIVE_TRANSPORT_EVENT,
   resolveLprDisplayCandidate,
   samplePrimaryText,
-  PLATE_SESSION_UPDATED_EVENT,
   resolvePlateWindowPlayheadMs,
   type PlateWindowLiveTransport,
-  type RevisionedPlateWindowSessionSnapshot,
   type PlateWindowSessionSnapshot,
 } from '../../modules/editor/application/plateWindow';
 import { buildJobTimingSnapshot, formatElapsedDuration } from '../../modules/editor/application/jobTiming';
@@ -41,7 +37,8 @@ import { buildDefaultLprState } from '../../modules/editor/domain/lprState';
 import type { LprFrameSample, LprJobState, LprPlateCandidate, LprReviewState, LprTargetTrack, TimelineIntervalSelection } from '../../modules/editor/domain/model';
 import { getLprAnalysisProfileLabel, getLprAnalysisProfiles } from '../../modules/editor/domain/lprProfiles';
 import { createLogger, getErrorSummary, serializeError } from '../../utils/logger';
-import { shouldApplyVersion, type VersionedPayload } from '../../platform/desktop';
+import { plateContract } from '../../platform/transport/contracts';
+import { registerListener, sendError } from '../../platform/transport/runtime';
 import { LprDashboard } from './LprDashboard';
 import { LprDataViewer } from './LprDataViewer';
 import styles from './LprWindow.module.css';
@@ -412,7 +409,6 @@ export const PlateWindow: React.FC = () => {
   const [selectedEvidenceSampleId, setSelectedEvidenceSampleId] = React.useState<string | null>(null);
   const [isEvidenceSelectionPinned, setIsEvidenceSelectionPinned] = React.useState(false);
   const [clockNowMs, setClockNowMs] = React.useState(() => Date.now());
-  const latestRevisionRef = React.useRef(0);
   const [liveTransport, setLiveTransport] = React.useState<PlateWindowLiveTransport | null>(null);
 
   const lprState = snapshot?.lpr ?? buildDefaultLprState();
@@ -460,30 +456,10 @@ export const PlateWindow: React.FC = () => {
     let removeSessionListener: (() => void) | undefined;
     let removeLiveTransportListener: (() => void) | undefined;
 
-    void listen<PlateWindowSessionSnapshot | VersionedPayload<PlateWindowSessionSnapshot>>(PLATE_SESSION_UPDATED_EVENT, (event) => {
+    // plate 側只讀＋request：session/live 經 transport runtime 訂閱，
+    // 包絡解析＋版本仲裁由 registerListener 內部處理（parseTransportEnvelope＋shouldApplyVersion）。
+    void registerListener<PlateWindowSessionSnapshot>(plateContract.event, (data) => {
       if (disposed) return;
-      const payload = event.payload;
-      let version = 0;
-      let data: PlateWindowSessionSnapshot;
-      if (payload && typeof payload === 'object') {
-        const candidate = payload as Record<string, unknown>;
-        if ('version' in candidate && 'payload' in candidate) {
-          version = Number(candidate.version) || 0;
-          data = candidate.payload as PlateWindowSessionSnapshot;
-        } else if ('revision' in candidate && 'snapshot' in candidate) {
-          version = Number(candidate.revision) || 0;
-          data = candidate.snapshot as PlateWindowSessionSnapshot;
-        } else {
-          data = payload as PlateWindowSessionSnapshot;
-        }
-      } else {
-        data = payload as PlateWindowSessionSnapshot;
-      }
-
-      if (!shouldApplyVersion(latestRevisionRef.current, version)) {
-        return;
-      }
-      latestRevisionRef.current = version;
       setLiveTransport(null);
       setSnapshot(data);
       setErrorMessage(null);
@@ -491,14 +467,17 @@ export const PlateWindow: React.FC = () => {
       removeSessionListener = unlisten;
     });
 
-    void listen<PlateWindowLiveTransport>(PLATE_LIVE_TRANSPORT_EVENT, (event) => {
-      if (disposed) {
-        return;
-      }
-      setLiveTransport(event.payload);
-    }).then((unlisten) => {
-      removeLiveTransportListener = unlisten;
-    });
+    const liveChannel = plateContract.liveEvent;
+    if (liveChannel !== null) {
+      void registerListener<PlateWindowLiveTransport>(liveChannel, (transport) => {
+        if (disposed) {
+          return;
+        }
+        setLiveTransport(transport);
+      }).then((unlisten) => {
+        removeLiveTransportListener = unlisten;
+      });
+    }
 
     void requestPlateWindowSession().catch((error) => {
       if (disposed) return;
@@ -542,6 +521,16 @@ export const PlateWindow: React.FC = () => {
     } catch (error) {
       log.error('Failed to send a plate window action.', { action, error: serializeError(error) });
       setErrorMessage(getErrorSummary(error, 'Unable to send the plate action.'));
+      try {
+        await sendError({
+          code: 'PLATE_ACTION_FAILED',
+          reason: getErrorSummary(error, 'Unable to send the plate action.'),
+          sourceWindow: 'plate',
+          actionType: action.type,
+        });
+      } catch (reportError) {
+        log.error('Failed to report the plate action error.', serializeError(reportError));
+      }
     }
   }, []);
 
