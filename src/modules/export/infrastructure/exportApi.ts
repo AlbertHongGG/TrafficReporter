@@ -1,10 +1,10 @@
-import { commands } from '../../../domain/ipc/bindings';
+import { commands } from '../../../platform/ipc/bindings';
 import type {
   ExportSnapshotPayload,
   RenderProfilePayload,
   TimelineExportRequest as TimelineExportRequestPayload,
-} from '../../../domain/ipc/bindings';
-import { unwrapCommand } from '../../../infrastructure/ipc-unwrap';
+} from '../../../platform/ipc/bindings';
+import { unwrapCommand } from '../../../platform/ipc/ipc-unwrap';
 import { parseTimelineExportResponse } from './exportSchemas';
 import type { ExportSnapshot, RenderProfile, TimelineExportRequest } from '../application/exportTypes';
 import { createLogger } from '../../../utils/logger';

@@ -23,8 +23,8 @@ import type {
   LprIntervalAnalysisResponsePayload,
   LprRuntimeStatusPayload,
   LprTargetScanResponsePayload,
-} from '../../../domain/ipc/bindings';
-import { IpcCommandError } from '../../../infrastructure/ipc-unwrap';
+} from '../../../platform/ipc/bindings';
+import { IpcCommandError } from '../../../platform/ipc/ipc-unwrap';
 
 export const videoMarkerRectSchema = z.object({
   x: z.number().nullable(),

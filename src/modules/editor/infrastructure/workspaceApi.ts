@@ -7,12 +7,12 @@
  * messages as the previous application-layer transport. Fire-and-forget: these
  * never throw; the optimistic store update always happens in the caller.
  */
-import { commands } from '../../../domain/ipc/bindings';
+import { commands } from '../../../platform/ipc/bindings';
 import type {
   EditorWorkspaceState as RustEditorWorkspaceState,
   RenderProfilePayload,
-} from '../../../domain/ipc/bindings';
-import { unwrapCommand } from '../../../infrastructure/ipc-unwrap';
+} from '../../../platform/ipc/bindings';
+import { unwrapCommand } from '../../../platform/ipc/ipc-unwrap';
 import type { EditorAsset, RenderProfile } from '../domain/model';
 
 function logCommandError(action: string, detail: unknown): void {

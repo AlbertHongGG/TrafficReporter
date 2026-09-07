@@ -3,7 +3,7 @@ import { listen } from '@tauri-apps/api/event';
 import type {
   EditorFileState as RustEditorFileState,
   EditorWorkspaceState as RustEditorWorkspaceState,
-} from '../../../domain/ipc/bindings';
+} from '../../../platform/ipc/bindings';
 import type {
   AudioBitrateKbps,
   EditorAsset,

@@ -3,7 +3,7 @@ import { clampNormalizedRect, findClosestTrackFrame, resolveTrackFrameAtPlayhead
 import { EDITOR_ENV } from '../../../modules/editor/editorEnv';
 import type { LprTargetTrack, LprTrackedRegion } from '../../../modules/editor/domain/lprState';
 import type { LiveTransportStore } from '../../../modules/editor/application/liveTransport';
-import type { PreviewViewport } from './useVideoViewport';
+import type { PreviewViewport } from '../../../modules/editor/application/useVideoViewport';
 import styles from '../MainWorkspace.module.css';
 
 type LprOverlayTargetEntry = {

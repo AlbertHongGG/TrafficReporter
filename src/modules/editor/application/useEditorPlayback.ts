@@ -1,19 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { EditorFileState, TimelineClip } from '../../../modules/editor/domain/model';
-import { formatRulerLabel } from '../../../modules/editor/domain/model';
+import type { EditorFileState, TimelineClip } from '../domain/model';
+import { formatRulerLabel } from '../domain/model';
 import {
   getPlaybackPreviewState,
   usePlaybackController,
   type PlaybackPreviewState,
   type PlaybackTimelineEntry,
-} from '../../../modules/editor/application/usePlaybackController';
+} from './usePlaybackController';
 import {
   buildLiveTransportSnapshot,
   createLiveTransportStore,
   type LiveTransportSnapshot,
-} from '../../../modules/editor/application/liveTransport';
-import { emitPlateWindowLiveTransport } from '../../../modules/editor/infrastructure/plateWindowApi';
-import { useVideoViewport } from '../video-player/useVideoViewport';
+} from './liveTransport';
+import { emitPlateWindowLiveTransport } from '../infrastructure/plateWindowApi';
+import { useVideoViewport } from './useVideoViewport';
 
 export interface UseEditorPlaybackOptions {
   activeFile: EditorFileState | null | undefined;

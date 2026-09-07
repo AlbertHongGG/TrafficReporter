@@ -10,10 +10,10 @@ import { VideoPlayerPanel } from './video-player/VideoPlayerPanel';
 import { TransportRow } from './TransportRow';
 import { Timeline } from './Timeline';
 
-import { useEditorPlayback } from './hooks/useEditorPlayback';
-import { useMediaIngestion } from './hooks/useMediaIngestion';
-import { useMarkerInteraction } from './hooks/useMarkerInteraction';
-import { useWorkspaceHotkeys } from './hooks/useWorkspaceHotkeys';
+import { useEditorPlayback } from '../../modules/editor/application/useEditorPlayback';
+import { useMediaIngestion } from '../../modules/editor/application/useMediaIngestion';
+import { useMarkerInteraction } from '../../modules/editor/application/useMarkerInteraction';
+import { useWorkspaceHotkeys } from '../../modules/editor/application/useWorkspaceHotkeys';
 
 import { useLprWorkflow } from '../../modules/editor/application/useLprWorkflow';
 import { useAiEvidenceWorkflow } from '../../modules/editor/application/useAiEvidenceWorkflow';

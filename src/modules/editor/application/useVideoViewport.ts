@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   fitContainedViewport,
   type PreviewViewport,
-} from '../../../modules/editor/domain/viewportHelpers';
+} from '../domain/viewportHelpers';
 
 export { fitContainedViewport, type PreviewViewport };
 

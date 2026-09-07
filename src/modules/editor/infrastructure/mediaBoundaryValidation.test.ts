@@ -20,8 +20,8 @@ import { describe, expect, it } from 'vitest';
 import type {
   MediaProbePayload,
   TimelineExportRequest,
-} from '../../../domain/ipc/bindings';
-import { IpcCommandError } from '../../../infrastructure/ipc-unwrap';
+} from '../../../platform/ipc/bindings';
+import { IpcCommandError } from '../../../platform/ipc/ipc-unwrap';
 import { parseTimelineExportResponse, timelineExportRequestSchema } from '../../export/infrastructure/exportSchemas';
 import {
   parseFrameExportResponse,

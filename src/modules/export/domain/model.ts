@@ -1,4 +1,4 @@
-import type { OutputCompressionModePayload, VideoMarkerRectPayload } from '../../../domain/ipc/bindings';
+import type { OutputCompressionModePayload, VideoMarkerRectPayload } from '../../../platform/ipc/bindings';
 import type { WorkspaceRuntimeSnapshot } from '../../../platform/transport/types';
 import type { LiveTransportSnapshot } from '../../editor/application/liveTransport';
 

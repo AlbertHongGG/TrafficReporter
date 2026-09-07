@@ -9,7 +9,7 @@
  * - `export_frame_image` → `null` (frame export acknowledgement)
  * - `save_generated_media_asset` → `null` (AI-panel asset acknowledgement)
  *
- * Each schema mirrors its wire shape in `src/domain/ipc/bindings.ts`:
+ * Each schema mirrors its wire shape in `src/platform/ipc/bindings.ts`:
  * wire-nullable fields stay `.nullable()` in the schema; domain-side
  * defaults (`??` convergence, e.g. `probe.durationMs ?? 0`) are unchanged
  * and live in the API functions, not here.
@@ -20,8 +20,8 @@
 
 import { z } from 'zod';
 
-import type { MediaProbePayload } from '../../../domain/ipc/bindings';
-import { IpcCommandError } from '../../../infrastructure/ipc-unwrap';
+import type { MediaProbePayload } from '../../../platform/ipc/bindings';
+import { IpcCommandError } from '../../../platform/ipc/ipc-unwrap';
 
 export const mediaProbePayloadSchema = z.object({
   durationMs: z.number().nullable(),

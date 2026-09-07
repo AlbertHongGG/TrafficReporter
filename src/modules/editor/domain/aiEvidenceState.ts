@@ -3,7 +3,7 @@ import type {
   LprDecisionTrace,
   LprJobStatus,
   LprVehicleKind,
-} from '../../../domain/ipc/bindings';
+} from '../../../platform/ipc/bindings';
 import type { TimelineIntervalSelection, VideoMarkerRect } from './model';
 import type { OutputCompressionMode } from '../../export/domain/model';
 import type { LprAnalysisProfileId } from './lprProfiles';

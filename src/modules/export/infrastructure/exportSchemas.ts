@@ -9,7 +9,7 @@
  * only receives already-clean objects.
  *
  * Each schema mirrors its `*Payload` wire shape in
- * `src/domain/ipc/bindings.ts`: wire-nullable fields stay `.nullable()` in
+ * `src/platform/ipc/bindings.ts`: wire-nullable fields stay `.nullable()` in
  * the schema; domain-side defaults (`??` convergence) are unchanged and live
  * in the existing request mappers, not here.
  *
@@ -23,8 +23,8 @@ import type {
   ExportSnapshotPayload,
   RenderProfilePayload,
   TimelineExportRequest,
-} from '../../../domain/ipc/bindings';
-import { IpcCommandError } from '../../../infrastructure/ipc-unwrap';
+} from '../../../platform/ipc/bindings';
+import { IpcCommandError } from '../../../platform/ipc/ipc-unwrap';
 
 export const outputCompressionModePayloadSchema = z.enum(['standard', 'compact']);
 

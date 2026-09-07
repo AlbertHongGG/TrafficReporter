@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { IpcCommandError } from '../../../../infrastructure/ipc-unwrap'
+import { IpcCommandError } from '../../../../platform/ipc/ipc-unwrap'
 import { getErrorSummary } from '../../../../utils/logger'
 import { buildDefaultLprState } from '../../domain/lprState'
 import type {

@@ -8,7 +8,7 @@
  * record the failure (failed job + feedback). Stale completions — a
  * superseded request finishing late — apply nothing.
  */
-import type { LprVehicleKind } from '../../../../domain/ipc/bindings';
+import type { LprVehicleKind } from '../../../../platform/ipc/bindings';
 import type { OutputCompressionMode } from '../../../export/domain/model';
 import { getLprSessionByFileId } from '../../domain/analysisState';
 import type {

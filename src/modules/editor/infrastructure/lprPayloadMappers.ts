@@ -28,7 +28,7 @@ import type {
   LprTrackedRegionPayload,
   TimelineIntervalSelectionPayload,
   VideoMarkerRectPayload,
-} from '../../../domain/ipc/bindings';
+} from '../../../platform/ipc/bindings';
 import type {
   AiEvidenceKeyframe,
   AiEvidenceOverlayBox,

@@ -54,9 +54,9 @@ cargo test --manifest-path src-tauri/Cargo.toml                            # Rus
 ## 專案結構
 
 ```
-src/                        React 前端（Zustand 狀態、use-case 服務、typed IPC 邊界）
+src/                        React 前端
 src-tauri/src/              Rust 後端（commands / application 服務 / contracts / media / events）
 traffic-lpr-runtime/        Python LPR 引擎（前處理 / 追蹤 / 融合 / 分析 / use cases）
 ```
 
-型別契約由 Rust 經 Specta 生成（`src/domain/ipc/bindings.ts`），請勿手改——改 Rust 側後跑 `npm run bindings:generate`。
+型別契約由 Rust 經 Specta 生成（`src/platform/ipc/bindings.ts`），請勿手改——改 Rust 側後跑 `npm run bindings:generate`。

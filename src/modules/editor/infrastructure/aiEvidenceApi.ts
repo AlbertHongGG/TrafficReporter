@@ -4,9 +4,9 @@
  * The only layer allowed to touch `bindings.commands` for AI evidence.
  * Request mapping + {@link unwrapCommand} + response mapping with typed fields.
  */
-import { commands } from '../../../domain/ipc/bindings';
-import type { AiEvidenceRequestPayload } from '../../../domain/ipc/bindings';
-import { unwrapCommand } from '../../../infrastructure/ipc-unwrap';
+import { commands } from '../../../platform/ipc/bindings';
+import type { AiEvidenceRequestPayload } from '../../../platform/ipc/bindings';
+import { unwrapCommand } from '../../../platform/ipc/ipc-unwrap';
 import { parseAiEvidenceResponse } from './aiEvidenceSchemas';
 import type { AiEvidenceRequest, AiEvidenceResponse } from '../domain/aiEvidenceState';
 import { mapAiEvidenceResponsePayload } from './lprPayloadMappers';

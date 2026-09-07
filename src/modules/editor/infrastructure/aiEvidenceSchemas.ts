@@ -12,8 +12,8 @@
  * with the command name plus a zod issue summary.
  */
 import { z } from 'zod';
-import type { AiEvidenceResponsePayload } from '../../../domain/ipc/bindings';
-import { IpcCommandError } from '../../../infrastructure/ipc-unwrap';
+import type { AiEvidenceResponsePayload } from '../../../platform/ipc/bindings';
+import { IpcCommandError } from '../../../platform/ipc/ipc-unwrap';
 import {
   lprAnalysisProvenanceSchema,
   lprDecisionTraceSchema,

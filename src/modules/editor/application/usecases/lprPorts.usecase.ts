@@ -22,7 +22,7 @@ import {
   getLprRuntimeStatus,
   scanLprTargets,
 } from '../../infrastructure/lprApi';
-import { IpcCommandError } from '../../../../infrastructure/ipc-unwrap';
+import { IpcCommandError } from '../../../../platform/ipc/ipc-unwrap';
 import { EDITOR_ENV } from '../../editorEnv';
 import { useEditorStore } from '../store/store';
 import { getActiveFile } from '../../domain/model';

@@ -12,7 +12,7 @@ export default defineConfig([
     'src-tauri/target',
     'src-tauri/gen',
     'traffic-lpr-runtime/**',
-    'src/domain/ipc/bindings.ts',
+    'src/platform/ipc/bindings.ts',
   ]),
   {
     files: ['**/*.{ts,tsx}'],
@@ -48,8 +48,8 @@ export default defineConfig([
           patterns: [
             {
               group: [
-                '**/domain/ipc/bindings',
-                '@/domain/ipc/bindings',
+                '**/platform/ipc/bindings',
+                '@/platform/ipc/bindings',
               ],
               importNames: ['commands'],
               message:

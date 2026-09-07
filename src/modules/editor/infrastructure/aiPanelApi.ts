@@ -1,5 +1,5 @@
-import { commands } from '../../../domain/ipc/bindings';
-import { unwrapCommand } from '../../../infrastructure/ipc-unwrap';
+import { commands } from '../../../platform/ipc/bindings';
+import { unwrapCommand } from '../../../platform/ipc/ipc-unwrap';
 import { parseSaveGeneratedMediaAssetResponse } from './mediaSchemas';
 import { desktopWindowManager } from '../../../platform/desktop';
 import { aiPanelContract } from '../../../platform/transport/contracts';

@@ -10,7 +10,7 @@ import type {
   TimelineIntervalSelectionPayload,
   TimelineTrackPayload,
   VideoMarkerRectPayload,
-} from '../../../domain/ipc/bindings';
+} from '../../../platform/ipc/bindings';
 import type {
   AudioBitrateKbps,
   ExportFormat,

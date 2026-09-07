@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { EditorFileState, VideoMarkerRect } from '../../../modules/editor/domain/model';
-import { clamp, DEFAULT_MARKER_RECT } from '../../../modules/editor/domain/model';
-import { useEditorStore } from '../../../modules/editor/application/store/store';
-import type { PreviewViewport } from '../../../modules/editor/domain/viewportHelpers';
+import type { EditorFileState, VideoMarkerRect } from '../domain/model';
+import { clamp, DEFAULT_MARKER_RECT } from '../domain/model';
+import { useEditorStore } from './store/store';
+import type { PreviewViewport } from '../domain/viewportHelpers';
 
 export interface MarkerInteraction {
   type: 'move' | 'resize';

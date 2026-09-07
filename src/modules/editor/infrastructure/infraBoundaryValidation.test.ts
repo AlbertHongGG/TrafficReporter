@@ -20,8 +20,8 @@ import type {
   LprFrameAnalysisResponsePayload,
   LprReviewStatePayload,
   LprRuntimeStatusPayload,
-} from '../../../domain/ipc/bindings';
-import { IpcCommandError } from '../../../infrastructure/ipc-unwrap';
+} from '../../../platform/ipc/bindings';
+import { IpcCommandError } from '../../../platform/ipc/ipc-unwrap';
 import { parseAiEvidenceResponse } from './aiEvidenceSchemas';
 import {
   parseLprCancelRuntimeJobResponse,
