@@ -1,7 +1,7 @@
 import React from 'react';
 import { AlertCircle, Film, Import, Link2, Trash2 } from 'lucide-react';
 import { formatTransportTime, type EditorFileState } from '../../../modules/editor/domain/model';
-import { useEditorContext } from '../EditorContext';
+import { useEditorStore } from '../../../modules/editor/application/store/store';
 import styles from '../MainWorkspace.module.css';
 
 interface MediaBinPanelProps {
@@ -21,7 +21,8 @@ export const MediaBinPanel: React.FC<MediaBinPanelProps> = ({
   handleRelinkFile,
   handleRemoveFile,
 }) => {
-  const { state } = useEditorContext();
+  const files = useEditorStore((s) => s.workspace.files);
+  const activeFileId = useEditorStore((s) => s.workspace.activeFileId);
 
   return (
     <aside className={styles.binPanel}>
@@ -36,7 +37,7 @@ export const MediaBinPanel: React.FC<MediaBinPanelProps> = ({
 
       <div className={styles.panelHeader}>
         <h2>Files</h2>
-        <span className={styles.badge}>{state.files.length}</span>
+        <span className={styles.badge}>{files.length}</span>
       </div>
 
       {missingFiles.length > 0 && (
@@ -47,16 +48,16 @@ export const MediaBinPanel: React.FC<MediaBinPanelProps> = ({
       )}
 
       <div className={styles.assetList}>
-        {state.files.length === 0 && (
+        {files.length === 0 && (
           <button type="button" className={styles.emptyState} onClick={() => void handleImportClick()}>
             <Import size={20} />
           </button>
         )}
 
-        {state.files.map((fileState) => (
+        {files.map((fileState) => (
           <div
             key={fileState.id}
-            className={`${styles.assetCard} ${fileState.asset.status === 'missing' ? styles.assetCardMissing : ''} ${state.activeFileId === fileState.id ? styles.assetCardSelected : ''}`}
+            className={`${styles.assetCard} ${fileState.asset.status === 'missing' ? styles.assetCardMissing : ''} ${activeFileId === fileState.id ? styles.assetCardSelected : ''}`}
           >
             <button
               type="button"

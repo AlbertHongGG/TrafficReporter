@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import type { EditorWorkspaceState, EditorFileState } from '../domain/model';
-import type { EditorAction } from './editorReducer';
+import { useEditorStore } from './store/store';
+import { editorWorkspaceTransport } from './session/editorSessionSync';
 import { openPlateWindow, emitPlateWindowSession } from '../infrastructure/plateWindowApi';
 import { openAiPanelWindow, emitAiPanelWindowSession } from '../infrastructure/aiPanelApi';
 import { openExportWindow, syncExportWindowSession } from '../../export/infrastructure/exportApi';
@@ -32,7 +33,6 @@ const log = createLogger('useWindowCoordinator');
 
 export interface UseWindowCoordinatorOptions {
   state: EditorWorkspaceState;
-  dispatch: React.Dispatch<EditorAction>;
   sessionRevision: number;
   activeFile: EditorFileState | null | undefined;
   currentPlayheadMs: number;
@@ -67,7 +67,6 @@ export interface UseWindowCoordinatorOptions {
 
 export function useWindowCoordinator({
   state,
-  dispatch,
   sessionRevision,
   activeFile,
   currentPlayheadMs,
@@ -155,7 +154,7 @@ export function useWindowCoordinator({
     }
 
     const compressionMode = activeFile.renderProfile.compressionMode === 'compact' ? 'standard' : 'compact';
-    dispatch({ type: 'set-render-profile', renderProfile: { compressionMode } });
+    editorWorkspaceTransport.setRenderProfile({ compressionMode });
 
     try {
       const snapshot = preparePendingExportSession(state);
@@ -167,7 +166,7 @@ export function useWindowCoordinator({
     } catch {
       // Ignore export-session sync failures when no exportable timeline is available.
     }
-  }, [activeFile, dispatch, sessionRevision, state]);
+  }, [activeFile, sessionRevision, state]);
 
   // Keep actions in a ref to avoid re-subscribing event listeners on every change
   const actionsRef = useRef({
@@ -190,7 +189,6 @@ export function useWindowCoordinator({
     activeFile,
     currentIsPlaying,
     lprState,
-    dispatch,
   });
 
   useEffect(() => {
@@ -214,7 +212,6 @@ export function useWindowCoordinator({
       activeFile,
       currentIsPlaying,
       lprState,
-      dispatch,
     };
   });
 
@@ -231,6 +228,7 @@ export function useWindowCoordinator({
 
       const actions = actionsRef.current;
       const action = event.payload;
+      const store = useEditorStore.getState();
 
       switch (action.type) {
         case 'refresh-runtime':
@@ -246,10 +244,10 @@ export function useWindowCoordinator({
           actions.handleSetIntervalBoundary(action.boundary);
           break;
         case 'clear-interval':
-          actions.dispatch({ type: 'clear-lpr-interval' });
+          store.clearLprInterval();
           break;
         case 'set-analysis-profile':
-          actions.dispatch({ type: 'set-lpr-analysis-profile', analysisProfileId: action.analysisProfileId });
+          store.setLprAnalysisProfile(action.analysisProfileId);
           break;
         case 'set-country-hints':
           latestCountryHintDraftRef.current = action.value;
@@ -265,27 +263,27 @@ export function useWindowCoordinator({
           await actions.handleAnalyzeLprInterval();
           break;
         case 'toggle-dense-sampling':
-          actions.dispatch({ type: 'set-lpr-toggles', toggles: { useDenseSampling: !actions.lprState.useDenseSampling } });
+          store.setLprToggles({ useDenseSampling: !actions.lprState.useDenseSampling });
           break;
         case 'toggle-developer-diagnostics':
-          actions.dispatch({ type: 'set-lpr-toggles', toggles: { showDeveloperDiagnostics: !actions.lprState.showDeveloperDiagnostics } });
+          store.setLprToggles({ showDeveloperDiagnostics: !actions.lprState.showDeveloperDiagnostics });
           break;
         case 'export-evidence':
           await actions.handleExportLprEvidence();
           break;
         case 'clear-results':
-          actions.dispatch({ type: 'clear-lpr-results' });
+          store.clearLprResults();
           break;
         case 'select-target-track':
           actions.handleSelectTargetTrack(action.targetTrackId, action.anchorTimeMs);
           break;
         case 'accept-candidate':
-          actions.dispatch({ type: 'accept-lpr-candidate', candidateId: action.candidateId });
+          store.acceptLprCandidate(action.candidateId);
           break;
         case 'seek-to-sample':
-          actions.dispatch({ type: 'set-playhead', playheadMs: Math.max(0, Math.round(action.timeMs)) });
+          store.setPlayhead(Math.max(0, Math.round(action.timeMs)));
           if (actions.currentIsPlaying) {
-            actions.dispatch({ type: 'set-playing', isPlaying: false });
+            store.setPlaying(false);
           }
           break;
         default:
@@ -327,6 +325,7 @@ export function useWindowCoordinator({
 
       const actions = actionsRef.current;
       const action = event.payload;
+      const store = useEditorStore.getState();
 
       switch (action.type) {
         case 'run-analysis':
@@ -336,14 +335,14 @@ export function useWindowCoordinator({
           await actions.handleCancelAiJob();
           break;
         case 'seek-to-time':
-          actions.dispatch({ type: 'set-playhead', playheadMs: Math.max(0, Math.round(action.timeMs)) });
+          store.setPlayhead(Math.max(0, Math.round(action.timeMs)));
           if (actions.currentIsPlaying) {
-            actions.dispatch({ type: 'set-playing', isPlaying: false });
+            store.setPlaying(false);
           }
           break;
         case 'reset-session':
           if (actions.activeFile) {
-            actions.dispatch({ type: 'reset-ai-session', fileId: actions.activeFile.id });
+            store.resetAiSession(actions.activeFile.id);
           }
           break;
         default:

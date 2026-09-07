@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { EditorFileState, VideoMarkerRect } from '../../../modules/editor/domain/model';
 import { clamp, DEFAULT_MARKER_RECT } from '../../../modules/editor/domain/model';
-import type { EditorAction } from '../../../modules/editor/application/editorReducer';
+import { useEditorStore } from '../../../modules/editor/application/store/store';
 import type { PreviewViewport } from '../../../modules/editor/domain/viewportHelpers';
 
 export interface MarkerInteraction {
@@ -15,14 +15,13 @@ export interface MarkerInteraction {
 export interface UseMarkerInteractionOptions {
   activeFile: EditorFileState | null | undefined;
   previewViewport: PreviewViewport;
-  dispatch: React.Dispatch<EditorAction>;
 }
 
 export function useMarkerInteraction({
   activeFile,
   previewViewport,
-  dispatch,
 }: UseMarkerInteractionOptions) {
+  const setMarkerRect = useEditorStore((s) => s.setMarkerRect);
   const [markerInteraction, setMarkerInteraction] = useState<MarkerInteraction | null>(null);
 
   useEffect(() => {
@@ -40,24 +39,18 @@ export function useMarkerInteraction({
       const originRect = markerInteraction.originRect;
 
       if (markerInteraction.type === 'move') {
-        dispatch({
-          type: 'set-marker-rect',
-          markerRect: {
-            ...originRect,
-            x: clamp(originRect.x + deltaX, 0, 1 - originRect.width),
-            y: clamp(originRect.y + deltaY, 0, 1 - originRect.height),
-          },
+        setMarkerRect({
+          ...originRect,
+          x: clamp(originRect.x + deltaX, 0, 1 - originRect.width),
+          y: clamp(originRect.y + deltaY, 0, 1 - originRect.height),
         });
         return;
       }
 
-      dispatch({
-        type: 'set-marker-rect',
-        markerRect: {
-          ...originRect,
-          width: clamp(originRect.width + deltaX, 0.05, 1 - originRect.x),
-          height: clamp(originRect.height + deltaY, 0.05, 1 - originRect.y),
-        },
+      setMarkerRect({
+        ...originRect,
+        width: clamp(originRect.width + deltaX, 0.05, 1 - originRect.x),
+        height: clamp(originRect.height + deltaY, 0.05, 1 - originRect.y),
       });
     };
 
@@ -76,7 +69,7 @@ export function useMarkerInteraction({
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
     };
-  }, [dispatch, markerInteraction, previewViewport.height, previewViewport.width]);
+  }, [markerInteraction, previewViewport.height, previewViewport.width, setMarkerRect]);
 
   const handleMarkerPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (!activeFile?.markerRect) {
@@ -120,11 +113,8 @@ export function useMarkerInteraction({
     : undefined;
 
   const handleCreateMarker = useCallback(() => {
-    dispatch({
-      type: 'set-marker-rect',
-      markerRect: activeFile?.markerRect ?? DEFAULT_MARKER_RECT,
-    });
-  }, [activeFile, dispatch]);
+    setMarkerRect(activeFile?.markerRect ?? DEFAULT_MARKER_RECT);
+  }, [activeFile, setMarkerRect]);
 
   return {
     markerInteraction,

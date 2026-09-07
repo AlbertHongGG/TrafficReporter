@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import type { EditorAsset, TimelineClip } from '../domain/model';
 import { clamp, clipEndMs } from '../domain/model';
-import type { EditorAction } from './editorReducer';
+import { useEditorStore } from './store/store';
 import {
   buildLiveTransportSnapshot,
   resolveLiveTransportMode,
@@ -96,7 +96,6 @@ interface UsePlaybackControllerArgs {
   previewMuted: boolean;
   playbackEntries: PlaybackTimelineEntry[];
   videoRef: React.RefObject<HTMLVideoElement | null>;
-  dispatch: React.Dispatch<EditorAction>;
   onTransportUpdate?: (transport: LiveTransportSnapshot) => void;
   onPreviewChange?: (previewState: PlaybackPreviewState) => void;
 }
@@ -109,7 +108,6 @@ export function usePlaybackController({
   previewMuted,
   playbackEntries,
   videoRef,
-  dispatch,
   onTransportUpdate,
   onPreviewChange,
 }: UsePlaybackControllerArgs) {
@@ -364,11 +362,11 @@ export function usePlaybackController({
     });
 
     if (Math.abs(currentPlayheadMs - boundedPlayheadMs) >= 1) {
-      dispatch({ type: 'set-playhead', playheadMs: boundedPlayheadMs });
+      useEditorStore.getState().setPlayhead(boundedPlayheadMs);
     }
 
     if (currentlyPlaying) {
-      dispatch({ type: 'set-playing', isPlaying: false });
+      useEditorStore.getState().setPlaying(false);
     }
 
     return boundedPlayheadMs;
@@ -396,7 +394,7 @@ export function usePlaybackController({
     });
 
     if (commit && Math.abs(currentPlayheadMs - boundedPlayheadMs) >= 1) {
-      dispatch({ type: 'set-playhead', playheadMs: boundedPlayheadMs });
+      useEditorStore.getState().setPlayhead(boundedPlayheadMs);
     }
 
     if (continuePlayback) {
@@ -411,7 +409,7 @@ export function usePlaybackController({
 
     gapAnchorRef.current = null;
     if (currentlyPlaying) {
-      dispatch({ type: 'set-playing', isPlaying: false });
+      useEditorStore.getState().setPlaying(false);
     }
   };
 
@@ -440,7 +438,7 @@ export function usePlaybackController({
     });
 
     if (Math.abs(originPlayheadMs - currentPlayheadMs) >= 1) {
-      dispatch({ type: 'set-playhead', playheadMs: originPlayheadMs });
+      useEditorStore.getState().setPlayhead(originPlayheadMs);
     }
 
     gapAnchorRef.current = result.snapshot.activeVideoEntry
@@ -451,7 +449,7 @@ export function usePlaybackController({
         };
 
     if (!currentlyPlaying) {
-      dispatch({ type: 'set-playing', isPlaying: true });
+      useEditorStore.getState().setPlaying(true);
     }
   };
 

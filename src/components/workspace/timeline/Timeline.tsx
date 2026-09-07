@@ -16,7 +16,8 @@ import {
   type TimelineClip,
 } from '../../../modules/editor/domain/model';
 import type { LiveTransportStore } from '../../../modules/editor/application/liveTransport';
-import type { EditorAction } from '../../../modules/editor/application/editorReducer';
+import { useEditorStore } from '../../../modules/editor/application/store/store';
+import { editorWorkspaceTransport } from '../../../modules/editor/application/session/editorSessionSync';
 import styles from '../MainWorkspace.module.css';
 
 const RULER_STEP_CANDIDATES_MS = [1, 2, 5, 10, 20, 50, 100, 250, 500, 1000, 2000, 5000, 10000, 15000, 30000, 60000, 120000, 300000];
@@ -47,7 +48,6 @@ export interface TimelinePanelProps {
   activeClips: TimelineClip[];
   timelineDurationMs: number;
   liveTransportStore: LiveTransportStore;
-  dispatch: React.Dispatch<EditorAction>;
   seekTo: (timeMs: number, preservePlayback: boolean, commit?: boolean) => void;
   stopPlayback: () => void;
   onScrubStateChange: (isScrubbing: boolean) => void;
@@ -58,7 +58,6 @@ export const TimelinePanel: React.FC<TimelinePanelProps> = ({
   activeClips,
   timelineDurationMs,
   liveTransportStore,
-  dispatch,
   seekTo,
   stopPlayback,
   onScrubStateChange,
@@ -67,6 +66,8 @@ export const TimelinePanel: React.FC<TimelinePanelProps> = ({
   const [timelineScrollLeft, setTimelineScrollLeft] = useState(0);
   const [interaction, setInteraction] = useState<ClipInteraction | null>(null);
   const [timelineScrub, setTimelineScrub] = useState<TimelineScrubState | null>(null);
+  const setZoom = useEditorStore((s) => s.setZoom);
+  const setSelection = useEditorStore((s) => s.setSelection);
 
   const zoomRef = useRef(activeFile?.zoom ?? DEFAULT_ZOOM);
   const pendingZoomAnchorRef = useRef<{ anchorMs: number; viewportX: number } | null>(null);
@@ -227,8 +228,8 @@ export const TimelinePanel: React.FC<TimelinePanelProps> = ({
 
     zoomRef.current = nextZoom;
     pendingZoomAnchorRef.current = { anchorMs, viewportX: cursorX };
-    dispatch({ type: 'set-zoom', zoom: nextZoom });
-  }, [activeFile, timelineVisibleWidthPx, dispatch]);
+    setZoom(nextZoom);
+  }, [activeFile, setZoom, timelineVisibleWidthPx]);
 
   useEffect(() => {
     const scroller = scrollRef.current;
@@ -254,9 +255,9 @@ export const TimelinePanel: React.FC<TimelinePanelProps> = ({
 
     const nextZoom = Math.min(DEFAULT_ZOOM, fitZoom);
     if (Math.abs(activeFile.zoom - DEFAULT_ZOOM) < 0.001 && activeFile.zoom > nextZoom + 0.001) {
-      dispatch({ type: 'set-zoom', zoom: nextZoom });
+      setZoom(nextZoom);
     }
-  }, [activeClips.length, activeFile, fitZoom, timelineViewportWidth, dispatch]);
+  }, [activeClips.length, activeFile, fitZoom, setZoom, timelineViewportWidth]);
 
   const seekTimelineFromClientX = useCallback((clientX: number, surfaceLeft: number, preservePlayback: boolean, commit = false) => {
     const scroller = scrollRef.current;
@@ -276,7 +277,7 @@ export const TimelinePanel: React.FC<TimelinePanelProps> = ({
     const preservePlayback = activeFile.isPlaying;
 
     if (activeFile.selectedClipIds.length > 0) {
-      dispatch({ type: 'set-selection', clipIds: [] });
+      setSelection([]);
     }
 
     seekTimelineFromClientX(event.clientX, surfaceLeft, preservePlayback, false);
@@ -347,13 +348,13 @@ export const TimelinePanel: React.FC<TimelinePanelProps> = ({
 
     const handlePointerUp = () => {
       if (interaction.type === 'move') {
-        dispatch({ type: 'move-clip', clipId: interaction.clipId, startMs: interaction.previewStartMs });
+        editorWorkspaceTransport.moveClip(interaction.clipId, interaction.previewStartMs);
       }
       if (interaction.type === 'trim-start') {
-        dispatch({ type: 'trim-clip-start', clipId: interaction.clipId, inPointMs: interaction.previewInPointMs });
+        editorWorkspaceTransport.trimClipStart(interaction.clipId, interaction.previewInPointMs);
       }
       if (interaction.type === 'trim-end') {
-        dispatch({ type: 'trim-clip-end', clipId: interaction.clipId, outPointMs: interaction.previewOutPointMs });
+        editorWorkspaceTransport.trimClipEnd(interaction.clipId, interaction.previewOutPointMs);
       }
       setInteraction(null);
     };
@@ -364,26 +365,26 @@ export const TimelinePanel: React.FC<TimelinePanelProps> = ({
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
     };
-  }, [activeFile, interaction, dispatch]);
+  }, [activeFile, interaction, setSelection]);
 
   const handleClipPointerDown = (event: React.PointerEvent<HTMLDivElement>, clip: TimelineClip) => {
     event.stopPropagation();
     stopPlayback();
-    dispatch({ type: 'set-selection', clipIds: [clip.id] });
+    setSelection([clip.id]);
     setInteraction({ type: 'move', clipId: clip.id, startClientX: event.clientX, previewStartMs: clip.startMs, originStartMs: clip.startMs });
   };
 
   const handleTrimStartPointerDown = (event: React.PointerEvent<HTMLButtonElement>, clip: TimelineClip) => {
     event.stopPropagation();
     stopPlayback();
-    dispatch({ type: 'set-selection', clipIds: [clip.id] });
+    setSelection([clip.id]);
     setInteraction({ type: 'trim-start', clipId: clip.id, startClientX: event.clientX, previewInPointMs: clip.inPointMs, originInPointMs: clip.inPointMs });
   };
 
   const handleTrimEndPointerDown = (event: React.PointerEvent<HTMLButtonElement>, clip: TimelineClip) => {
     event.stopPropagation();
     stopPlayback();
-    dispatch({ type: 'set-selection', clipIds: [clip.id] });
+    setSelection([clip.id]);
     setInteraction({ type: 'trim-end', clipId: clip.id, startClientX: event.clientX, previewOutPointMs: clip.outPointMs, originOutPointMs: clip.outPointMs });
   };
 

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { save } from '@tauri-apps/plugin-dialog';
 import type { EditorWorkspaceState, EditorFileState } from '../domain/model';
-import type { EditorAction } from './editorReducer';
+import { useEditorStore } from './store/store';
 import { getLprSessionByFileId } from '../domain/analysisState';
 import { buildLprTargetAnchor, resolveLprAnalysisTargetVehicleKind } from '../domain/lprState';
 import {
@@ -38,7 +38,6 @@ const log = createLogger('useLprWorkflow');
 
 export interface UseLprWorkflowOptions {
   state: EditorWorkspaceState;
-  dispatch: React.Dispatch<EditorAction>;
   activeFile: EditorFileState | null | undefined;
   livePlayheadMsRef: React.MutableRefObject<number>;
   currentIsPlaying: boolean;
@@ -47,7 +46,6 @@ export interface UseLprWorkflowOptions {
 
 export function useLprWorkflow({
   state,
-  dispatch,
   activeFile,
   livePlayheadMsRef,
   currentIsPlaying,
@@ -80,34 +78,28 @@ export function useLprWorkflow({
   const refreshLprRuntimeStatus = useCallback(async () => {
     try {
       const runtimeStatus = await getLprRuntimeStatus();
-      dispatch({ type: 'set-lpr-runtime-status', runtimeStatus });
+      useEditorStore.getState().setLprRuntimeStatus(runtimeStatus);
     } catch (error) {
-      dispatch({
-        type: 'set-lpr-runtime-status',
-        runtimeStatus: {
-          available: false,
-          pythonExecutable: null,
-          runtimeScript: null,
-          version: null,
-          missingPackages: [],
-          installedPackages: [],
-          detail: getErrorMessage(error, 'Unable to inspect the local LPR runtime.'),
-        },
+      useEditorStore.getState().setLprRuntimeStatus({
+        available: false,
+        pythonExecutable: null,
+        runtimeScript: null,
+        version: null,
+        missingPackages: [],
+        installedPackages: [],
+        detail: getErrorMessage(error, 'Unable to inspect the local LPR runtime.'),
       });
     }
-  }, [dispatch]);
+  }, []);
 
   const updateLprJob = useCallback((job: Partial<LprSessionState['job']>) => {
     const timestamp = new Date().toISOString();
-    dispatch({
-      type: 'set-lpr-job',
-      job: {
-        ...job,
-        stageStartedAt: resolveStageStartedAt(lprState.job, job, timestamp),
-        updatedAt: timestamp,
-      },
+    useEditorStore.getState().setLprJob({
+      ...job,
+      stageStartedAt: resolveStageStartedAt(lprState.job, job, timestamp),
+      updatedAt: timestamp,
     });
-  }, [dispatch, lprState.job]);
+  }, [lprState.job]);
 
   const beginLprRequest = useCallback((stage: string, detail: string, progress: number) => {
     const requestId = createRunFolderId();
@@ -188,9 +180,9 @@ export function useLprWorkflow({
       .split(',')
       .map((value) => value.trim())
       .filter(Boolean);
-    dispatch({ type: 'set-lpr-country-hints', countryHints });
+    useEditorStore.getState().setLprCountryHints(countryHints);
     return countryHints;
-  }, [dispatch]);
+  }, []);
 
   const resolveSuggestedInterval = useCallback((playheadMs: number) => {
     const activeClips = activeFile?.clips ?? [];
@@ -217,14 +209,11 @@ export function useLprWorkflow({
 
   const handleSetIntervalBoundary = useCallback((boundary: 'start' | 'end') => {
     const currentInterval = resolveSuggestedInterval(livePlayheadMsRef.current);
-    dispatch({
-      type: 'set-lpr-interval',
-      interval: normalizeLprInterval({
-        startMs: boundary === 'start' ? livePlayheadMsRef.current : currentInterval.startMs,
-        endMs: boundary === 'end' ? livePlayheadMsRef.current : currentInterval.endMs,
-      }),
-    });
-  }, [dispatch, livePlayheadMsRef, resolveSuggestedInterval]);
+    useEditorStore.getState().setLprInterval(normalizeLprInterval({
+      startMs: boundary === 'start' ? livePlayheadMsRef.current : currentInterval.startMs,
+      endMs: boundary === 'end' ? livePlayheadMsRef.current : currentInterval.endMs,
+    }));
+  }, [livePlayheadMsRef, resolveSuggestedInterval]);
 
   const handleUseClipInterval = useCallback(() => {
     const activeClips = activeFile?.clips ?? [];
@@ -236,14 +225,11 @@ export function useLprWorkflow({
       return;
     }
 
-    dispatch({
-      type: 'set-lpr-interval',
-      interval: normalizeLprInterval({
-        startMs: currentClip.startMs,
-        endMs: currentClip.startMs + clipDurationMs(currentClip),
-      }),
-    });
-  }, [activeFile, dispatch, livePlayheadMsRef]);
+    useEditorStore.getState().setLprInterval(normalizeLprInterval({
+      startMs: currentClip.startMs,
+      endMs: currentClip.startMs + clipDurationMs(currentClip),
+    }));
+  }, [activeFile, livePlayheadMsRef]);
 
   const handleScanLprTargets = useCallback(async () => {
     if (!activeFile || activeFile.asset.status !== 'ready') {
@@ -265,10 +251,11 @@ export function useLprWorkflow({
         return;
       }
 
-      dispatch({ type: 'set-lpr-runtime-status', runtimeStatus: response.runtime });
-      dispatch({ type: 'set-lpr-target-tracks', targetTracks: buildTargetTracksFromDetections(response.detections) });
-      dispatch({ type: 'set-lpr-analysis-track', analysisTrack: null });
-      dispatch({ type: 'set-lpr-mode', workflowMode: response.detections.length > 0 ? 'target' : 'range' });
+      const store = useEditorStore.getState();
+      store.setLprRuntimeStatus(response.runtime);
+      store.setLprTargetTracks(buildTargetTracksFromDetections(response.detections));
+      store.setLprAnalysisTrack(null);
+      store.setLprMode(response.detections.length > 0 ? 'target' : 'range');
       updateLprJob({
         status: 'completed',
         progress: 1,
@@ -293,7 +280,7 @@ export function useLprWorkflow({
     } finally {
       forgetLprRequest(requestId);
     }
-  }, [activeFile, beginLprRequest, dispatch, forgetLprRequest, livePlayheadMsRef, lprState.targetVehicleKind, setWorkspaceFeedback, shouldIgnoreLprRequestResult, updateLprJob]);
+  }, [activeFile, beginLprRequest, forgetLprRequest, livePlayheadMsRef, lprState.targetVehicleKind, setWorkspaceFeedback, shouldIgnoreLprRequestResult, updateLprJob]);
 
   const handleAnalyzeLprFrame = useCallback(async () => {
     if (!activeFile || activeFile.asset.status !== 'ready') {
@@ -324,28 +311,26 @@ export function useLprWorkflow({
         return;
       }
 
-      dispatch({ type: 'set-lpr-runtime-status', runtimeStatus: response.runtime });
-      dispatch({ type: 'set-lpr-analysis-track', analysisTrack: null });
-      dispatch({ type: 'set-lpr-samples', samples: response.sample ? [response.sample] : [] });
-      dispatch({ type: 'set-lpr-candidates', candidates: response.candidates });
-      dispatch({ type: 'set-lpr-review', review: response.review ?? null });
-      dispatch({ type: 'set-lpr-provenance', provenance: response.provenance ?? null });
-      dispatch({ type: 'set-lpr-decision', decision: response.decision ?? null });
+      const store = useEditorStore.getState();
+      store.setLprRuntimeStatus(response.runtime);
+      store.setLprAnalysisTrack(null);
+      store.setLprSamples(response.sample ? [response.sample] : []);
+      store.setLprCandidates(response.candidates);
+      store.setLprReview(response.review ?? null);
+      store.setLprProvenance(response.provenance ?? null);
+      store.setLprDecision(response.decision ?? null);
       if (response.candidates.length > 0) {
         const completionDetail = buildLprCompletionDetail(response.candidates, response.review);
-        dispatch({
-          type: 'append-lpr-history',
-          entry: {
-            id: createId('lpr-history'),
-            createdAt: new Date().toISOString(),
-            interval: null,
-            targetTrackId: response.detections[0]?.id ?? null,
-            acceptedCandidateId: response.acceptedCandidateId ?? null,
-            analysisProfileId: lprState.selectedAnalysisProfileId,
-            developerDiagnosticsEnabled: lprState.showDeveloperDiagnostics,
-            candidates: response.candidates,
-            summary: completionDetail,
-          },
+        store.appendLprHistory({
+          id: createId('lpr-history'),
+          createdAt: new Date().toISOString(),
+          interval: null,
+          targetTrackId: response.detections[0]?.id ?? null,
+          acceptedCandidateId: response.acceptedCandidateId ?? null,
+          analysisProfileId: lprState.selectedAnalysisProfileId,
+          developerDiagnosticsEnabled: lprState.showDeveloperDiagnostics,
+          candidates: response.candidates,
+          summary: completionDetail,
         });
       }
       updateLprJob({
@@ -374,7 +359,7 @@ export function useLprWorkflow({
     } finally {
       forgetLprRequest(requestId);
     }
-  }, [activeFile, applyCountryHints, beginLprRequest, dispatch, forgetLprRequest, livePlayheadMsRef, lprAnalysisVehicleKind, lprSelectedTrack, lprState.countryHints, lprState.selectedAnalysisProfileId, lprState.showDeveloperDiagnostics, setWorkspaceFeedback, shouldIgnoreLprRequestResult, updateLprJob]);
+  }, [activeFile, applyCountryHints, beginLprRequest, forgetLprRequest, livePlayheadMsRef, lprAnalysisVehicleKind, lprSelectedTrack, lprState.countryHints, lprState.selectedAnalysisProfileId, lprState.showDeveloperDiagnostics, setWorkspaceFeedback, shouldIgnoreLprRequestResult, updateLprJob]);
 
   const handleAnalyzeLprInterval = useCallback(async () => {
     if (!activeFile || activeFile.asset.status !== 'ready') {
@@ -462,32 +447,30 @@ export function useLprWorkflow({
         return;
       }
 
-      dispatch({ type: 'set-lpr-runtime-status', runtimeStatus: response.runtime });
-      dispatch({ type: 'set-lpr-interval', interval });
-      dispatch({ type: 'set-lpr-analysis-track', analysisTrack: response.analysisTrack ?? response.targetTracks[0] ?? null });
-      dispatch({ type: 'set-lpr-samples', samples: response.samples });
-      dispatch({ type: 'set-lpr-candidates', candidates: response.candidates });
-      dispatch({ type: 'set-lpr-review', review: response.review ?? null });
-      dispatch({ type: 'set-lpr-provenance', provenance: response.provenance ?? null });
-      dispatch({ type: 'set-lpr-decision', decision: response.decision ?? null });
+      const store = useEditorStore.getState();
+      store.setLprRuntimeStatus(response.runtime);
+      store.setLprInterval(interval);
+      store.setLprAnalysisTrack(response.analysisTrack ?? response.targetTracks[0] ?? null);
+      store.setLprSamples(response.samples);
+      store.setLprCandidates(response.candidates);
+      store.setLprReview(response.review ?? null);
+      store.setLprProvenance(response.provenance ?? null);
+      store.setLprDecision(response.decision ?? null);
       const intervalDetail = response.jobStatus === 'degraded'
         ? response.summary
         : (buildLprCompletionDetail(response.candidates, response.review) ?? response.summary);
-      dispatch({
-        type: 'append-lpr-history',
-        entry: {
-          id: createId('lpr-history'),
-          createdAt: new Date().toISOString(),
-          interval,
-          targetTrackId: response.analysisTrack?.id ?? lprSelectedTrack?.id ?? null,
-          acceptedCandidateId: response.acceptedCandidateId ?? null,
-          analysisProfileId: lprState.selectedAnalysisProfileId,
-          developerDiagnosticsEnabled: lprState.showDeveloperDiagnostics,
-          candidates: response.candidates,
-          summary: intervalDetail,
-        },
+      store.appendLprHistory({
+        id: createId('lpr-history'),
+        createdAt: new Date().toISOString(),
+        interval,
+        targetTrackId: response.analysisTrack?.id ?? lprSelectedTrack?.id ?? null,
+        acceptedCandidateId: response.acceptedCandidateId ?? null,
+        analysisProfileId: lprState.selectedAnalysisProfileId,
+        developerDiagnosticsEnabled: lprState.showDeveloperDiagnostics,
+        candidates: response.candidates,
+        summary: intervalDetail,
       });
-      dispatch({ type: 'set-lpr-mode', workflowMode: response.candidates.length > 0 ? 'review' : 'target' });
+      store.setLprMode(response.candidates.length > 0 ? 'review' : 'target');
       updateLprJob({
         status: response.jobStatus ?? 'completed',
         progress: 1,
@@ -514,19 +497,20 @@ export function useLprWorkflow({
     } finally {
       forgetLprRequest(requestId);
     }
-  }, [activeFile, applyCountryHints, beginLprRequest, dispatch, forgetLprRequest, lprAnalysisVehicleKind, lprSelectedTargetAnchor, lprSelectedTrack, lprState.countryHints, lprState.interval, lprState.selectedAnalysisProfileId, lprState.selectedTargetTrackId, lprState.showDeveloperDiagnostics, lprState.useDenseSampling, setWorkspaceFeedback, shouldIgnoreLprRequestResult, updateLprJob]);
+  }, [activeFile, applyCountryHints, beginLprRequest, forgetLprRequest, lprAnalysisVehicleKind, lprSelectedTargetAnchor, lprSelectedTrack, lprState.countryHints, lprState.interval, lprState.selectedAnalysisProfileId, lprState.selectedTargetTrackId, lprState.showDeveloperDiagnostics, lprState.useDenseSampling, setWorkspaceFeedback, shouldIgnoreLprRequestResult, updateLprJob]);
 
   const handleSelectTargetTrack = useCallback((targetTrackId: string, preferredTimeMs?: number | null) => {
     const targetTrack = lprState.targetTracks.find((track: LprTargetTrack) => track.id === targetTrackId) ?? null;
     const targetTimeMs = Math.max(0, Math.round(preferredTimeMs ?? livePlayheadMsRef.current));
     const anchor = buildLprTargetAnchor(targetTrack, targetTimeMs);
 
-    dispatch({ type: 'select-lpr-target-track', targetTrackId, anchor });
-    dispatch({ type: 'set-playhead', playheadMs: targetTimeMs });
+    const store = useEditorStore.getState();
+    store.selectLprTargetTrack(targetTrackId, anchor);
+    store.setPlayhead(targetTimeMs);
     if (currentIsPlaying) {
-      dispatch({ type: 'set-playing', isPlaying: false });
+      store.setPlaying(false);
     }
-  }, [currentIsPlaying, dispatch, livePlayheadMsRef, lprState.targetTracks]);
+  }, [currentIsPlaying, livePlayheadMsRef, lprState.targetTracks]);
 
   const handleExportLprEvidence = useCallback(async () => {
     if (!activeFile || activeFile.asset.status !== 'ready' || (!lprTopCandidate && lprState.samples.length === 0)) {

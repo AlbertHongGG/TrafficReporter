@@ -2,30 +2,30 @@ import { useCallback, useEffect, useState } from 'react';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { open } from '@tauri-apps/plugin-dialog';
 import type { EditorAsset } from '../../../modules/editor/domain/model';
-import type { EditorAction } from '../../../modules/editor/application/editorReducer';
+import { useEditorStore } from '../../../modules/editor/application/store/store';
+import { editorWorkspaceTransport } from '../../../modules/editor/application/session/editorSessionSync';
 import { buildEditorAsset, isSupportedMediaPath } from '../../../modules/editor/infrastructure/mediaApi';
 import { createLogger, getErrorSummary, serializeError } from '../../../utils/logger';
 
 const log = createLogger('useMediaIngestion');
 
 export interface UseMediaIngestionOptions {
-  dispatch: React.Dispatch<EditorAction>;
   stopPlayback?: () => void;
 }
 
-export function useMediaIngestion({ dispatch, stopPlayback }: UseMediaIngestionOptions) {
+export function useMediaIngestion({ stopPlayback }: UseMediaIngestionOptions) {
   const [isExternalDropActive, setIsExternalDropActive] = useState(false);
   const [importFeedback, setImportFeedback] = useState<string | null>(null);
 
   const handleSelectFile = useCallback((fileId: string) => {
     stopPlayback?.();
-    dispatch({ type: 'set-active-file', fileId });
-  }, [dispatch, stopPlayback]);
+    editorWorkspaceTransport.setActiveFile(fileId);
+  }, [stopPlayback]);
 
   const handleRemoveFile = useCallback((fileId: string) => {
     stopPlayback?.();
-    dispatch({ type: 'remove-file', fileId });
-  }, [dispatch, stopPlayback]);
+    editorWorkspaceTransport.removeFile(fileId);
+  }, [stopPlayback]);
 
   const importMediaPaths = useCallback(async (paths: string[]) => {
     const filtered = [...new Set(paths)].filter(isSupportedMediaPath);
@@ -44,7 +44,7 @@ export function useMediaIngestion({ dispatch, stopPlayback }: UseMediaIngestionO
       const failures = results.filter((result) => result.status === 'rejected');
 
       if (assets.length > 0) {
-        dispatch({ type: 'add-files', assets });
+        editorWorkspaceTransport.addFiles(assets);
       }
 
       if (failures.length > 0) {
@@ -63,7 +63,7 @@ export function useMediaIngestion({ dispatch, stopPlayback }: UseMediaIngestionO
       log.error('Media import failed.', serializeError(error));
       setImportFeedback(getErrorSummary(error, 'Failed to import media.'));
     }
-  }, [dispatch]);
+  }, []);
 
   useEffect(() => {
     let disposed = false;
@@ -139,13 +139,13 @@ export function useMediaIngestion({ dispatch, stopPlayback }: UseMediaIngestionO
 
     try {
       const asset = await buildEditorAsset(selection);
-      dispatch({ type: 'relink-file', fileId, asset });
+      useEditorStore.getState().relinkFile(fileId, asset);
       setImportFeedback(null);
     } catch (error) {
       log.error('Failed to relink media file.', serializeError(error));
       setImportFeedback(getErrorSummary(error, 'Failed to relink video.'));
     }
-  }, [dispatch]);
+  }, []);
 
   return {
     isExternalDropActive,

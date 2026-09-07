@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import type { EditorWorkspaceState, EditorFileState } from '../domain/model';
-import type { EditorAction } from './editorReducer';
+import { useEditorStore } from './store/store';
 import { getAiEvidenceSessionByFileId, getLprSessionByFileId } from '../domain/analysisState';
 import { buildDefaultLprState, buildLprTargetAnchor } from '../domain/lprState';
 import { analyzeAiEvidence } from '../infrastructure/aiEvidenceApi';
@@ -22,7 +22,6 @@ const log = createLogger('useAiEvidenceWorkflow');
 
 export interface UseAiEvidenceWorkflowOptions {
   state: EditorWorkspaceState;
-  dispatch: React.Dispatch<EditorAction>;
   activeFile: EditorFileState | null | undefined;
   lprState: LprSessionState;
   lprAnalysisVehicleKind: LprVehicleKind | null;
@@ -32,7 +31,6 @@ export interface UseAiEvidenceWorkflowOptions {
 
 export function useAiEvidenceWorkflow({
   state,
-  dispatch,
   activeFile,
   lprState,
   lprAnalysisVehicleKind,
@@ -51,22 +49,19 @@ export function useAiEvidenceWorkflow({
   const updateAiJob = useCallback((fileId: string, job: Partial<AiEvidenceSessionState['job']>) => {
     const timestamp = new Date().toISOString();
     const currentJob = getAiEvidenceSessionByFileId(state.analysis, fileId).job;
-    dispatch({
-      type: 'set-ai-job',
-      fileId,
-      job: {
-        ...job,
-        stageStartedAt: resolveStageStartedAt(currentJob, job, timestamp),
-        updatedAt: timestamp,
-      },
+    useEditorStore.getState().setAiJob(fileId, {
+      ...job,
+      stageStartedAt: resolveStageStartedAt(currentJob, job, timestamp),
+      updatedAt: timestamp,
     });
-  }, [dispatch, state.analysis]);
+  }, [state.analysis]);
 
   const beginAiRequest = useCallback((fileId: string, prompt: string) => {
     const requestId = createRunFolderId();
     activeAiRequestRef.current = { requestId, fileId };
-    dispatch({ type: 'set-ai-prompt', fileId, prompt });
-    dispatch({ type: 'set-ai-result', fileId, result: null });
+    const store = useEditorStore.getState();
+    store.setAiPrompt(fileId, prompt);
+    store.setAiResult(fileId, null);
     updateAiJob(fileId, {
       status: 'running',
       progress: 0.05,
@@ -84,7 +79,7 @@ export function useAiEvidenceWorkflow({
       stageStepCount: 1,
     });
     return requestId;
-  }, [dispatch, updateAiJob]);
+  }, [updateAiJob]);
 
   const forgetAiRequest = useCallback((requestId: string) => {
     if (activeAiRequestRef.current?.requestId === requestId) {
@@ -149,8 +144,8 @@ export function useAiEvidenceWorkflow({
         }]
         : currentLprState.history,
     });
-    dispatch({ type: 'replace-lpr-session', fileId, session: projectedSession });
-  }, [dispatch, state.analysis]);
+    useEditorStore.getState().replaceLprSession(fileId, projectedSession);
+  }, [state.analysis]);
 
   const handleCancelAiJob = useCallback(async () => {
     const activeRequest = activeAiRequestRef.current;
@@ -222,8 +217,9 @@ export function useAiEvidenceWorkflow({
         return;
       }
 
-      dispatch({ type: 'set-lpr-runtime-status', runtimeStatus: response.runtime });
-      dispatch({ type: 'set-ai-result', fileId, result: response });
+      const store = useEditorStore.getState();
+      store.setLprRuntimeStatus(response.runtime);
+      store.setAiResult(fileId, response);
       updateAiJob(fileId, {
         status: 'completed',
         progress: 1,
@@ -269,7 +265,6 @@ export function useAiEvidenceWorkflow({
     activeFile,
     applyAiEvidenceProjection,
     beginAiRequest,
-    dispatch,
     forgetAiRequest,
     lprAnalysisVehicleKind,
     lprState.countryHints,

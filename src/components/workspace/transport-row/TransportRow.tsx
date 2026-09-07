@@ -9,7 +9,8 @@ import {
   Volume2,
   VolumeX,
 } from 'lucide-react';
-import { useEditorContext } from '../EditorContext';
+import { useEditorStore } from '../../../modules/editor/application/store/store';
+import { editorWorkspaceTransport } from '../../../modules/editor/application/session/editorSessionSync';
 import { formatRulerLabel, getTimelineDuration } from '../../../modules/editor/domain/model';
 import styles from '../MainWorkspace.module.css';
 
@@ -28,8 +29,12 @@ export const TransportRow: React.FC<TransportRowProps> = ({
   seekBy,
   togglePlay,
 }) => {
-  const { state, dispatch } = useEditorContext();
-  const activeFile = state.activeFileId ? state.files.find(f => f.id === state.activeFileId) : null;
+  const activeFile = useEditorStore((s) =>
+    s.workspace.activeFileId ? s.workspace.files.find((f) => f.id === s.workspace.activeFileId) ?? null : null,
+  );
+  const setTrackMuted = useEditorStore((s) => s.setTrackMuted);
+  const setPreviewMuted = useEditorStore((s) => s.setPreviewMuted);
+  const setPreviewVolume = useEditorStore((s) => s.setPreviewVolume);
 
   const activeClips = useMemo(() => activeFile?.clips ?? [], [activeFile]);
   const selectedClipId = activeFile?.selectedClipIds[0] ?? null;
@@ -65,7 +70,7 @@ export const TransportRow: React.FC<TransportRowProps> = ({
           <button
             type="button"
             className={`${styles.iconButton} ${trackMuted ? styles.iconButtonActive : ''}`}
-            onClick={() => dispatch({ type: 'set-track-muted', muted: !trackMuted })}
+            onClick={() => setTrackMuted(!trackMuted)}
             disabled={!activeFile || activeClips.length === 0}
             aria-pressed={trackMuted}
             aria-label={trackMuted ? 'Unmute track' : 'Mute track'}
@@ -76,11 +81,7 @@ export const TransportRow: React.FC<TransportRowProps> = ({
             type="button"
             className={styles.iconButton}
             onClick={() =>
-              dispatch({
-                type: 'split-clip',
-                clipId: selectedClip?.id ?? '',
-                atMs: livePlayheadMsRef.current,
-              })
+              editorWorkspaceTransport.splitClip(selectedClip?.id ?? '', livePlayheadMsRef.current)
             }
             disabled={!selectedClip}
             aria-label="Split selected clip"
@@ -90,7 +91,7 @@ export const TransportRow: React.FC<TransportRowProps> = ({
           <button
             type="button"
             className={styles.iconButton}
-            onClick={() => dispatch({ type: 'delete-selected-clips' })}
+            onClick={() => editorWorkspaceTransport.deleteSelectedClips()}
             disabled={!selectedClip}
             aria-label="Delete selected clip"
           >
@@ -137,9 +138,9 @@ export const TransportRow: React.FC<TransportRowProps> = ({
         <button
           type="button"
           className={styles.iconButton}
-          onClick={() =>
-            dispatch({ type: 'set-preview-muted', previewMuted: !currentPreviewMuted })
-          }
+            onClick={() =>
+              setPreviewMuted(!currentPreviewMuted)
+            }
           disabled={!activeFile}
           aria-label={currentPreviewMuted ? 'Unmute preview' : 'Mute preview'}
         >
@@ -151,12 +152,9 @@ export const TransportRow: React.FC<TransportRowProps> = ({
           max={1}
           step={0.01}
           value={currentPreviewVolume}
-          onChange={(event) =>
-            dispatch({
-              type: 'set-preview-volume',
-              previewVolume: Number(event.target.value),
-            })
-          }
+            onChange={(event) =>
+              setPreviewVolume(Number(event.target.value))
+            }
           disabled={!activeFile}
           aria-label="Adjust preview volume"
           className={styles.volumeSlider}

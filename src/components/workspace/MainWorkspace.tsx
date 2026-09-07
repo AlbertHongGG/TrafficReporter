@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle } from 'lucide-react';
 import styles from './MainWorkspace.module.css';
 
-import { useEditorContext } from './EditorContext';
+import { useEditorStore } from '../../modules/editor/application/store/store';
+import { useEditorSessionSync } from '../../modules/editor/application/session/editorSessionSync';
 import { Toolbar } from './toolbar/Toolbar';
 import { MediaBinPanel } from './media-bin/MediaBinPanel';
 import { VideoPlayerPanel } from './video-player/VideoPlayerPanel';
@@ -25,7 +26,9 @@ export interface MediaEditorWorkspaceProps {
 }
 
 export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isActive = true }) => {
-  const { state, dispatch, sessionRevision } = useEditorContext();
+  useEditorSessionSync();
+  const state = useEditorStore((s) => s.workspace);
+  const sessionRevision = useEditorStore((s) => s.revision);
   const [workspaceFeedback, setWorkspaceFeedback] = useState<string | null>(null);
   const [isScrubbing, setIsScrubbing] = useState(false);
   const plateWindowLiveSyncEnabledRef = useRef(false);
@@ -65,7 +68,6 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     timelineDurationMs,
     isScrubbing,
     isActive,
-    dispatch,
     plateWindowLiveSyncEnabledRef,
   });
 
@@ -91,7 +93,6 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     lprAnalysisVehicleKind,
   } = useLprWorkflow({
     state,
-    dispatch,
     activeFile,
     livePlayheadMsRef,
     currentIsPlaying,
@@ -105,7 +106,6 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     handleRunAiEvidence,
   } = useAiEvidenceWorkflow({
     state,
-    dispatch,
     activeFile,
     lprState,
     lprAnalysisVehicleKind,
@@ -121,7 +121,6 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     handleToggleCompactExports,
   } = useWindowCoordinator({
     state,
-    dispatch,
     sessionRevision,
     activeFile,
     currentPlayheadMs,
@@ -158,7 +157,6 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
   } = useMarkerInteraction({
     activeFile,
     previewViewport,
-    dispatch,
   });
 
   // Media Ingestion & Bin Operations
@@ -170,7 +168,6 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
     handleSelectFile,
     handleRemoveFile,
   } = useMediaIngestion({
-    dispatch,
     stopPlayback,
   });
 
@@ -178,7 +175,6 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
   useWorkspaceHotkeys({
     selectedClip,
     togglePlay,
-    dispatch,
     livePlayheadMsRef,
   });
 
@@ -266,7 +262,6 @@ export const MediaEditorWorkspace: React.FC<MediaEditorWorkspaceProps> = ({ isAc
               activeClips={activeClips}
               timelineDurationMs={timelineDurationMs}
               liveTransportStore={liveTransportStore}
-              dispatch={dispatch}
               seekTo={seekTo}
               stopPlayback={stopPlayback}
               onScrubStateChange={setIsScrubbing}

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Film, Square, X } from 'lucide-react';
-import { useEditorContext } from '../EditorContext';
+import { getActiveFile } from '../../../modules/editor/domain/model';
+import { useEditorStore } from '../../../modules/editor/application/store/store';
 import { LprPreviewOverlayLayer } from './LprPreviewOverlayLayer';
 import type { PlaybackPreviewState } from '../../../modules/editor/application/usePlaybackController';
 import type { LiveTransportStore } from '../../../modules/editor/application/liveTransport';
@@ -37,7 +38,8 @@ export const VideoPlayerPanel: React.FC<VideoPlayerPanelProps> = ({
   handleMarkerResizePointerDown,
   handleCreateMarker,
 }) => {
-  const { activeFile, dispatch } = useEditorContext();
+  const activeFile = useEditorStore((s) => getActiveFile(s.workspace));
+  const clearMarker = useEditorStore((s) => s.clearMarker);
 
   return (
     <section className={styles.previewPanel}>
@@ -87,7 +89,7 @@ export const VideoPlayerPanel: React.FC<VideoPlayerPanelProps> = ({
             <Square size={14} />
             {activeFile?.markerRect ? 'Marker' : 'Add Marker'}
           </button>
-          <button type="button" className={styles.previewToolButton} onClick={() => dispatch({ type: 'clear-marker' })} disabled={!activeFile?.markerRect}>
+          <button type="button" className={styles.previewToolButton} onClick={clearMarker} disabled={!activeFile?.markerRect}>
             <X size={14} />
             Clear
           </button>

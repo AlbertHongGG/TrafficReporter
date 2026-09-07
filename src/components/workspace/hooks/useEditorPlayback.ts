@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { EditorFileState, TimelineClip } from '../../../modules/editor/domain/model';
 import { formatRulerLabel } from '../../../modules/editor/domain/model';
-import type { EditorAction } from '../../../modules/editor/application/editorReducer';
 import {
   getPlaybackPreviewState,
   usePlaybackController,
@@ -22,7 +21,6 @@ export interface UseEditorPlaybackOptions {
   timelineDurationMs: number;
   isScrubbing: boolean;
   isActive?: boolean;
-  dispatch: React.Dispatch<EditorAction>;
   plateWindowLiveSyncEnabledRef: React.MutableRefObject<boolean>;
 }
 
@@ -32,7 +30,6 @@ export function useEditorPlayback({
   timelineDurationMs,
   isScrubbing,
   isActive = true,
-  dispatch,
   plateWindowLiveSyncEnabledRef,
 }: UseEditorPlaybackOptions) {
   const [livePreviewState, setLivePreviewState] = useState<PlaybackPreviewState>({
@@ -107,7 +104,6 @@ export function useEditorPlayback({
     previewMuted: currentPreviewMuted,
     playbackEntries,
     videoRef: previewVideoRef,
-    dispatch,
     onTransportUpdate: handleTransportUpdate,
     onPreviewChange: handlePreviewChange,
   });
