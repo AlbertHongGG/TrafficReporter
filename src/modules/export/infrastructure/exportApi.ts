@@ -1,9 +1,9 @@
-import { commands } from '../../../types/bindings';
+import { commands } from '../../../domain/ipc/bindings';
 import type {
   ExportSnapshotPayload,
   RenderProfilePayload,
   TimelineExportRequest as TimelineExportRequestPayload,
-} from '../../../types/bindings';
+} from '../../../domain/ipc/bindings';
 import { unwrapCommand } from '../../../infrastructure/ipc-unwrap';
 import { parseTimelineExportResponse } from './exportSchemas';
 import type { ExportSnapshot, RenderProfile, TimelineExportRequest } from '../application/exportTypes';

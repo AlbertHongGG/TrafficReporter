@@ -1,11 +1,9 @@
 import { useEffect } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import {
-  commands,
-  type EditorFileState as RustEditorFileState,
-  type EditorWorkspaceState as RustEditorWorkspaceState,
-  type RenderProfilePayload,
-} from '../../../../types/bindings';
+import type {
+  EditorFileState as RustEditorFileState,
+  EditorWorkspaceState as RustEditorWorkspaceState,
+} from '../../../../domain/ipc/bindings';
 import type {
   AudioBitrateKbps,
   EditorAsset,
@@ -18,6 +16,19 @@ import type {
 import { DEFAULT_ZOOM } from '../../domain/model';
 import type { ExportFormat } from '../../../export/domain/model';
 import { useEditorStore } from '../store/store';
+import {
+  fetchAppState,
+  notifyWorkspaceAddFiles,
+  notifyWorkspaceDeleteClips,
+  notifyWorkspaceMoveClip,
+  notifyWorkspaceRemoveFile,
+  notifyWorkspaceSetActiveFile,
+  notifyWorkspaceSetClipsMuted,
+  notifyWorkspaceSetRenderProfile,
+  notifyWorkspaceSplitClip,
+  notifyWorkspaceTrimClipEnd,
+  notifyWorkspaceTrimClipStart,
+} from '../../infrastructure/workspaceApi';
 
 /**
  * IPC snapshot → frontend workspace mapper (Blueprint §1.2, Phase 1-D).
@@ -162,14 +173,10 @@ function commitSyncedPayload(remote: RustEditorWorkspaceState): void {
  */
 export function useEditorSessionSync(): void {
   useEffect(() => {
-    // 1. Fetch initial state from Rust
-    commands.getAppState()
-      .then((res) => {
-        if (res.status === 'ok') {
-          commitSyncedPayload(res.data);
-        } else {
-          console.error('Failed to get initial app state from Rust:', res.error);
-        }
+    // 1. Fetch initial state from Rust (via infrastructure API)
+    fetchAppState()
+      .then((data) => {
+        commitSyncedPayload(data);
       })
       .catch((error) => {
         console.error('Failed to get initial app state from Rust:', error);
@@ -188,48 +195,28 @@ export function useEditorSessionSync(): void {
 
 /**
  * Workspace mutations that must stay synchronized with the Rust backend
- * (Phase 3-C; moving these commands into the infra API is Phase 5 scope).
+ * (Phase 7: commands moved into the infrastructure API per Blueprint §2.2).
  *
- * Each entry applies the optimistic store update first, then issues the
- * matching Rust workspace command with the same payloads and error handling
- * as the previous controller. Local-only state (zoom, selection,
- * preview, LPR/AI sessions) is intentionally absent here — callers use the
- * Zustand store actions directly for those.
+ * Each entry applies the optimistic store update first, then notifies Rust
+ * through the infrastructure API (fire-and-forget; backend failures are
+ * logged there). Local-only state (zoom, selection, preview, LPR/AI
+ * sessions) is intentionally absent here — callers use the Zustand store
+ * actions directly for those.
  */
 export const editorWorkspaceTransport = {
   addFiles(assets: EditorAsset[]): void {
     useEditorStore.getState().addFiles(assets);
-    commands.workspaceAddFiles(assets)
-      .then((res) => {
-        if (res.status === 'error') {
-          console.error('Failed to add files to Rust workspace:', res.error);
-        }
-      })
-      .catch((err) => {
-        console.error('Unexpected error calling workspaceAddFiles:', err);
-      });
+    void notifyWorkspaceAddFiles(assets);
   },
 
   removeFile(fileId: string): void {
     useEditorStore.getState().removeFile(fileId);
-    commands.workspaceRemoveFile(fileId)
-      .then((res) => {
-        if (res.status === 'error') {
-          console.error('Failed to remove file from Rust workspace:', res.error);
-        }
-      })
-      .catch(console.error);
+    void notifyWorkspaceRemoveFile(fileId);
   },
 
   setActiveFile(fileId: string): void {
     useEditorStore.getState().setActiveFile(fileId);
-    commands.workspaceSetActiveFile(fileId)
-      .then((res) => {
-        if (res.status === 'error') {
-          console.error('Failed to set active file in Rust workspace:', res.error);
-        }
-      })
-      .catch(console.error);
+    void notifyWorkspaceSetActiveFile(fileId);
   },
 
   moveClip(clipId: string, startMs: number): void {
@@ -237,13 +224,7 @@ export const editorWorkspaceTransport = {
     useEditorStore.getState().moveClip(clipId, startMs);
     const fileId = currentWorkspace.activeFileId;
     if (fileId) {
-      commands.workspaceMoveClip(fileId, clipId, startMs)
-        .then((res) => {
-          if (res.status === 'error') {
-            console.error('Failed to move clip in Rust workspace:', res.error);
-          }
-        })
-        .catch(console.error);
+      void notifyWorkspaceMoveClip(fileId, clipId, startMs);
     }
   },
 
@@ -255,13 +236,7 @@ export const editorWorkspaceTransport = {
       const clip = currentWorkspace.files.find((f) => f.id === fileId)?.clips.find((c) => c.id === clipId);
       if (clip) {
         const newStartMs = clip.startMs + (inPointMs - clip.inPointMs);
-        commands.workspaceTrimClipStart(fileId, clipId, inPointMs, newStartMs)
-          .then((res) => {
-            if (res.status === 'error') {
-              console.error('Failed to trim clip start in Rust workspace:', res.error);
-            }
-          })
-          .catch(console.error);
+        void notifyWorkspaceTrimClipStart(fileId, clipId, inPointMs, newStartMs);
       }
     }
   },
@@ -271,13 +246,7 @@ export const editorWorkspaceTransport = {
     useEditorStore.getState().trimClipEnd(clipId, outPointMs);
     const fileId = currentWorkspace.activeFileId;
     if (fileId) {
-      commands.workspaceTrimClipEnd(fileId, clipId, outPointMs)
-        .then((res) => {
-          if (res.status === 'error') {
-            console.error('Failed to trim clip end in Rust workspace:', res.error);
-          }
-        })
-        .catch(console.error);
+      void notifyWorkspaceTrimClipEnd(fileId, clipId, outPointMs);
     }
   },
 
@@ -286,13 +255,7 @@ export const editorWorkspaceTransport = {
     useEditorStore.getState().splitClip(clipId, atMs);
     const fileId = currentWorkspace.activeFileId;
     if (fileId) {
-      commands.workspaceSplitClip(fileId, clipId, atMs)
-        .then((res) => {
-          if (res.status === 'error') {
-            console.error('Failed to split clip in Rust workspace:', res.error);
-          }
-        })
-        .catch(console.error);
+      void notifyWorkspaceSplitClip(fileId, clipId, atMs);
     }
   },
 
@@ -301,13 +264,7 @@ export const editorWorkspaceTransport = {
     useEditorStore.getState().deleteSelectedClips();
     const file = currentWorkspace.files.find((f) => f.id === currentWorkspace.activeFileId);
     if (file) {
-      commands.workspaceDeleteClips(file.id, file.selectedClipIds)
-        .then((res) => {
-          if (res.status === 'error') {
-            console.error('Failed to delete clips in Rust workspace:', res.error);
-          }
-        })
-        .catch(console.error);
+      void notifyWorkspaceDeleteClips(file.id, file.selectedClipIds);
     }
   },
 
@@ -316,13 +273,7 @@ export const editorWorkspaceTransport = {
     useEditorStore.getState().setSelectedClipsMuted(muted);
     const file = currentWorkspace.files.find((f) => f.id === currentWorkspace.activeFileId);
     if (file) {
-      commands.workspaceSetClipsMuted(file.id, file.selectedClipIds, muted)
-        .then((res) => {
-          if (res.status === 'error') {
-            console.error('Failed to mute clips in Rust workspace:', res.error);
-          }
-        })
-        .catch(console.error);
+      void notifyWorkspaceSetClipsMuted(file.id, file.selectedClipIds, muted);
     }
   },
 
@@ -331,20 +282,7 @@ export const editorWorkspaceTransport = {
     useEditorStore.getState().setRenderProfile(renderProfile);
     const file = currentWorkspace.files.find((f) => f.id === currentWorkspace.activeFileId);
     if (file) {
-      const newProfile: RenderProfilePayload = {
-        format: renderProfile.format ?? file.renderProfile.format,
-        fps: renderProfile.fps ?? file.renderProfile.fps,
-        videoQuality: renderProfile.videoQuality ?? file.renderProfile.videoQuality ?? null,
-        audioBitrateKbps: renderProfile.audioBitrateKbps ?? file.renderProfile.audioBitrateKbps ?? null,
-        compressionMode: renderProfile.compressionMode ?? file.renderProfile.compressionMode ?? 'standard',
-      };
-      commands.workspaceSetRenderProfile(file.id, newProfile)
-        .then((res) => {
-          if (res.status === 'error') {
-            console.error('Failed to set render profile in Rust workspace:', res.error);
-          }
-        })
-        .catch(console.error);
+      void notifyWorkspaceSetRenderProfile(file.id, renderProfile, file.renderProfile);
     }
   },
 };

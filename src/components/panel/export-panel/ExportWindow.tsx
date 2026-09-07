@@ -14,21 +14,21 @@ import {
   Settings2,
   AlertTriangle,
 } from 'lucide-react';
-import { createLogger, getErrorMessage, serializeError } from '../../utils/logger';
-import { processTimelineExport, requestExportWindowSession } from '../../modules/export/infrastructure/exportApi';
+import { createLogger, getErrorMessage, serializeError } from '../../../utils/logger';
+import { processTimelineExport, requestExportWindowSession } from '../../../modules/export/infrastructure/exportApi';
 import type {
   AudioBitrateKbps,
   ExportSnapshot,
   ExportFormat,
   ExportProgressPayload,
   VideoQuality,
-} from '../../modules/export/application/exportTypes';
-import { formatTransportTime } from '../../modules/editor/domain/model';
-import { EXPORT_WINDOW_LABEL } from '../../modules/export/application/exportWindow';
-import { exportContract } from '../../platform/transport/contracts';
-import { registerListener, sendError } from '../../platform/transport/runtime';
+} from '../../../modules/export/application/exportTypes';
+import { formatTransportTime } from '../../../modules/editor/domain/model';
+import { EXPORT_WINDOW_LABEL } from '../../../modules/export/application/exportWindow';
+import { exportContract } from '../../../platform/transport/contracts';
+import { registerListener, sendError } from '../../../platform/transport/runtime';
 import styles from './ExportWindow.module.css';
-import { Select } from '../common/Select/Select';
+import { Select } from '../../ui-kit/Select/Select';
 
 type ExportStatus = 'loading' | 'idle' | 'running' | 'done' | 'error';
 const log = createLogger('ExportWindow');

@@ -1,4 +1,4 @@
-import { Header } from '../../components/common/Header/Header';
+import { Header } from '../../components/ui-kit/Header/Header';
 import { MediaEditorWorkspace } from '../../components/workspace/MainWorkspace';
 import styles from './AppShell.module.css';
 

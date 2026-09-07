@@ -22,23 +22,23 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { Select } from '../common/Select/Select';
+import { Select } from '../../ui-kit/Select/Select';
 import {
   resolveLprDisplayCandidate,
   samplePrimaryText,
   resolvePlateWindowPlayheadMs,
   type PlateWindowLiveTransport,
   type PlateWindowSessionSnapshot,
-} from '../../modules/editor/application/plateWindow';
-import { buildJobTimingSnapshot, formatElapsedDuration } from '../../modules/editor/application/jobTiming';
-import { requestPlateWindowSession, sendPlateWindowAction } from '../../modules/editor/infrastructure/plateWindowApi';
-import { clamp, formatRulerLabel, formatRulerLabelWithMilliseconds } from '../../modules/editor/domain/model';
-import { buildDefaultLprState } from '../../modules/editor/domain/lprState';
-import type { LprFrameSample, LprJobState, LprPlateCandidate, LprReviewState, LprTargetTrack, TimelineIntervalSelection } from '../../modules/editor/domain/model';
-import { getLprAnalysisProfileLabel, getLprAnalysisProfiles } from '../../modules/editor/domain/lprProfiles';
-import { createLogger, getErrorSummary, serializeError } from '../../utils/logger';
-import { plateContract } from '../../platform/transport/contracts';
-import { registerListener, sendError } from '../../platform/transport/runtime';
+} from '../../../modules/editor/application/plateWindow';
+import { buildJobTimingSnapshot, formatElapsedDuration } from '../../../modules/editor/application/jobTiming';
+import { requestPlateWindowSession, sendPlateWindowAction } from '../../../modules/editor/infrastructure/plateWindowApi';
+import { clamp, formatRulerLabel, formatRulerLabelWithMilliseconds } from '../../../modules/editor/domain/model';
+import { buildDefaultLprState } from '../../../modules/editor/domain/lprState';
+import type { LprFrameSample, LprJobState, LprPlateCandidate, LprReviewState, LprTargetTrack, TimelineIntervalSelection } from '../../../modules/editor/domain/model';
+import { getLprAnalysisProfileLabel, getLprAnalysisProfiles } from '../../../modules/editor/domain/lprProfiles';
+import { createLogger, getErrorSummary, serializeError } from '../../../utils/logger';
+import { plateContract } from '../../../platform/transport/contracts';
+import { registerListener, sendError } from '../../../platform/transport/runtime';
 import { LprDashboard } from './LprDashboard';
 import { LprDataViewer } from './LprDataViewer';
 import styles from './LprWindow.module.css';

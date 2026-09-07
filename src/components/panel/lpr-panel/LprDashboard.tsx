@@ -2,7 +2,7 @@
 import React from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { AlertCircle, Check, Clock, Crop, Database, FileOutput, Globe, Image, LoaderCircle, RotateCcw, Search, Target, X, Zap } from 'lucide-react';
-import { Select } from '../common/Select/Select';
+import { Select } from '../ui-kit/Select/Select';
 import styles from './LprWindow.module.css';
 
 export const LprDashboard = ({

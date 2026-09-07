@@ -6,12 +6,12 @@
  * the shared {@link unwrapCommand} helper, then maps the payload back to the
  * frontend domain via typed field mapping (no assertions).
  */
-import { commands } from '../../../types/bindings';
+import { commands } from '../../../domain/ipc/bindings';
 import type {
   LprFrameAnalysisRequestPayload,
   LprIntervalAnalysisRequestPayload,
   LprTargetScanRequestPayload,
-} from '../../../types/bindings';
+} from '../../../domain/ipc/bindings';
 import { unwrapCommand } from '../../../infrastructure/ipc-unwrap';
 import {
   parseLprCancelRuntimeJobResponse,

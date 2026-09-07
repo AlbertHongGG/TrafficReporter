@@ -12,7 +12,6 @@ export default defineConfig([
     'src-tauri/target',
     'src-tauri/gen',
     'traffic-lpr-runtime/**',
-    'src/types/bindings.ts',
     'src/domain/ipc/bindings.ts',
   ]),
   {
@@ -49,8 +48,6 @@ export default defineConfig([
           patterns: [
             {
               group: [
-                '**/types/bindings',
-                '@/types/bindings',
                 '**/domain/ipc/bindings',
                 '@/domain/ipc/bindings',
               ],

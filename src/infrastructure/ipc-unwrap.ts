@@ -15,7 +15,7 @@
 
 /**
  * Shape of every Tauri command result produced by the Specta-generated
- * `typedError` wrapper in `src/types/bindings.ts`.
+ * `typedError` wrapper in `src/domain/ipc/bindings.ts`.
  */
 export type TauriResult<T> =
   | { status: 'ok'; data: T }
@@ -68,7 +68,7 @@ function toTransportError(command: string, cause: unknown): IpcCommandError {
  *
  * @example
  * ```ts
- * import { commands } from '../../types/bindings';
+ * import { commands } from '../../domain/ipc/bindings';
  * import { unwrapCommand } from '../../infrastructure/ipc-unwrap';
  *
  * export function cancelLprRuntimeJob(): Promise<boolean> {

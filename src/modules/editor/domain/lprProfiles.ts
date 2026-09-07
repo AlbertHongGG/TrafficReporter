@@ -1,5 +1,5 @@
 import rawCatalog from './lpr-analysis-profiles.json';
-import type { LprAnalysisOptionsPayload } from '../../../types/bindings';
+import type { LprAnalysisOptionsPayload } from '../../../domain/ipc/bindings';
 
 export type LprAnalysisProfileId = string;
 

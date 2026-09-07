@@ -12,7 +12,7 @@ import type {
   LprTrackingSummary,
   LprTrackingTier,
   LprVehicleKind,
-} from '../../../types/bindings';
+} from '../../../domain/ipc/bindings';
 import type { TimelineIntervalSelection, VideoMarkerRect } from './model';
 import { defaultLprAnalysisProfileId, type LprAnalysisProfileId } from './lprProfiles';
 import type { OutputCompressionMode } from '../../export/domain/model';

@@ -1,5 +1,5 @@
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { commands, type EditorAsset, type FrameExportRequest, type MediaProbePayload } from '../../../types/bindings';
+import { commands, type EditorAsset, type FrameExportRequest, type MediaProbePayload } from '../../../domain/ipc/bindings';
 import { unwrapCommand } from '../../../infrastructure/ipc-unwrap';
 import { parseFrameExportResponse, parseMediaProbeResponse } from './mediaSchemas';
 import { basename, createId, extensionOf } from '../domain/model';

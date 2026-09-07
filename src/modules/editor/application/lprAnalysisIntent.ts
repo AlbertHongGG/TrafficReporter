@@ -1,4 +1,4 @@
-import type { LprAnalysisIntent } from '../../../types/bindings';
+import type { LprAnalysisIntent } from '../../../domain/ipc/bindings';
 
 export const INTERACTIVE_RANGE_LATENCY_BUDGET_MS = 30_000;
 

@@ -1,8 +1,8 @@
 import React, { useMemo } from 'react';
 import { AppShell } from '../shell/AppShell';
-import { PlateWindow } from '../../components/lpr-panel/LprWindow';
-import { AiEvidenceWindow } from '../../components/ai-panel/AiEvidenceWindow';
-import { ExportWindow } from '../../components/export-panel/ExportWindow';
+import { PlateWindow } from '../../components/panel/lpr-panel/LprWindow';
+import { AiEvidenceWindow } from '../../components/panel/ai-panel/AiEvidenceWindow';
+import { ExportWindow } from '../../components/panel/export-panel/ExportWindow';
 import { resolveWindowKind, type WindowKind } from './windowRouting';
 
 export const WindowRouter: React.FC = () => {

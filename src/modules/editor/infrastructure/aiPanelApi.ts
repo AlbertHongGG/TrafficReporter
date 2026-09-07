@@ -1,4 +1,4 @@
-import { commands } from '../../../types/bindings';
+import { commands } from '../../../domain/ipc/bindings';
 import { unwrapCommand } from '../../../infrastructure/ipc-unwrap';
 import { parseSaveGeneratedMediaAssetResponse } from './mediaSchemas';
 import { desktopWindowManager } from '../../../platform/desktop';

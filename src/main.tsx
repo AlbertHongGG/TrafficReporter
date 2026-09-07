@@ -1,6 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { AppErrorBoundary } from './components/common/AppErrorBoundary';
+import { AppErrorBoundary } from './components/ui-kit/AppErrorBoundary';
 import { WindowRouter } from './app/router';
 import './index.css';
 import { installGlobalLogger } from './utils/logger';
