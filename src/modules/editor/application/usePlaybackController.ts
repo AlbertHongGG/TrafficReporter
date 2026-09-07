@@ -1,16 +1,36 @@
+/**
+ * Playback controller — React glue (Blueprint §4, Phase 4-D).
+ *
+ * Slim surface: subscribes to controller props via `latestStateRef`, owns
+ * the `<video>` element sync (`syncVideoElement` + pending paused seeks +
+ * media-event listeners), and forwards transport decisions to the playback
+ * service (`createPlaybackService`). The service owns gap anchors, the live
+ * playhead, preview dedup, store commits, and the clock step; this hook
+ * feeds it the production ports (default wall clock + rAF, store writers,
+ * ref-forwarded transport callbacks) and applies the resolved
+ * `SyncVideoOptions` to the element after each service call.
+ */
 import React, { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
-import type { EditorAsset, TimelineClip } from '../domain/model';
-import { clamp, clipEndMs } from '../domain/model';
-import { useEditorStore } from './store/store';
+import { createPlaybackService, type PlaybackService } from './usecases/playbackService.usecase';
+import { defaultPlaybackPorts, type PlaybackPorts } from './usecases/playbackPorts.usecase';
 import {
-  buildLiveTransportSnapshot,
-  resolveLiveTransportMode,
-  type LiveTransportSnapshot,
-} from './liveTransport';
+  getPlaybackSnapshot,
+  getSourceTimeSeconds,
+} from './usecases/playbackPreview.usecase';
+import {
+  PAUSED_SYNC_THRESHOLD_SECONDS,
+  PLAYING_RESYNC_THRESHOLD_SECONDS,
+  type PlaybackPreviewState,
+  type PlaybackTimelineEntry,
+  type SyncVideoOptions,
+} from './usecases/playbackTypes.usecase';
+import type { LiveTransportSnapshot } from './liveTransport';
+import type { PlaybackMediaSample } from './usecases/playbackClock.usecase';
 
-const PLAYING_RESYNC_THRESHOLD_SECONDS = 0.75;
-const PAUSED_SYNC_THRESHOLD_SECONDS = 0.04;
-const CLIP_END_EPSILON_MS = 18;
+// Compatibility surface: consumers (`useEditorPlayback`, `VideoPlayerPanel`)
+// keep importing these from the hook module.
+export type { PlaybackPreviewState, PlaybackTimelineEntry, SyncVideoOptions };
+export { getPlaybackPreviewState } from './usecases/playbackPreview.usecase';
 
 function syncMediaTime(element: HTMLMediaElement, expectedTime: number, maxDriftSeconds: number) {
   try {
@@ -21,71 +41,6 @@ function syncMediaTime(element: HTMLMediaElement, expectedTime: number, maxDrift
   } catch {
     return false;
   }
-}
-
-export interface PlaybackTimelineEntry {
-  clip: TimelineClip;
-  asset: EditorAsset;
-  trackOrder: number;
-}
-
-export interface PlaybackPreviewState {
-  previewAsset: EditorAsset | null;
-  hasActiveVideo: boolean;
-}
-
-interface PlaybackSnapshot extends PlaybackPreviewState {
-  activeVideoEntry: PlaybackTimelineEntry | null;
-}
-
-interface SyncVideoOptions {
-  playing: boolean;
-  previewMuted: boolean;
-  previewVolume: number;
-  forceSeek?: boolean;
-  scrubbing?: boolean;
-}
-
-export function getPlaybackPreviewState(
-  playbackEntries: PlaybackTimelineEntry[],
-  playheadMs: number,
-): PlaybackPreviewState {
-  const snapshot = getPlaybackSnapshot(playbackEntries, playheadMs);
-  return {
-    previewAsset: snapshot.previewAsset,
-    hasActiveVideo: snapshot.hasActiveVideo,
-  };
-}
-
-function getPlaybackSnapshot(
-  playbackEntries: PlaybackTimelineEntry[],
-  playheadMs: number,
-): PlaybackSnapshot {
-  let activeVideoEntry: PlaybackTimelineEntry | null = null;
-
-  for (const entry of playbackEntries) {
-    if (playheadMs < entry.clip.startMs || playheadMs >= clipEndMs(entry.clip)) {
-      continue;
-    }
-
-    if (entry.asset.hasVideo && (!activeVideoEntry || entry.trackOrder > activeVideoEntry.trackOrder)) {
-      activeVideoEntry = entry;
-    }
-  }
-
-  return {
-    activeVideoEntry,
-    previewAsset: activeVideoEntry?.asset ?? null,
-    hasActiveVideo: Boolean(activeVideoEntry?.asset.url),
-  };
-}
-
-function getSourceTimeSeconds(entry: PlaybackTimelineEntry, playheadMs: number) {
-  return (entry.clip.inPointMs + (playheadMs - entry.clip.startMs)) / 1000;
-}
-
-function getPlayheadMsFromSourceTime(entry: PlaybackTimelineEntry, sourceTimeSeconds: number) {
-  return entry.clip.startMs + ((sourceTimeSeconds * 1000) - entry.clip.inPointMs);
 }
 
 interface UsePlaybackControllerArgs {
@@ -111,14 +66,6 @@ export function usePlaybackController({
   onTransportUpdate,
   onPreviewChange,
 }: UsePlaybackControllerArgs) {
-  const gapAnchorRef = useRef<{ originPlayheadMs: number; startedAt: number } | null>(null);
-  const livePlayheadMsRef = useRef(playheadMs);
-  const lastPreviewKeyRef = useRef<string>('');
-  const pendingPausedVideoSeekRef = useRef<{
-    clipId: string;
-    assetUrl: string;
-    expectedTime: number;
-  } | null>(null);
   const latestStateRef = useRef({
     isPlaying,
     playheadMs,
@@ -143,16 +90,39 @@ export function usePlaybackController({
     };
   }, [isPlaying, onPreviewChange, onTransportUpdate, playbackEntries, playheadMs, previewMuted, previewVolume, timelineDurationMs]);
 
-  const emitPreviewState = useCallback((previewState: PlaybackPreviewState) => {
-    const { onPreviewChange: handlePreviewChange } = latestStateRef.current;
-    const nextKey = `${previewState.hasActiveVideo ? 'video' : 'placeholder'}:${previewState.previewAsset?.id ?? 'none'}`;
-    if (lastPreviewKeyRef.current === nextKey) {
-      return;
-    }
+  const pendingPausedVideoSeekRef = useRef<{
+    clipId: string;
+    assetUrl: string;
+    expectedTime: number;
+  } | null>(null);
 
-    lastPreviewKeyRef.current = nextKey;
-    handlePreviewChange?.(previewState);
-  }, []);
+  const serviceRef = useRef<PlaybackService | null>(null);
+  if (serviceRef.current === null) {
+    const basePorts = defaultPlaybackPorts();
+    const ports: PlaybackPorts = {
+      ...basePorts,
+      getState: () => {
+        const current = latestStateRef.current;
+        return {
+          isPlaying: current.isPlaying,
+          playheadMs: current.playheadMs,
+          timelineDurationMs: current.timelineDurationMs,
+          previewVolume: current.previewVolume,
+          previewMuted: current.previewMuted,
+          playbackEntries: current.playbackEntries,
+        };
+      },
+      transport: {
+        onTransportUpdate: (transport) => {
+          latestStateRef.current.onTransportUpdate?.(transport);
+        },
+        onPreviewChange: (previewState) => {
+          latestStateRef.current.onPreviewChange?.(previewState);
+        },
+      },
+    };
+    serviceRef.current = createPlaybackService(ports, playheadMs);
+  }
 
   const flushPendingPausedVideoSeek = useCallback(() => {
     const element = videoRef.current;
@@ -304,163 +274,106 @@ export function usePlaybackController({
       element.pause();
       return true;
     },
-    [videoRef],
+    [flushPendingPausedVideoSeek, videoRef],
   );
 
-  const emitTransportState = React.useEffectEvent((targetPlayheadMs: number, transportMode: LiveTransportSnapshot['mode']) => {
-    const {
-      timelineDurationMs: currentTimelineDurationMs,
-      playbackEntries: currentPlaybackEntries,
-      onTransportUpdate: handleTransportUpdate,
-    } = latestStateRef.current;
-    const boundedPlayheadMs = clamp(targetPlayheadMs, 0, currentTimelineDurationMs);
-    const snapshot = getPlaybackSnapshot(currentPlaybackEntries, boundedPlayheadMs);
-
-    livePlayheadMsRef.current = boundedPlayheadMs;
-    handleTransportUpdate?.(buildLiveTransportSnapshot(boundedPlayheadMs, transportMode));
-    emitPreviewState({
-      previewAsset: snapshot.previewAsset,
-      hasActiveVideo: snapshot.hasActiveVideo,
-    });
-    return {
-      boundedPlayheadMs,
-      snapshot,
-    };
-  });
-
-  const syncTransport = React.useEffectEvent((targetPlayheadMs: number, options: SyncVideoOptions) => {
-    const {
-      previewMuted: isPreviewMuted,
-      previewVolume: currentPreviewVolume,
-    } = latestStateRef.current;
-    const nextOptions = {
-      ...options,
-      previewMuted: isPreviewMuted,
-      previewVolume: currentPreviewVolume,
-    } satisfies SyncVideoOptions;
-    const result = emitTransportState(
-      targetPlayheadMs,
-      resolveLiveTransportMode(nextOptions.playing, nextOptions.scrubbing),
-    );
-    syncVideoElement(
-      result.snapshot.activeVideoEntry,
-      result.boundedPlayheadMs,
-      nextOptions,
-    );
-    return result;
-  });
-
-  const finishPlayback = (finalPlayheadMs: number) => {
-    const { playheadMs: currentPlayheadMs, timelineDurationMs: currentTimelineDurationMs, isPlaying: currentlyPlaying } = latestStateRef.current;
-    const committedPlayheadMs = clamp(livePlayheadMsRef.current, 0, currentTimelineDurationMs);
-    const boundedPlayheadMs = clamp(finalPlayheadMs ?? committedPlayheadMs, 0, currentTimelineDurationMs);
-    gapAnchorRef.current = null;
-    syncTransport(boundedPlayheadMs, {
-      playing: false,
-      previewMuted: true,
-      previewVolume: 0,
-    });
-
-    if (Math.abs(currentPlayheadMs - boundedPlayheadMs) >= 1) {
-      useEditorStore.getState().setPlayhead(boundedPlayheadMs);
-    }
-
-    if (currentlyPlaying) {
-      useEditorStore.getState().setPlaying(false);
-    }
-
-    return boundedPlayheadMs;
-  };
-
-  const stopPlayback = () => {
-    const { timelineDurationMs: currentTimelineDurationMs } = latestStateRef.current;
-    finishPlayback(clamp(livePlayheadMsRef.current, 0, currentTimelineDurationMs));
-  };
-
-  const seekTo = (nextPlayheadMs: number, preservePlayback = false, commit = true) => {
-    const {
-      isPlaying: currentlyPlaying,
-      playheadMs: currentPlayheadMs,
-      timelineDurationMs: currentTimelineDurationMs,
-    } = latestStateRef.current;
-    const boundedPlayheadMs = clamp(nextPlayheadMs, 0, currentTimelineDurationMs);
-    const continuePlayback = preservePlayback && currentlyPlaying;
-    const result = syncTransport(boundedPlayheadMs, {
-      playing: continuePlayback,
-      previewMuted: true,
-      previewVolume: 0,
-      forceSeek: true,
-      scrubbing: !commit && !continuePlayback,
-    });
-
-    if (commit && Math.abs(currentPlayheadMs - boundedPlayheadMs) >= 1) {
-      useEditorStore.getState().setPlayhead(boundedPlayheadMs);
-    }
-
-    if (continuePlayback) {
-      gapAnchorRef.current = result.snapshot.activeVideoEntry
-        ? null
-        : {
-            originPlayheadMs: boundedPlayheadMs,
-            startedAt: performance.now(),
-          };
+  const syncDomToService = useCallback((syncOptions: SyncVideoOptions) => {
+    const service = serviceRef.current;
+    if (!service) {
       return;
     }
+    const current = latestStateRef.current;
+    const livePlayheadMs = service.getLivePlayheadMs();
+    const snapshot = getPlaybackSnapshot(current.playbackEntries, livePlayheadMs);
+    syncVideoElement(snapshot.activeVideoEntry, livePlayheadMs, syncOptions);
+  }, [syncVideoElement]);
 
-    gapAnchorRef.current = null;
-    if (currentlyPlaying) {
-      useEditorStore.getState().setPlaying(false);
-    }
-  };
-
-  const togglePlay = () => {
-    const {
-      isPlaying: currentlyPlaying,
-      playheadMs: currentPlayheadMs,
-      timelineDurationMs: currentTimelineDurationMs,
-    } = latestStateRef.current;
-
-    if (currentTimelineDurationMs === 0) {
+  const togglePlay = useCallback(() => {
+    const service = serviceRef.current;
+    if (!service) {
       return;
     }
-
-    if (currentlyPlaying) {
-      stopPlayback();
+    const result = service.togglePlay();
+    if (!result.ok || result.value.kind === 'noop-empty-timeline') {
       return;
     }
-
-    const originPlayheadMs = livePlayheadMsRef.current >= currentTimelineDurationMs ? 0 : livePlayheadMsRef.current;
-    const result = syncTransport(originPlayheadMs, {
+    const current = latestStateRef.current;
+    if (result.value.kind === 'stopped') {
+      syncDomToService({
+        playing: false,
+        previewMuted: current.previewMuted,
+        previewVolume: current.previewVolume,
+      });
+      return;
+    }
+    syncDomToService({
       playing: true,
-      previewMuted: true,
-      previewVolume: 0,
+      previewMuted: current.previewMuted,
+      previewVolume: current.previewVolume,
       forceSeek: true,
     });
+  }, [syncDomToService]);
 
-    if (Math.abs(originPlayheadMs - currentPlayheadMs) >= 1) {
-      useEditorStore.getState().setPlayhead(originPlayheadMs);
-    }
-
-    gapAnchorRef.current = result.snapshot.activeVideoEntry
-      ? null
-      : {
-          originPlayheadMs,
-          startedAt: performance.now(),
-        };
-
-    if (!currentlyPlaying) {
-      useEditorStore.getState().setPlaying(true);
-    }
-  };
-
-  const seekBy = (deltaMs: number) => {
-    const { isPlaying: currentlyPlaying, timelineDurationMs: currentTimelineDurationMs } = latestStateRef.current;
-    if (currentTimelineDurationMs === 0) {
+  const seekTo = useCallback((nextPlayheadMs: number, preservePlayback = false, commit = true) => {
+    const service = serviceRef.current;
+    if (!service) {
       return;
     }
+    const result = service.seekTo(nextPlayheadMs, preservePlayback, commit);
+    if (!result.ok) {
+      return;
+    }
+    const current = latestStateRef.current;
+    syncDomToService({
+      playing: result.value.continuePlayback,
+      previewMuted: current.previewMuted,
+      previewVolume: current.previewVolume,
+      forceSeek: true,
+      scrubbing: !commit && !result.value.continuePlayback,
+    });
+  }, [syncDomToService]);
 
-    seekTo(livePlayheadMsRef.current + deltaMs, currentlyPlaying);
-  };
+  const seekBy = useCallback((deltaMs: number) => {
+    const service = serviceRef.current;
+    if (!service) {
+      return;
+    }
+    const result = service.seekBy(deltaMs);
+    if (!result.ok) {
+      return;
+    }
+    const outcome = result.value;
+    // `seekBy` routes through `seekTo`, so the only `kind`-carrying outcome
+    // is the empty-timeline no-op; anything else is a `SeekOutcome`.
+    if ('kind' in outcome) {
+      return;
+    }
+    const current = latestStateRef.current;
+    syncDomToService({
+      playing: outcome.continuePlayback,
+      previewMuted: current.previewMuted,
+      previewVolume: current.previewVolume,
+      forceSeek: true,
+      scrubbing: false,
+    });
+  }, [syncDomToService]);
+
+  const stopPlayback = useCallback(() => {
+    const service = serviceRef.current;
+    if (!service) {
+      return;
+    }
+    const result = service.stopPlayback();
+    if (!result.ok) {
+      return;
+    }
+    const current = latestStateRef.current;
+    syncDomToService({
+      playing: false,
+      previewMuted: current.previewMuted,
+      previewVolume: current.previewVolume,
+    });
+  }, [syncDomToService]);
 
   useEffect(() => {
     if (!isPlaying) {
@@ -470,110 +383,97 @@ export function usePlaybackController({
     let frameId = 0;
 
     const step = (timestamp: number) => {
-      const {
-        timelineDurationMs: currentTimelineDurationMs,
-        playbackEntries: currentPlaybackEntries,
-        previewMuted: isPreviewMuted,
-        previewVolume: currentPreviewVolume,
-      } = latestStateRef.current;
-      const currentPlayheadMs = clamp(livePlayheadMsRef.current, 0, currentTimelineDurationMs);
-      if (currentPlayheadMs >= currentTimelineDurationMs) {
-        finishPlayback(currentTimelineDurationMs);
+      const service = serviceRef.current;
+      if (!service) {
+        frameId = requestAnimationFrame(step);
         return;
       }
-
-      const snapshot = getPlaybackSnapshot(currentPlaybackEntries, currentPlayheadMs);
+      const current = latestStateRef.current;
+      const livePlayheadMs = service.getLivePlayheadMs();
+      const snapshot = getPlaybackSnapshot(current.playbackEntries, livePlayheadMs);
       if (!snapshot.activeVideoEntry || !snapshot.activeVideoEntry.asset.url) {
-        const gapAnchor = gapAnchorRef.current ?? {
-          originPlayheadMs: currentPlayheadMs,
-          startedAt: timestamp,
-        };
-        gapAnchorRef.current = gapAnchor;
-
-        const nextPlayheadMs = gapAnchor.originPlayheadMs + (timestamp - gapAnchor.startedAt);
-        if (nextPlayheadMs >= currentTimelineDurationMs) {
-          finishPlayback(currentTimelineDurationMs);
-          return;
+        const driven = service.stepClock(timestamp, {
+          hasElement: videoRef.current !== null,
+          videoReady: false,
+          readyState: 0,
+          seeking: false,
+          currentTime: Number.NaN,
+        });
+        if (driven === null && service.getLivePlayheadMs() >= current.timelineDurationMs) {
+          const finished = latestStateRef.current;
+          const finishedSnapshot = getPlaybackSnapshot(finished.playbackEntries, service.getLivePlayheadMs());
+          syncVideoElement(finishedSnapshot.activeVideoEntry, service.getLivePlayheadMs(), {
+            playing: false,
+            previewMuted: finished.previewMuted,
+            previewVolume: finished.previewVolume,
+          });
         }
-
-        emitTransportState(nextPlayheadMs, 'playing');
         frameId = requestAnimationFrame(step);
         return;
       }
 
-      gapAnchorRef.current = null;
-
-      const element = videoRef.current;
       const videoReady = syncVideoElement(
         snapshot.activeVideoEntry,
-        currentPlayheadMs,
+        livePlayheadMs,
         {
           playing: true,
-          previewMuted: isPreviewMuted,
-          previewVolume: currentPreviewVolume,
+          previewMuted: current.previewMuted,
+          previewVolume: current.previewVolume,
         },
       );
 
-      if (!element || !videoReady || element.readyState < 2 || element.seeking || !Number.isFinite(element.currentTime)) {
-        frameId = requestAnimationFrame(step);
-        return;
-      }
-
-      const currentClipEndMs = clipEndMs(snapshot.activeVideoEntry.clip);
-      const mediaDrivenPlayheadMs = clamp(
-        getPlayheadMsFromSourceTime(snapshot.activeVideoEntry, element.currentTime),
-        snapshot.activeVideoEntry.clip.startMs,
-        currentClipEndMs,
-      );
-      const reachedClipEnd = mediaDrivenPlayheadMs >= currentClipEndMs - CLIP_END_EPSILON_MS;
-      const nextTransport = emitTransportState(reachedClipEnd ? currentClipEndMs : mediaDrivenPlayheadMs, 'playing');
-
-      if (nextTransport.boundedPlayheadMs >= currentTimelineDurationMs) {
-        finishPlayback(currentTimelineDurationMs);
-        return;
-      }
-
-      if (reachedClipEnd && !nextTransport.snapshot.activeVideoEntry) {
-        element.pause();
-        gapAnchorRef.current = {
-          originPlayheadMs: nextTransport.boundedPlayheadMs,
-          startedAt: timestamp,
+      const element = videoRef.current;
+      const media: PlaybackMediaSample = element
+        ? {
+          hasElement: true,
+          videoReady,
+          readyState: element.readyState,
+          seeking: element.seeking,
+          currentTime: element.currentTime,
+        }
+        : {
+          hasElement: false,
+          videoReady,
+          readyState: 0,
+          seeking: false,
+          currentTime: Number.NaN,
         };
+      const driven = service.stepClock(timestamp, media);
+      if (driven && !driven.activeVideoEntry) {
+        videoRef.current?.pause();
       }
-
       frameId = requestAnimationFrame(step);
     };
 
     frameId = requestAnimationFrame(step);
     return () => cancelAnimationFrame(frameId);
-  }, [finishPlayback, isPlaying, syncVideoElement, videoRef]);
+  }, [isPlaying, syncVideoElement, videoRef]);
 
   useEffect(() => {
     if (isPlaying) {
       return;
     }
 
-    gapAnchorRef.current = null;
-    syncTransport(playheadMs, {
-      playing: false,
-      previewMuted: true,
-      previewVolume: 0,
-      forceSeek: false,
-    });
-  }, [isPlaying, playheadMs, playbackEntries, previewMuted, previewVolume]);
+    const service = serviceRef.current;
+    if (!service) {
+      return;
+    }
+    const { syncOptions } = service.syncPausedTransport(playheadMs);
+    syncDomToService(syncOptions);
+  }, [isPlaying, playheadMs, playbackEntries, previewMuted, previewVolume, syncDomToService]);
 
   useEffect(() => {
     if (!isPlaying) {
       return;
     }
 
-    syncTransport(livePlayheadMsRef.current, {
-      playing: true,
-      previewMuted: true,
-      previewVolume: 0,
-      forceSeek: false,
-    });
-  }, [isPlaying, playbackEntries, previewMuted, previewVolume]);
+    const service = serviceRef.current;
+    if (!service) {
+      return;
+    }
+    const { syncOptions } = service.refreshPlayingTransport();
+    syncDomToService(syncOptions);
+  }, [isPlaying, playbackEntries, previewMuted, previewVolume, syncDomToService]);
 
   return {
     togglePlay,
