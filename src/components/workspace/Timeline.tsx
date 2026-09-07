@@ -1,4 +1,4 @@
-// src/components/timeline-panel/TimelinePanel.tsx
+// src/components/workspace/Timeline.tsx
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Film } from 'lucide-react';
 import {
@@ -14,11 +14,11 @@ import {
   pxToMs,
   type EditorFileState,
   type TimelineClip,
-} from '../../../modules/editor/domain/model';
-import type { LiveTransportStore } from '../../../modules/editor/application/liveTransport';
-import { useEditorStore } from '../../../modules/editor/application/store/store';
-import { editorWorkspaceTransport } from '../../../modules/editor/application/session/editorSessionSync';
-import styles from '../MainWorkspace.module.css';
+} from '../../modules/editor/domain/model';
+import type { LiveTransportStore } from '../../modules/editor/application/liveTransport';
+import { useEditorStore } from '../../modules/editor/application/store/store';
+import { editorWorkspaceTransport } from '../../modules/editor/application/editorSessionSync';
+import styles from './MainWorkspace.module.css';
 
 const RULER_STEP_CANDIDATES_MS = [1, 2, 5, 10, 20, 50, 100, 250, 500, 1000, 2000, 5000, 10000, 15000, 30000, 60000, 120000, 300000];
 const MIN_TIMELINE_PADDING_MS = 60000;

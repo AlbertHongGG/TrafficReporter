@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import type { EditorWorkspaceState, EditorFileState } from '../domain/model';
 import { useEditorStore } from './store/store';
-import { editorWorkspaceTransport } from './session/editorSessionSync';
+import { editorWorkspaceTransport } from './editorSessionSync';
 import { openPlateWindow, emitPlateWindowSession } from '../infrastructure/plateWindowApi';
 import { openAiPanelWindow, emitAiPanelWindowSession } from '../infrastructure/aiPanelApi';
 import { openExportWindow, syncExportWindowSession } from '../../export/infrastructure/exportApi';

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import type { TimelineClip } from '../../../modules/editor/domain/model';
-import { editorWorkspaceTransport } from '../../../modules/editor/application/session/editorSessionSync';
+import { editorWorkspaceTransport } from '../../../modules/editor/application/editorSessionSync';
 
 export interface UseWorkspaceHotkeysOptions {
   selectedClip: TimelineClip | null;

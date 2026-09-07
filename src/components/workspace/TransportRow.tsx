@@ -9,10 +9,10 @@ import {
   Volume2,
   VolumeX,
 } from 'lucide-react';
-import { useEditorStore } from '../../../modules/editor/application/store/store';
-import { editorWorkspaceTransport } from '../../../modules/editor/application/session/editorSessionSync';
-import { formatRulerLabel, getTimelineDuration } from '../../../modules/editor/domain/model';
-import styles from '../MainWorkspace.module.css';
+import { useEditorStore } from '../../modules/editor/application/store/store';
+import { editorWorkspaceTransport } from '../../modules/editor/application/editorSessionSync';
+import { formatRulerLabel, getTimelineDuration } from '../../modules/editor/domain/model';
+import styles from './MainWorkspace.module.css';
 
 interface TransportRowProps {
   currentTimecodeRef: React.RefObject<HTMLSpanElement | null>;

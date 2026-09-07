@@ -23,7 +23,7 @@ import {
   scanLprTargets,
 } from '../../infrastructure/lprApi';
 import { IpcCommandError } from '../../../../infrastructure/ipc-unwrap';
-import { EDITOR_ENV } from '../../config/editorEnv';
+import { EDITOR_ENV } from '../../editorEnv';
 import { useEditorStore } from '../store/store';
 import { getActiveFile } from '../../domain/model';
 import { getLprSessionByFileId } from '../../domain/analysisState';

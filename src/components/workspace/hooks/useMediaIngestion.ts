@@ -3,7 +3,7 @@ import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { open } from '@tauri-apps/plugin-dialog';
 import type { EditorAsset } from '../../../modules/editor/domain/model';
 import { useEditorStore } from '../../../modules/editor/application/store/store';
-import { editorWorkspaceTransport } from '../../../modules/editor/application/session/editorSessionSync';
+import { editorWorkspaceTransport } from '../../../modules/editor/application/editorSessionSync';
 import { buildEditorAsset, isSupportedMediaPath } from '../../../modules/editor/infrastructure/mediaApi';
 import { createLogger, getErrorSummary, serializeError } from '../../../utils/logger';
 

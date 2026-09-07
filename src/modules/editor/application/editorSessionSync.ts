@@ -3,7 +3,7 @@ import { listen } from '@tauri-apps/api/event';
 import type {
   EditorFileState as RustEditorFileState,
   EditorWorkspaceState as RustEditorWorkspaceState,
-} from '../../../../domain/ipc/bindings';
+} from '../../../domain/ipc/bindings';
 import type {
   AudioBitrateKbps,
   EditorAsset,
@@ -12,10 +12,10 @@ import type {
   EditorWorkspaceState,
   RenderProfile,
   VideoQuality,
-} from '../../domain/model';
-import { DEFAULT_ZOOM } from '../../domain/model';
-import type { ExportFormat } from '../../../export/domain/model';
-import { useEditorStore } from '../store/store';
+} from '../domain/model';
+import { DEFAULT_ZOOM } from '../domain/model';
+import type { ExportFormat } from '../../export/domain/model';
+import { useEditorStore } from './store/store';
 import {
   fetchAppState,
   notifyWorkspaceAddFiles,
@@ -28,7 +28,7 @@ import {
   notifyWorkspaceSplitClip,
   notifyWorkspaceTrimClipEnd,
   notifyWorkspaceTrimClipStart,
-} from '../../infrastructure/workspaceApi';
+} from '../infrastructure/workspaceApi';
 
 /**
  * IPC snapshot → frontend workspace mapper (Blueprint §1.2, Phase 1-D).

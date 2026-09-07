@@ -3,12 +3,12 @@ import { AlertCircle } from 'lucide-react';
 import styles from './MainWorkspace.module.css';
 
 import { useEditorStore } from '../../modules/editor/application/store/store';
-import { useEditorSessionSync } from '../../modules/editor/application/session/editorSessionSync';
-import { Toolbar } from './toolbar/Toolbar';
-import { MediaBinPanel } from './media-bin/MediaBinPanel';
+import { useEditorSessionSync } from '../../modules/editor/application/editorSessionSync';
+import { Toolbar } from './Toolbar';
+import { MediaBinPanel } from './MediaBinPanel';
 import { VideoPlayerPanel } from './video-player/VideoPlayerPanel';
-import { TransportRow } from './transport-row/TransportRow';
-import { Timeline } from './timeline/Timeline';
+import { TransportRow } from './TransportRow';
+import { Timeline } from './Timeline';
 
 import { useEditorPlayback } from './hooks/useEditorPlayback';
 import { useMediaIngestion } from './hooks/useMediaIngestion';
