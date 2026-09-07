@@ -9,6 +9,7 @@ pub mod infrastructure;
 pub mod application;
 pub mod commands;
 pub mod ai;
+pub mod events;
 
 pub use commands::create_builder;
 
