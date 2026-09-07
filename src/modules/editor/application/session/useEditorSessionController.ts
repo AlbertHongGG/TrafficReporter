@@ -2,12 +2,97 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { listen } from '@tauri-apps/api/event';
 import {
   commands,
+  type EditorFileState as RustEditorFileState,
   type EditorWorkspaceState as RustEditorWorkspaceState,
   type RenderProfilePayload,
 } from '../../../../types/bindings';
-import type { EditorWorkspacePayload } from '../../domain/model';
+import type {
+  AudioBitrateKbps,
+  EditorFilePayload,
+  EditorWorkspacePayload,
+  VideoQuality,
+} from '../../domain/model';
+import type { ExportFormat } from '../../../export/domain/model';
 import type { EditorAction } from '../editorReducer';
 import { createEditorSessionStoreState, reduceEditorSessionStoreState } from './sessionStore';
+
+/**
+ * IPC snapshot → frontend workspace mapper (Blueprint §1.2, Phase 1-D).
+ *
+ * The backend snapshot is a transport view: nullable-over-the-wire scalars,
+ * and — per the contract — its `analysis` carries only `lprRuntimeStatus`.
+ * Session maps (`lprSessionsByFileId` / `aiEvidenceSessionsByFileId`) are
+ * frontend-owned (see `domain/analysisState.ts`) and are never read off the
+ * wire, so no `Value`/`any` session state crosses IPC in either direction.
+ * No assertions; wire-nulls resolve to domain defaults.
+ */
+function toExportFormat(format: string): ExportFormat {
+  return format === 'mkv' ? 'mkv' : 'mp4';
+}
+
+function toVideoQuality(value: string | null | undefined): VideoQuality | undefined {
+  switch (value) {
+    case 'source':
+    case '2160p':
+    case '1440p':
+    case '1080p':
+    case '720p':
+    case '480p':
+      return value;
+    default:
+      return undefined;
+  }
+}
+
+function toAudioBitrateKbps(value: number | null | undefined): AudioBitrateKbps | undefined {
+  switch (value) {
+    case 320:
+    case 256:
+    case 192:
+    case 128:
+    case 96:
+      return value;
+    default:
+      return undefined;
+  }
+}
+
+function toEditorFilePayload(remoteFile: RustEditorFileState): EditorFilePayload {
+  return {
+    id: remoteFile.id,
+    asset: remoteFile.asset,
+    track: remoteFile.track,
+    clips: remoteFile.clips.map((clip) => ({
+      id: clip.id,
+      assetId: clip.assetId,
+      trackId: clip.trackId,
+      startMs: clip.startMs ?? 0,
+      inPointMs: clip.inPointMs ?? 0,
+      outPointMs: clip.outPointMs ?? 0,
+      muted: clip.muted,
+    })),
+    renderProfile: {
+      format: toExportFormat(remoteFile.renderProfile.format),
+      fps: remoteFile.renderProfile.fps,
+      videoQuality: toVideoQuality(remoteFile.renderProfile.videoQuality),
+      audioBitrateKbps: toAudioBitrateKbps(remoteFile.renderProfile.audioBitrateKbps),
+      compressionMode: remoteFile.renderProfile.compressionMode,
+    },
+  };
+}
+
+function toEditorWorkspacePayload(remote: RustEditorWorkspaceState): EditorWorkspacePayload {
+  return {
+    workspaceName: remote.workspaceName,
+    activeFileId: remote.activeFileId,
+    files: remote.files.map(toEditorFilePayload),
+    analysis: {
+      lprRuntimeStatus: remote.analysis.lprRuntimeStatus,
+      lprSessionsByFileId: {},
+      aiEvidenceSessionsByFileId: {},
+    },
+  };
+}
 
 export function useEditorSessionController() {
   const [session, setSession] = useState(() => createEditorSessionStoreState());
@@ -23,7 +108,7 @@ export function useEditorSessionController() {
         if (res.status === 'ok') {
           setSession((currentSession) => reduceEditorSessionStoreState(currentSession, {
             type: 'sync-workspace-state',
-            workspace: res.data as unknown as EditorWorkspacePayload,
+            workspace: toEditorWorkspacePayload(res.data),
           }));
         } else {
           console.error('Failed to get initial app state from Rust:', res.error);
@@ -37,7 +122,7 @@ export function useEditorSessionController() {
     const unlisten = listen<RustEditorWorkspaceState>('editor/state-updated', (event) => {
       setSession((currentSession) => reduceEditorSessionStoreState(currentSession, {
         type: 'sync-workspace-state',
-        workspace: event.payload as unknown as EditorWorkspacePayload,
+        workspace: toEditorWorkspacePayload(event.payload),
       }));
     });
 

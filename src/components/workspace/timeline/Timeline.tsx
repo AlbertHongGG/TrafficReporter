@@ -16,6 +16,7 @@ import {
   type TimelineClip,
 } from '../../../modules/editor/domain/model';
 import type { LiveTransportStore } from '../../../modules/editor/application/liveTransport';
+import type { EditorAction } from '../../../modules/editor/application/editorReducer';
 import styles from '../MainWorkspace.module.css';
 
 const RULER_STEP_CANDIDATES_MS = [1, 2, 5, 10, 20, 50, 100, 250, 500, 1000, 2000, 5000, 10000, 15000, 30000, 60000, 120000, 300000];
@@ -46,7 +47,7 @@ export interface TimelinePanelProps {
   activeClips: TimelineClip[];
   timelineDurationMs: number;
   liveTransportStore: LiveTransportStore;
-  dispatch: any;
+  dispatch: React.Dispatch<EditorAction>;
   seekTo: (timeMs: number, preservePlayback: boolean, commit?: boolean) => void;
   stopPlayback: () => void;
   onScrubStateChange: (isScrubbing: boolean) => void;

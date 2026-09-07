@@ -1,4 +1,5 @@
 import { commands } from '../../../types/bindings';
+import { unwrapCommand } from '../../../infrastructure/ipc-unwrap';
 import { desktopWindowManager } from '../../../platform/desktop';
 import {
   AI_PANEL_ACTION_EVENT,
@@ -26,7 +27,8 @@ export function sendAiPanelAction(action: AiPanelAction) {
 }
 
 export async function saveGeneratedMediaAsset(sourcePath: string, outputPath: string): Promise<void> {
-  const res = await commands.saveGeneratedMediaAsset(sourcePath, outputPath);
-  if (res.status === 'ok') return;
-  throw new Error(res.error);
+  await unwrapCommand(
+    commands.saveGeneratedMediaAsset(sourcePath, outputPath),
+    'save_generated_media_asset',
+  );
 }

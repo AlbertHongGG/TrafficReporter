@@ -7,13 +7,27 @@ import type {
   LprOcrInput,
   LprReviewStatus,
   LprSampleSelection,
+  LprSequenceSummary,
   LprTemporalSupport,
+  LprTrackingSummary,
   LprTrackingTier,
   LprVehicleKind,
 } from '../../../types/bindings';
 import type { TimelineIntervalSelection, VideoMarkerRect } from './model';
 import { defaultLprAnalysisProfileId, type LprAnalysisProfileId } from './lprProfiles';
 import type { OutputCompressionMode } from '../../export/domain/model';
+
+/**
+ * Unstructured cross-process diagnostics (Blueprint §1.2).
+ *
+ * Specta emits these payloads as `any` because the backend holds them as
+ * schemaless JSON. The frontend converges every such field onto this single
+ * domain-wide type instead of scattering `any`. Consumers must narrow via
+ * `unknown`-safe helpers (see `asRecord`/`asNumber` in the LPR panel).
+ * Runtime boundary validation is Phase 2 (zod) scope — this type adds no
+ * runtime checks and changes no behavior.
+ */
+export type Diagnostics = Record<string, unknown>;
 
 export interface LprReviewState {
   status: LprReviewStatus;
@@ -78,7 +92,7 @@ export interface LprTrackedRegion {
   box: VideoMarkerRect;
   confidence: number;
   className: string;
-  diagnostics?: any | null;
+  diagnostics?: Diagnostics | null;
 }
 
 export interface LprTargetTrack {
@@ -87,7 +101,7 @@ export interface LprTargetTrack {
   label: string;
   confidence: number;
   frames: LprTrackedRegion[];
-  diagnostics?: any | null;
+  diagnostics?: Diagnostics | null;
 }
 
 export interface LprPlateCandidate {
@@ -99,7 +113,7 @@ export interface LprPlateCandidate {
   countryCode: string | null;
   box: VideoMarkerRect | null;
   quality: LprQualityMetrics | null;
-  diagnostics?: any | null;
+  diagnostics?: Diagnostics | null;
 }
 
 export interface LprFrameSample {
@@ -111,7 +125,7 @@ export interface LprFrameSample {
   selection?: LprSampleSelection | null;
   ocrInput?: LprOcrInput | null;
   temporalSupport?: LprTemporalSupport | null;
-  diagnostics?: any | null;
+  diagnostics?: Diagnostics | null;
   imagePath?: string | null;
   candidates: LprPlateCandidate[];
 }
@@ -208,7 +222,7 @@ export interface LprFrameAnalysisResponse {
   decision: LprDecisionTrace | null;
   runtime: LprRuntimeStatus;
   jobStatus: LprJobStatus | null;
-  diagnostics?: any | null;
+  diagnostics?: Diagnostics | null;
 }
 
 export interface LprIntervalAnalysisRequest {
@@ -241,9 +255,9 @@ export interface LprIntervalAnalysisResponse {
   summary: string;
   runtime: LprRuntimeStatus;
   jobStatus: LprJobStatus | null;
-  tracking?: any | null;
-  sequence?: any | null;
-  diagnostics?: any | null;
+  tracking?: LprTrackingSummary | null;
+  sequence?: LprSequenceSummary | null;
+  diagnostics?: Diagnostics | null;
 }
 
 export interface LprEvidenceExportRequest {

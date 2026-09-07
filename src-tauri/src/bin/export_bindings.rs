@@ -1,8 +1,8 @@
 fn main() {
     let out_path = if std::path::Path::new("src-tauri").exists() {
-        "src/types/bindings.ts"
+        "src/domain/ipc/bindings.ts"
     } else {
-        "../src/types/bindings.ts"
+        "../src/domain/ipc/bindings.ts"
     };
 
     app_lib::create_builder()

@@ -1,5 +1,6 @@
 ﻿// @ts-nocheck
 import React from 'react';
+import type { LprPlateCandidate } from '../../modules/editor/domain/lprState';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Clock, LocateFixed, Search, LayoutTemplate, Database, AlertCircle, FileOutput, ArrowDownToLine, Zap, Image, Maximize2, Minimize2, MousePointer2 } from 'lucide-react';
 import styles from './LprWindow.module.css';
@@ -132,7 +133,7 @@ export const LprDataViewer = ({
                                 </div>
                                 {reasonTokens.length > 0 && (
                                   <div className={styles.evidenceReasonRow}>
-                                    {reasonTokens.map((reason: any) => (
+                                    {reasonTokens.map((reason: string) => (
                                       <span key={`${entry.sample.id}-${reason}`} className={styles.evidenceReasonChip}>{reason}</span>
                                     ))}
                                   </div>
@@ -194,7 +195,7 @@ export const LprDataViewer = ({
                                         <span className={styles.evidenceMetaTitle}>Candidates</span>
                                       </div>
                                       <div className={styles.evidenceCandidateList}>
-                                        {evidenceCandidates(entry.sample).map((candidate: any, idx: number) => {
+                                        {evidenceCandidates(entry.sample).map((candidate: LprPlateCandidate, idx: number) => {
                                           const isTop = idx === 0;
                                           const percent = formatConfidence(candidate.confidence);
                                           return (

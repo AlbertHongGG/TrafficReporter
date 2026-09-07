@@ -1,4 +1,4 @@
-import type { OutputCompressionModePayload } from '../../../types/bindings';
+import type { OutputCompressionModePayload, VideoMarkerRectPayload } from '../../../domain/ipc/bindings';
 
 export type ExportFormat = 'mp4' | 'mkv';
 export type VideoQuality = 'source' | '2160p' | '1440p' | '1080p' | '720p' | '480p';
@@ -6,12 +6,11 @@ export type AudioBitrateKbps = 320 | 256 | 192 | 128 | 96;
 export type OutputCompressionMode = OutputCompressionModePayload;
 export const DEFAULT_OUTPUT_COMPRESSION_MODE: OutputCompressionMode = 'standard';
 
-export interface VideoMarkerRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
+// Lifted from the IPC single source (bindings payload is nullable over the wire;
+// the frontend domain holds resolved values).
+export type VideoMarkerRect = {
+  [K in keyof VideoMarkerRectPayload]: NonNullable<VideoMarkerRectPayload[K]>;
+};
 
 export interface RenderProfile {
   format: ExportFormat;

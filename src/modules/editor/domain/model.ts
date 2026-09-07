@@ -6,7 +6,11 @@ import type {
   LprLegibilityLevel,
   LprTrackingTier,
   LprVehicleKind,
-} from '../../../types/bindings';
+  TimelineClipPayload,
+  TimelineIntervalSelectionPayload,
+  TimelineTrackPayload,
+  VideoMarkerRectPayload,
+} from '../../../domain/ipc/bindings';
 import type {
   AudioBitrateKbps,
   ExportFormat,
@@ -16,34 +20,23 @@ import type {
 } from '../../export/domain/model';
 import type { LprTargetTrack, LprTrackedRegion } from './lprState';
 
-// Core Timeline & Media Entities
-export interface VideoMarkerRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
+// Core Timeline & Media Entities — lifted from the IPC single source
+// (bindings payloads are nullable over the wire; the frontend domain holds resolved values).
+export type VideoMarkerRect = {
+  [K in keyof VideoMarkerRectPayload]: NonNullable<VideoMarkerRectPayload[K]>;
+};
 
-export interface TimelineIntervalSelection {
-  startMs: number;
-  endMs: number;
-}
+export type TimelineIntervalSelection = {
+  [K in keyof TimelineIntervalSelectionPayload]: NonNullable<TimelineIntervalSelectionPayload[K]>;
+};
 
-export interface TimelineClip {
-  id: string;
-  assetId: string;
-  trackId: string;
-  startMs: number;
-  inPointMs: number;
-  outPointMs: number;
-  muted: boolean;
-}
+export type TimelineClip = {
+  [K in keyof TimelineClipPayload]: NonNullable<TimelineClipPayload[K]>;
+};
 
-export interface TimelineTrack {
-  id: string;
-  name: string;
-  order: number;
-}
+export type TimelineTrack = {
+  [K in keyof TimelineTrackPayload]: NonNullable<TimelineTrackPayload[K]>;
+};
 
 export interface MediaProbeResult {
   durationMs: number;

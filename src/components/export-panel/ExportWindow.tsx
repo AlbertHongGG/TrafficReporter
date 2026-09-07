@@ -227,7 +227,7 @@ export const ExportWindow: React.FC = () => {
       removeSessionListener = unlisten;
     });
 
-    void requestExportWindowSession().catch((error: any) => {
+    void requestExportWindowSession().catch((error: unknown) => {
       if (disposed) {
         return;
       }
@@ -435,7 +435,7 @@ export const ExportWindow: React.FC = () => {
                   <div className={styles.selectWrapper}>
                     <Select
                       value={videoQuality}
-                      onChange={(value: any) => setVideoQuality(normalizeVideoQuality(snapshot, value as VideoQuality))}
+                      onChange={(value: string) => setVideoQuality(normalizeVideoQuality(snapshot, value as VideoQuality))}
                       options={videoQualityOptions.map((option) => ({
                         value: option.value,
                         label: option.label,
@@ -449,7 +449,7 @@ export const ExportWindow: React.FC = () => {
                   <div className={styles.selectWrapper}>
                     <Select
                       value={audioBitrateKbps.toString()}
-                      onChange={(val: any) => setAudioBitrateKbps(Number(val) as AudioBitrateKbps)}
+                      onChange={(val: string) => setAudioBitrateKbps(Number(val) as AudioBitrateKbps)}
                       disabled={!usesAudioBitrate}
                       options={AUDIO_BITRATE_OPTIONS.map((opt) => ({
                         value: opt.toString(),

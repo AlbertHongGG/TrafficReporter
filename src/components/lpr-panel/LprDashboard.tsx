@@ -137,7 +137,7 @@ export const LprDashboard = ({
             ariaLabel="Analysis profile"
             value={lprState.selectedAnalysisProfileId}
             onChange={(analysisProfileId: string) => void sendAction({ type: 'set-analysis-profile', analysisProfileId })}
-            options={analysisProfiles.map((profile: any) => ({
+            options={analysisProfiles.map((profile) => ({
               value: profile.id,
               label: profile.label,
               description: compactProfileDescription(profile.id, profile.description),

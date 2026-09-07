@@ -1,5 +1,11 @@
 import { commands } from '../../../types/bindings';
-import type { ExportSnapshot, TimelineExportRequest } from '../application/exportTypes';
+import type {
+  ExportSnapshotPayload,
+  RenderProfilePayload,
+  TimelineExportRequest as TimelineExportRequestPayload,
+} from '../../../types/bindings';
+import { unwrapCommand } from '../../../infrastructure/ipc-unwrap';
+import type { ExportSnapshot, RenderProfile, TimelineExportRequest } from '../application/exportTypes';
 import { createLogger } from '../../../utils/logger';
 import { desktopWindowManager } from '../../../platform/desktop';
 import {
@@ -10,10 +16,51 @@ import {
 
 const log = createLogger('ExportWindowApi');
 
+function toRenderProfilePayload(profile: RenderProfile): RenderProfilePayload {
+  return {
+    format: profile.format,
+    fps: profile.fps,
+    videoQuality: profile.videoQuality ?? null,
+    audioBitrateKbps: profile.audioBitrateKbps ?? null,
+    compressionMode: profile.compressionMode,
+  };
+}
+
+function toExportSnapshotPayload(snapshot: ExportSnapshot): ExportSnapshotPayload {
+  return {
+    fileId: snapshot.fileId,
+    fileName: snapshot.fileName,
+    workspaceName: snapshot.workspaceName,
+    suggestedName: snapshot.suggestedName,
+    timelineDurationMs: snapshot.timelineDurationMs,
+    hasVideo: snapshot.hasVideo,
+    hasAudio: snapshot.hasAudio,
+    dominantWidth: snapshot.dominantWidth ?? null,
+    dominantHeight: snapshot.dominantHeight ?? null,
+    sources: snapshot.sources.map((source) => ({
+      ...source,
+      width: source.width ?? null,
+      height: source.height ?? null,
+    })),
+    tracks: snapshot.tracks,
+    clips: snapshot.clips,
+    renderProfile: toRenderProfilePayload(snapshot.renderProfile),
+  };
+}
+
+function toTimelineExportRequestPayload(request: TimelineExportRequest): TimelineExportRequestPayload {
+  return {
+    outputPath: request.outputPath,
+    profile: toRenderProfilePayload(request.profile),
+    snapshot: toExportSnapshotPayload(request.snapshot),
+  };
+}
+
 export async function processTimelineExport(request: TimelineExportRequest): Promise<void> {
-  const res = await commands.processTimelineExport(request as any);
-  if (res.status === 'ok') return;
-  throw new Error(res.error);
+  await unwrapCommand(
+    commands.processTimelineExport(toTimelineExportRequestPayload(request)),
+    'process_timeline_export',
+  );
 }
 
 export function syncExportWindowSession(snapshot: ExportSnapshot, revision = 0) {
