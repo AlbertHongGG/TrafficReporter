@@ -7,6 +7,7 @@
 import { commands } from '../../../types/bindings';
 import type { AiEvidenceRequestPayload } from '../../../types/bindings';
 import { unwrapCommand } from '../../../infrastructure/ipc-unwrap';
+import { parseAiEvidenceResponse } from './aiEvidenceSchemas';
 import type { AiEvidenceRequest, AiEvidenceResponse } from '../domain/aiEvidenceState';
 import { mapAiEvidenceResponsePayload } from './lprPayloadMappers';
 
@@ -30,9 +31,10 @@ function toAiEvidenceRequestPayload(request: AiEvidenceRequest): AiEvidenceReque
 }
 
 export async function analyzeAiEvidence(request: AiEvidenceRequest): Promise<AiEvidenceResponse> {
-  const response = await unwrapCommand(
+  const raw = await unwrapCommand(
     commands.analyzeAiEvidence(toAiEvidenceRequestPayload(request)),
     'analyze_ai_evidence',
   );
+  const response = parseAiEvidenceResponse('analyze_ai_evidence', raw);
   return mapAiEvidenceResponsePayload(response);
 }

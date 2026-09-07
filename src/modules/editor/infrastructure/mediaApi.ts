@@ -1,6 +1,7 @@
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { commands, type EditorAsset, type FrameExportRequest, type MediaProbePayload } from '../../../types/bindings';
 import { unwrapCommand } from '../../../infrastructure/ipc-unwrap';
+import { parseFrameExportResponse, parseMediaProbeResponse } from './mediaSchemas';
 import { basename, createId, extensionOf } from '../domain/model';
 
 const SUPPORTED_EXTENSIONS = new Set([
@@ -94,17 +95,19 @@ async function captureVideoThumbnail(url: string, durationMs: number) {
 }
 
 export async function probePath(path: string): Promise<MediaProbePayload> {
-  return unwrapCommand(commands.probeMediaSource(path), 'probe_media_source');
+  const raw = await unwrapCommand(commands.probeMediaSource(path), 'probe_media_source');
+  return parseMediaProbeResponse('probe_media_source', raw);
 }
 
 export async function exportFrameImage(request: FrameExportRequest): Promise<void> {
-  await unwrapCommand(
+  const raw = await unwrapCommand(
     commands.exportFrameImage({
       ...request,
       timeMs: Math.max(0, Math.round(request.timeMs ?? 0)),
     }),
     'export_frame_image',
   );
+  parseFrameExportResponse('export_frame_image', raw);
 }
 
 export async function buildEditorAsset(path: string): Promise<EditorAsset> {

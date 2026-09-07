@@ -5,6 +5,7 @@ import type {
   TimelineExportRequest as TimelineExportRequestPayload,
 } from '../../../types/bindings';
 import { unwrapCommand } from '../../../infrastructure/ipc-unwrap';
+import { parseTimelineExportResponse } from './exportSchemas';
 import type { ExportSnapshot, RenderProfile, TimelineExportRequest } from '../application/exportTypes';
 import { createLogger } from '../../../utils/logger';
 import { desktopWindowManager } from '../../../platform/desktop';
@@ -57,10 +58,11 @@ function toTimelineExportRequestPayload(request: TimelineExportRequest): Timelin
 }
 
 export async function processTimelineExport(request: TimelineExportRequest): Promise<void> {
-  await unwrapCommand(
+  const raw = await unwrapCommand(
     commands.processTimelineExport(toTimelineExportRequestPayload(request)),
     'process_timeline_export',
   );
+  parseTimelineExportResponse('process_timeline_export', raw);
 }
 
 export function syncExportWindowSession(snapshot: ExportSnapshot, revision = 0) {

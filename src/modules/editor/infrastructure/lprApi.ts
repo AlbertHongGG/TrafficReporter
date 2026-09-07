@@ -13,6 +13,14 @@ import type {
   LprTargetScanRequestPayload,
 } from '../../../types/bindings';
 import { unwrapCommand } from '../../../infrastructure/ipc-unwrap';
+import {
+  parseLprCancelRuntimeJobResponse,
+  parseLprEvidenceExportResponse,
+  parseLprFrameAnalysisResponse,
+  parseLprIntervalAnalysisResponse,
+  parseLprRuntimeStatusResponse,
+  parseLprTargetScanResponse,
+} from './lprSchemas';
 import type {
   LprEvidenceExportRequest,
   LprEvidenceExportResponse,
@@ -84,19 +92,22 @@ function toIntervalAnalysisRequestPayload(request: LprIntervalAnalysisRequest): 
   };
 }
 
-export function getLprRuntimeStatus(): Promise<LprRuntimeStatus> {
-  return unwrapCommand(commands.getLprRuntimeStatus(), 'get_lpr_runtime_status');
+export async function getLprRuntimeStatus(): Promise<LprRuntimeStatus> {
+  const raw = await unwrapCommand(commands.getLprRuntimeStatus(), 'get_lpr_runtime_status');
+  return parseLprRuntimeStatusResponse('get_lpr_runtime_status', raw);
 }
 
-export function cancelLprRuntimeJob(): Promise<boolean> {
-  return unwrapCommand(commands.cancelLprRuntimeJob(), 'cancel_lpr_runtime_job');
+export async function cancelLprRuntimeJob(): Promise<boolean> {
+  const raw = await unwrapCommand(commands.cancelLprRuntimeJob(), 'cancel_lpr_runtime_job');
+  return parseLprCancelRuntimeJobResponse('cancel_lpr_runtime_job', raw);
 }
 
 export async function scanLprTargets(request: LprTargetScanRequest): Promise<LprTargetScanResponse> {
-  const response = await unwrapCommand(
+  const raw = await unwrapCommand(
     commands.scanLprTargets(toTargetScanRequestPayload(request)),
     'scan_lpr_targets',
   );
+  const response = parseLprTargetScanResponse('scan_lpr_targets', raw);
   return {
     detections: response.detections.map(mapTrackedRegionPayload),
     runtime: response.runtime,
@@ -104,10 +115,11 @@ export async function scanLprTargets(request: LprTargetScanRequest): Promise<Lpr
 }
 
 export async function analyzeLprFrame(request: LprFrameAnalysisRequest): Promise<LprFrameAnalysisResponse> {
-  const response = await unwrapCommand(
+  const raw = await unwrapCommand(
     commands.analyzeLprFrame(toFrameAnalysisRequestPayload(request)),
     'analyze_lpr_frame',
   );
+  const response = parseLprFrameAnalysisResponse('analyze_lpr_frame', raw);
   return {
     detections: response.detections.map(mapTrackedRegionPayload),
     sample: mapNullableFrameSamplePayload(response.sample),
@@ -123,10 +135,11 @@ export async function analyzeLprFrame(request: LprFrameAnalysisRequest): Promise
 }
 
 export async function analyzeLprInterval(request: LprIntervalAnalysisRequest): Promise<LprIntervalAnalysisResponse> {
-  const response = await unwrapCommand(
+  const raw = await unwrapCommand(
     commands.analyzeLprInterval(toIntervalAnalysisRequestPayload(request)),
     'analyze_lpr_interval',
   );
+  const response = parseLprIntervalAnalysisResponse('analyze_lpr_interval', raw);
   return {
     targetTracks: response.targetTracks.map(mapTargetTrackPayload),
     analysisTrack: mapNullableTargetTrackPayload(response.analysisTrack),
@@ -146,7 +159,7 @@ export async function analyzeLprInterval(request: LprIntervalAnalysisRequest): P
 }
 
 export async function exportLprEvidence(request: LprEvidenceExportRequest): Promise<LprEvidenceExportResponse> {
-  const response = await unwrapCommand(
+  const raw = await unwrapCommand(
     commands.exportLprEvidence({
       outputPath: request.outputPath,
       sourcePath: request.sourcePath,
@@ -163,6 +176,7 @@ export async function exportLprEvidence(request: LprEvidenceExportRequest): Prom
     }),
     'export_lpr_evidence',
   );
+  const response = parseLprEvidenceExportResponse('export_lpr_evidence', raw);
   return {
     jsonPath: response.jsonPath,
     imagePath: response.imagePath,
